@@ -19,6 +19,8 @@ export function TechChart({ source = "upbit", symbol = "KRW-BTC" }: TechChartPro
 
   // Data Fetching
   useEffect(() => {
+    let isMounted = true;
+    
     const loadData = async () => {
         try {
             console.log(`[TechChart] Fetching ${source} data for ${symbol}...`);
@@ -33,6 +35,9 @@ export function TechChart({ source = "upbit", symbol = "KRW-BTC" }: TechChartPro
 
             console.log(`[TechChart] ${source} data fetched:`, candles?.length);
             
+            // Only update state if component is still mounted
+            if (!isMounted) return;
+            
             if (candles && candles.length > 0) {
                  setData(candles);
             } else {
@@ -41,9 +46,13 @@ export function TechChart({ source = "upbit", symbol = "KRW-BTC" }: TechChartPro
             }
         } catch (e) {
             console.error(`[TechChart] ${source} Fetch Error:`, e);
-            setData([]);
+            if (isMounted) {
+                setData([]);
+            }
         }
-        setLoading(false);
+        if (isMounted) {
+            setLoading(false);
+        }
     };
 
     // Immediate reset on prop change to indicate content switch
@@ -53,9 +62,16 @@ export function TechChart({ source = "upbit", symbol = "KRW-BTC" }: TechChartPro
     
     // Polling interval depending on source
     const intervalTime = source === "upbit" ? 5000 : 60000;
-    const interval = setInterval(loadData, intervalTime);
+    const interval = setInterval(() => {
+        if (isMounted) {
+            loadData();
+        }
+    }, intervalTime);
     
-    return () => clearInterval(interval);
+    return () => {
+        isMounted = false;
+        clearInterval(interval);
+    };
   }, [source, symbol]);
 
   // Chart Rendering

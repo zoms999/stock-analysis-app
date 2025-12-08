@@ -9,8 +9,8 @@ export interface CandleData {
 
 export async function fetchUpbitCandles(market: string = "KRW-BTC", count: number = 200, unit: number = 240): Promise<CandleData[]> {
   try {
-    // unit: minutes. 1, 3, 5, 10, 15, 30, 60, 240
-    const url = `https://api.upbit.com/v1/candles/minutes/${unit}?market=${market}&count=${count}`;
+    // Use proxy route to avoid CORS issues
+    const url = `/api/upbit/candles?market=${encodeURIComponent(market)}&minutes=${unit}&count=${count}`;
     const response = await fetch(url);
     
     if (!response.ok) {
@@ -54,7 +54,8 @@ export async function fetchUpbitCandles(market: string = "KRW-BTC", count: numbe
 
 export async function fetchUpbitTicker(markets: string = "KRW-BTC") {
     try {
-        const url = `https://api.upbit.com/v1/ticker?markets=${markets}`;
+        // Use proxy route to avoid CORS issues
+        const url = `/api/upbit/ticker?markets=${encodeURIComponent(markets)}`;
         const response = await fetch(url);
         if (!response.ok) throw new Error("Ticker fetch failed");
         return await response.json();

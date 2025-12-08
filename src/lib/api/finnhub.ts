@@ -3,31 +3,21 @@ import { CandleData } from "./upbit";
 
 export async function fetchFinnhubCandles(symbol: string = "AAPL", resolution: string = "D"): Promise<CandleData[]> {
   try {
-    const apiKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
-    if (!apiKey) {
-      console.error("Finnhub API Key is missing");
-      return [];
-    }
-
-    // Finnhub Candle Endpoint
-    // resolution: '1', '5', '15', '30', '60', 'D', 'W', 'M'
-    // For free plan, intraday data might be delayed or unavailable for some symbols, but 'D' is usually safe.
-    // We need 'from' and 'to' timestamps. Let's fetch last 200 days/periods.
-    
-    const now = Math.floor(Date.now() / 1000);
-    const from = now - (200 * 24 * 60 * 60); // Approx 200 days ago for Daily
-
-    const url = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&token=${apiKey}`;
+    // Use proxy route to avoid CORS issues and hide API key
+    const url = `/api/finnhub/candles?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}`;
     
     const response = await fetch(url);
+    
     if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error(`Finnhub API Error (${response.status}):`, errorData);
         throw new Error(`Finnhub API Error: ${response.statusText}`);
     }
 
     const data = await response.json();
 
     if (data.s === "no_data") {
-        console.warn("Finnhub returned no data");
+        console.warn(`Finnhub returned no data for ${symbol}`);
         return [];
     }
     
@@ -38,7 +28,7 @@ export async function fetchFinnhubCandles(symbol: string = "AAPL", resolution: s
 
     // Transform to Lightweight Charts format
     // Finnhub returns arrays for each property { c: [], h: [], ... }
-    const length = data.t.length;
+    const length = data.t?.length || 0;
     const candles: CandleData[] = [];
 
     for (let i = 0; i < length; i++) {

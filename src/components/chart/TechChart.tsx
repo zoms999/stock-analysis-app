@@ -80,13 +80,23 @@ export function TechChart({ source = "upbit", symbol = "KRW-BTC" }: TechChartPro
     // Render even if data is empty (to show empty grid)
     
     try {
+        // Clean up existing chart before creating new one
         if (chartRef.current) {
-            chartRef.current.remove();
+            try {
+                chartRef.current.remove();
+            } catch (e) {
+                // Chart already disposed, ignore
+            }
+            chartRef.current = null;
         }
 
         const handleResize = () => {
           if (chartContainerRef.current && chartRef.current) {
-             chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+             try {
+                 chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+             } catch (e) {
+                 // Chart disposed during resize, ignore
+             }
           }
         };
 
@@ -126,7 +136,14 @@ export function TechChart({ source = "upbit", symbol = "KRW-BTC" }: TechChartPro
 
         return () => {
           window.removeEventListener("resize", handleResize);
-          chart.remove();
+          if (chartRef.current) {
+              try {
+                  chartRef.current.remove();
+              } catch (e) {
+                  // Chart already disposed, ignore
+              }
+              chartRef.current = null;
+          }
         };
     } catch (err) {
         console.error("Chart Rendering Error:", err);

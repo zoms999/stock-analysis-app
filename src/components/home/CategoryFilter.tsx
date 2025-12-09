@@ -17,9 +17,8 @@ export function CategoryFilter() {
           <button
             key={cat}
             onClick={() => setActiveCategory(cat)}
-            className={`text-sm font-bold px-3 py-1.5 transition-colors relative ${
-              activeCategory === cat ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
+            className={`text-sm font-bold px-3 py-1.5 transition-colors relative ${activeCategory === cat ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
           >
             {cat}
             {activeCategory === cat && (
@@ -30,18 +29,16 @@ export function CategoryFilter() {
       </div>
 
       {/* Sub Tags */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-4 items-center">
         {TAGS.map((tag) => (
-          <Button
+          <button
             key={tag}
-            variant="outline"
-            size="sm"
-            className="rounded-full text-xs h-7 border-border hover:border-primary hover:text-primary bg-background/50"
+            className="text-sm text-foreground/80 hover:text-foreground font-medium transition-colors"
           >
             {tag}
-          </Button>
+          </button>
         ))}
-        <span className="text-xs text-muted-foreground self-center ml-2">
+        <span className="text-sm font-bold text-muted-foreground ml-2">
           (랭킹순위 리스트 출력 클릭시 해당 종목 게시판 리스트)
         </span>
       </div>

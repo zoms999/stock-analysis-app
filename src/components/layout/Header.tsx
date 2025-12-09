@@ -5,17 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Clock } from "./Clock";
 import Link from "next/link";
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 export function Header() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<any>(null);
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
+  const pathname = usePathname();
 
   useEffect(() => {
+    const supabase = createClient();
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "k") {
         e.preventDefault();
@@ -23,7 +25,7 @@ export function Header() {
       }
     };
     window.addEventListener("keydown", handleKeyDown);
-    
+
     // Check Auth & Subscribe to changes
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -45,9 +47,10 @@ export function Header() {
       window.removeEventListener("keydown", handleKeyDown);
       subscription.unsubscribe();
     };
-  }, [supabase, router]);
+  }, [router, pathname]);
 
   const handleLogout = async () => {
+    const supabase = createClient();
     await supabase.auth.signOut();
     setUser(null);
     router.refresh();
@@ -87,21 +90,21 @@ export function Header() {
 
         {/* Search */}
         <div className="flex flex-1 items-center space-x-2 mr-4">
-            <div className="relative w-full max-w-md">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                    ref={searchInputRef}
-                    type="search"
-                    placeholder="종목 검색... (Ctrl+K)"
-                    className="w-full bg-secondary pl-9 md:w-[300px] lg:w-[400px] focus-visible:ring-primary/20"
-                />
-            </div>
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              ref={searchInputRef}
+              type="search"
+              placeholder="종목 검색... (Ctrl+K)"
+              className="w-full bg-secondary pl-9 md:w-[300px] lg:w-[400px] focus-visible:ring-primary/20"
+            />
+          </div>
         </div>
 
         {/* Right Actions */}
         <div className="flex items-center space-x-4">
           <Clock />
-          
+
           <Button variant="ghost" size="icon" className="text-muted-foreground" title="언어 변경">
             <Globe className="h-5 w-5" />
           </Button>
@@ -112,21 +115,21 @@ export function Header() {
 
           {/* Login / User Placeholder */}
           {user ? (
-             <div className="flex items-center space-x-2">
-                <Link href="/mypage" className="cursor-pointer">
-                    <Button variant="ghost" size="sm" className="hidden sm:inline-flex text-xs text-muted-foreground p-0 mr-2">
-                        {user.email?.split('@')[0]}님
-                    </Button>
-                </Link>
-                <Button variant="ghost" size="icon" onClick={handleLogout} title="로그아웃">
-                    <LogOut className="h-5 w-5" />
+            <div className="flex items-center space-x-2">
+              <Link href="/mypage" className="cursor-pointer">
+                <Button variant="ghost" size="sm" className="hidden sm:inline-flex text-xs text-muted-foreground p-0 mr-2">
+                  {user.email?.split('@')[0]}님
                 </Button>
-             </div>
+              </Link>
+              <Button variant="ghost" size="icon" onClick={handleLogout} title="로그아웃">
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </div>
           ) : (
             <Link href="/login">
-                <Button variant="premium" size="sm" className="hidden sm:inline-flex font-bold">
-                    로그인
-                </Button>
+              <Button variant="premium" size="sm" className="hidden sm:inline-flex font-bold">
+                로그인
+              </Button>
             </Link>
           )}
 

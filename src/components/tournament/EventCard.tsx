@@ -25,12 +25,12 @@ export function EventCard({
   return (
     <div
       className={cn(
-        "group relative overflow-hidden rounded-xl border border-border bg-card p-6 transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10",
+        "group relative overflow-hidden rounded-xl border-2 border-border bg-card p-6 shadow-md transition-all hover:border-primary/50 hover:shadow-xl hover:shadow-primary/20",
         className
       )}
     >
       {/* Background Gradient Effect */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
 
       <div className="relative z-10 flex flex-col h-full">
         {/* Header: Status & Icon */}
@@ -66,7 +66,7 @@ export function EventCard({
           </h3>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-sm text-muted-foreground">총 상금</span>
-            <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-500">
+            <span className="text-2xl font-black bg-gradient-to-r from-amber-500 to-yellow-600 text-transparent bg-clip-text">
               {prizePool}
             </span>
           </div>

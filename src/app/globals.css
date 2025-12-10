@@ -58,6 +58,37 @@
   --radius: 0.5rem;
 }
 
+.light {
+  /* Premium Light Theme - Improved Contrast */
+  --background: #F8FAFC; /* Slate 50 - Softer than pure white */
+  --foreground: #020617; /* Slate 950 - Much darker for better readability */
+  
+  --card: #FFFFFF; /* Pure white for cards to stand out */
+  --card-foreground: #020617; /* Slate 950 */
+  
+  --popover: #FFFFFF;
+  --popover-foreground: #020617;
+  
+  --primary: #3B82F6; /* Blue 500 */
+  --primary-foreground: #FFFFFF;
+  
+  --secondary: #E2E8F0; /* Slate 200 - More visible */
+  --secondary-foreground: #0F172A; /* Slate 900 */
+  
+  --muted: #F1F5F9; /* Slate 100 */
+  --muted-foreground: #334155; /* Slate 700 - Much darker for better readability */
+  
+  --accent: #2563EB; /* Blue 600 */
+  --accent-foreground: #FFFFFF;
+  
+  --destructive: #EF4444; /* Red 500 */
+  --destructive-foreground: #FFFFFF;
+
+  --border: #CBD5E1; /* Slate 300 - More visible borders */
+  --input: #E2E8F0; /* Slate 200 */
+  --ring: #3B82F6;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);

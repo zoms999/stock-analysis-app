@@ -19,8 +19,8 @@ interface LeaderboardProps {
 
 export function Leaderboard({ data, className }: LeaderboardProps) {
   return (
-    <div className={cn("bg-card rounded-xl border border-border overflow-hidden", className)}>
-      <div className="p-4 border-b border-border flex items-center justify-between bg-muted/20">
+    <div className={cn("bg-card rounded-xl border-2 border-border shadow-md overflow-hidden", className)}>
+      <div className="p-4 border-b border-border flex items-center justify-between bg-muted/30">
         <h3 className="font-bold flex items-center">
             <Medal className="mr-2 h-5 w-5 text-yellow-500" />
             실시간 랭킹
@@ -34,7 +34,7 @@ export function Leaderboard({ data, className }: LeaderboardProps) {
             key={ranker.id}
             className={cn(
               "flex items-center p-4 hover:bg-muted/50 transition-colors",
-              ranker.rank <= 3 ? "bg-primary/5" : ""
+              ranker.rank <= 3 ? "bg-primary/10" : ""
             )}
           >
             {/* Rank */}

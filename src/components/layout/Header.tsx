@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Globe, Bell, Menu, User, LogOut } from "lucide-react";
+import { Search, Globe, Bell, Menu, User, LogOut, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Clock } from "./Clock";
@@ -8,12 +8,20 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
+import { useTheme } from "next-themes";
 
 export function Header() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<any>(null);
   const router = useRouter();
   const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -104,6 +112,20 @@ export function Header() {
         {/* Right Actions */}
         <div className="flex items-center space-x-4">
           <Clock />
+
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="text-muted-foreground" 
+            title="테마 변경"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          >
+            {mounted && (theme === "dark" ? (
+              <Sun className="h-5 w-5" />
+            ) : (
+              <Moon className="h-5 w-5" />
+            ))}
+          </Button>
 
           <Button variant="ghost" size="icon" className="text-muted-foreground" title="언어 변경">
             <Globe className="h-5 w-5" />

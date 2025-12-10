@@ -49,13 +49,13 @@ export default function TournamentPage() {
   return (
     <div className="min-h-screen bg-background pb-20">
         {/* Banner Section */}
-        <div className="relative border-b border-border bg-gradient-to-b from-primary/5 to-background py-16">
+        <div className="relative border-b border-border bg-gradient-to-b from-primary/10 to-background py-16">
             <div className="container mx-auto px-4 text-center">
                 <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-sm text-primary mb-6">
                     <Flame className="mr-2 h-4 w-4" />
                     현재 총 상금 규모 ₩50,000,000+
                 </div>
-                <h1 className="text-4xl font-black tracking-tight md:text-6xl mb-4 text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60">
+                <h1 className="text-4xl font-black tracking-tight md:text-6xl mb-4 bg-gradient-to-b from-foreground to-foreground/60 text-transparent bg-clip-text">
                     투자 토너먼트
                 </h1>
                 <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
@@ -73,7 +73,7 @@ export default function TournamentPage() {
             </div>
             
             {/* Background Decoration */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-primary/20 blur-[120px] rounded-full pointer-events-none opacity-50" />
+             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-primary/20 blur-[120px] rounded-full pointer-events-none opacity-50" />
         </div>
 
         <div className="container mx-auto px-4 py-12">
@@ -116,14 +116,14 @@ export default function TournamentPage() {
                     <Leaderboard data={TOP_RANKERS} />
                     
                     {/* Promotion Box */}
-                    <div className="rounded-xl bg-gradient-to-br from-indigo-900 to-slate-900 p-6 border border-indigo-500/30 text-center">
-                        <Trophy className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-                        <h3 className="font-bold text-lg text-white mb-2">시즌 랭킹 도전!</h3>
-                        <p className="text-sm text-indigo-200 mb-6">
+                    <div className="rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 p-6 text-center">
+                        <Trophy className="h-12 w-12 text-primary mx-auto mb-4" />
+                        <h3 className="font-bold text-lg text-foreground mb-2">시즌 랭킹 도전!</h3>
+                        <p className="text-sm text-muted-foreground mb-6">
                             월간 랭킹 1위에게는<br/>
                             특별한 뱃지와 추가 포인트가 지급됩니다.
                         </p>
-                        <Button variant="secondary" className="w-full">
+                        <Button variant="default" className="w-full">
                             내 랭킹 확인하기
                         </Button>
                     </div>

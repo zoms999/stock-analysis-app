@@ -93,6 +93,7 @@ export async function signInWithFacebook() {
     provider: 'facebook',
     options: {
       redirectTo: `${origin}/auth/callback`,
+      scopes: 'public_profile,email',
     }
   })
 

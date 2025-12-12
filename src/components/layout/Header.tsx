@@ -3,6 +3,7 @@
 import { Search, Globe, Bell, Menu, User, LogOut, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Clock } from "./Clock";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -139,9 +140,15 @@ export function Header() {
           {user ? (
             <div className="flex items-center space-x-2">
               <Link href="/mypage" className="cursor-pointer">
-                <Button variant="ghost" size="sm" className="hidden sm:inline-flex text-xs text-muted-foreground p-0 mr-2">
-                  {user.email?.split('@')[0]}님
-                </Button>
+                <div className="hidden sm:flex items-center gap-2 mr-2">
+                   <Avatar className="h-8 w-8">
+                    <AvatarImage src={user?.user_metadata?.avatar_url} alt={user.email} />
+                    <AvatarFallback>{user.email?.charAt(0).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {user.user_metadata?.nickname || user.email?.split('@')[0]}님
+                  </span>
+                </div>
               </Link>
               <Button variant="ghost" size="icon" onClick={handleLogout} title="로그아웃">
                 <LogOut className="h-5 w-5" />
@@ -155,9 +162,11 @@ export function Header() {
             </Link>
           )}
 
-          <Button variant="ghost" size="icon" className="sm:hidden">
-            <User className="h-5 w-5" />
-          </Button>
+          <Link href={user ? "/mypage" : "/login"} className="sm:hidden">
+            <Button variant="ghost" size="icon">
+              <User className="h-5 w-5" />
+            </Button>
+          </Link>
         </div>
       </div>
     </header>

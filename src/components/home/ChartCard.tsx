@@ -14,7 +14,7 @@ const TechChart = dynamic(() => import("@/components/chart/TechChart").then(mod 
 interface ChartCardProps {
   id: number;
   symbol: string;
-  source: "upbit" | "finnhub";
+  source: "upbit" | "finnhub" | "yahoo";
   title: string;
   user: {
     name: string;

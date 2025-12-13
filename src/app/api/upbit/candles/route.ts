@@ -21,8 +21,21 @@ export async function GET(req: Request) {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      let errorMsg = response.statusText;
+      try {
+           const errorJson = JSON.parse(errorText);
+           if (errorJson.error && errorJson.error.message) {
+               errorMsg = errorJson.error.message;
+           }
+      } catch (e) {
+          // ignore parsing error, use statusText
+      }
+      
+      console.error(`Upbit API Error (${response.status}):`, errorMsg);
+
       return NextResponse.json(
-        { error: `Upbit API Error: ${response.statusText}` },
+        { error: `Upbit API Error: ${errorMsg}` },
         { status: response.status }
       );
     }

@@ -5,9 +5,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, IChartApi, CandlestickSeries } from "lightweight-charts";
 import { fetchUpbitCandles, CandleData } from "@/lib/api/upbit";
 import { fetchFinnhubCandles } from "@/lib/api/finnhub";
+import { fetchYahooCandles } from "@/lib/api/yahoo";
 
 interface TechChartProps {
-  source?: "upbit" | "finnhub";
+  source?: "upbit" | "finnhub" | "yahoo";
   symbol?: string;
 }
 
@@ -31,6 +32,8 @@ export function TechChart({ source = "upbit", symbol = "KRW-BTC" }: TechChartPro
                 candles = await fetchUpbitCandles(symbol);
             } else if (source === "finnhub") {
                 candles = await fetchFinnhubCandles(symbol, "D"); 
+            } else if (source === "yahoo") {
+                candles = await fetchYahooCandles(symbol, "1d");
             }
 
             console.log(`[TechChart] ${source} data fetched:`, candles?.length);
@@ -61,7 +64,7 @@ export function TechChart({ source = "upbit", symbol = "KRW-BTC" }: TechChartPro
     loadData();
     
     // Polling interval depending on source
-    const intervalTime = source === "upbit" ? 5000 : 60000;
+    const intervalTime = source === "upbit" ? 30000 : 60000;
     const interval = setInterval(() => {
         if (isMounted) {
             loadData();
@@ -150,11 +153,20 @@ export function TechChart({ source = "upbit", symbol = "KRW-BTC" }: TechChartPro
     }
   }, [data]);
 
+  const getSourceLabel = () => {
+      switch(source) {
+          case 'upbit': return <span className="text-primary">Upbit</span>;
+          case 'finnhub': return <span className="text-blue-400">Finnhub</span>;
+          case 'yahoo': return <span className="text-purple-400">Yahoo</span>;
+          default: return null;
+      }
+  };
+
   return (
     <div className="relative w-full rounded-xl border border-border bg-card p-4 shadow-lg">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-           {source === 'upbit' ? <span className="text-primary">Upbit</span> : <span className="text-blue-400">Finnhub</span>} 
+           {getSourceLabel()} 
            {symbol}
         </h3>
         {loading && <span className="text-xs text-muted-foreground animate-pulse">데이터 연결 중...</span>}

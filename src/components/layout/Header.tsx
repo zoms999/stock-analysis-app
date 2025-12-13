@@ -82,12 +82,15 @@ export function Header() {
             {/* <Link href="/mypage" className="transition-colors hover:text-foreground/80 text-foreground/60">
               마이페이지
             </Link> */}
+            <Link href="/posts" className="transition-colors hover:text-foreground/80 text-foreground/60">
+              차트 게시판
+            </Link>
             <Link href="/notices" className="transition-colors hover:text-foreground/80 text-foreground/60">
               공지사항
             </Link>
-            <Link href="/" className="transition-colors hover:text-foreground/80 text-foreground/60">
+            {/* <Link href="/" className="transition-colors hover:text-foreground/80 text-foreground/60">
               커뮤니티
-            </Link>
+            </Link> */}
           </nav>
         </div>
 
@@ -108,6 +111,13 @@ export function Header() {
               className="w-full bg-secondary pl-9 md:w-[300px] lg:w-[400px] focus-visible:ring-primary/20"
             />
           </div>
+          
+          <Link href="/analyze">
+            <Button variant="outline" className="hidden md:flex items-center gap-2 border-primary/20 hover:bg-primary/5 hover:text-primary transition-colors">
+              <LogOut className="h-4 w-4 rotate-90" /> {/* Using LogOut rotated as a placeholder for 'Enter' or 'Analysis' icon if specialized icon not available, or just generic */}
+              <span className="text-primary font-bold">차트 분석하기</span>
+            </Button>
+          </Link>
         </div>
 
         {/* Right Actions */}

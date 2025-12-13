@@ -66,7 +66,7 @@ const MOCK_POSTS: Record<string, any> = {
       <p>단기 목표가는 $185, 손절가는 $165로 보고 대응하면 좋을 것 같습니다.</p>
     `,
     symbol: "AAPL",
-    source: "finnhub",
+    source: "yahoo",
     comments: []
   }
 };

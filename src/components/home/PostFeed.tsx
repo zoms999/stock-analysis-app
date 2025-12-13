@@ -23,7 +23,7 @@ const MOCK_GRID_DATA = [
   {
     id: 3,
     symbol: "AAPL",
-    source: "finnhub",
+    source: "yahoo",
     title: "애플 (AAPL)",
     user: { name: "StockPro", level: "레벨 5", ranking: 330, avatar: "" },
     stats: { profit: "수익금 200만 15%", winRate: "최근 60%", count: "전체 55% 42개" }
@@ -39,7 +39,7 @@ const MOCK_GRID_DATA = [
    {
     id: 5,
     symbol: "TSLA",
-    source: "finnhub",
+    source: "yahoo",
     title: "테슬라",
     user: { name: "MuskFan", level: "레벨 3", ranking: 1200, avatar: "" },
     stats: { profit: "수익금 -50만 -10%", winRate: "최근 40%", count: "전체 45% 20개" }
@@ -67,7 +67,7 @@ export function PostFeed() {
                 key={post.id}
                 id={post.id}
                 symbol={post.symbol}
-                source={post.source as "upbit" | "finnhub"}
+                source={post.source as "upbit" | "finnhub" | "yahoo"}
                 title={post.title}
                 user={post.user}
                 stats={post.stats}

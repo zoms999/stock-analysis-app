@@ -99,20 +99,20 @@ export default function AnalyzePage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#0a0a0a]">
+        <div className="min-h-screen bg-background">
             <div className="container mx-auto max-w-6xl py-6 space-y-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
-                    <h1 className="text-2xl font-bold text-white">차트 분석</h1>
+                    <h1 className="text-2xl font-bold text-foreground">차트 분석</h1>
                 </div>
 
                 {/* 1. Search Bar */}
                 <div className="flex justify-center">
                     <form onSubmit={handleSearch} className="relative w-full max-w-2xl">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                         <Input
                             placeholder="종목 검색 (예: BTC-USD, AAPL, TSLA)"
-                            className="pl-12 h-12 text-base rounded-lg bg-[#1a1a1a] border-gray-700 text-white placeholder:text-gray-500 focus-visible:ring-blue-500 focus-visible:border-blue-500 shadow-sm"
+                            className="pl-12 h-12 text-base rounded-lg bg-card border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500 focus-visible:border-blue-500 shadow-sm"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -123,12 +123,12 @@ export default function AnalyzePage() {
                 <div className="space-y-2">
                     <div className="flex justify-center">
                         <Tabs defaultValue="D" onValueChange={setInterval} className="w-full max-w-xl">
-                            <TabsList className="grid w-full grid-cols-6 bg-[#1a1a1a] border border-gray-700 h-11 p-1 rounded-lg shadow-sm">
+                            <TabsList className="grid w-full grid-cols-6 bg-card border border-border h-11 p-1 rounded-lg shadow-sm">
                                 {activeIntervals.map((item) => (
                                     <TabsTrigger
                                         key={item.value}
                                         value={item.value}
-                                        className="data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold rounded-md text-gray-400 hover:text-gray-200 transition-all"
+                                        className="data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold rounded-md text-muted-foreground hover:text-foreground transition-all"
                                     >
                                         {item.label}
                                     </TabsTrigger>
@@ -144,11 +144,11 @@ export default function AnalyzePage() {
                 </div>
 
                 {/* 3. Main Chart Area */}
-                <Card className="border border-gray-800 shadow-sm overflow-hidden bg-[#1a1a1a]">
-                    <div className="px-6 py-3 border-b border-gray-800 flex justify-between items-center bg-[#0f0f0f]">
+                <Card className="border border-border shadow-sm overflow-hidden bg-card">
+                    <div className="px-6 py-3 border-b border-border flex justify-between items-center bg-muted/50">
                         <div className="flex items-center gap-3">
-                            <h2 className="font-bold text-xl text-white">{symbol}</h2>
-                            <span className="text-sm text-gray-400">
+                            <h2 className="font-bold text-xl text-foreground">{symbol}</h2>
+                            <span className="text-sm text-muted-foreground">
                                 {interval === "Y" && "연봉"}
                                 {interval === "M" && "월봉"}
                                 {interval === "W" && "주봉"}
@@ -175,14 +175,14 @@ export default function AnalyzePage() {
 
                 {/* 4. Text Editor Area */}
                 <div className="space-y-4">
-                    <Card className="border border-gray-800 shadow-sm bg-[#1a1a1a]">
-                        <div className="px-6 py-3 border-b border-gray-800 bg-[#0f0f0f]">
-                            <h3 className="font-semibold text-white">분석 내용</h3>
+                    <Card className="border border-border shadow-sm bg-card">
+                        <div className="px-6 py-3 border-b border-border bg-muted/50">
+                            <h3 className="font-semibold text-foreground">분석 내용</h3>
                         </div>
                         <div className="p-6">
                             <Textarea
                                 placeholder="차트 분석 내용을 작성해주세요..."
-                                className="min-h-[200px] text-base bg-[#0f0f0f] border-gray-700 text-white placeholder:text-gray-500 focus-visible:ring-blue-500 resize-none"
+                                className="min-h-[200px] text-base bg-background border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500 resize-none"
                                 value={content}
                                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
                             />
@@ -190,7 +190,7 @@ export default function AnalyzePage() {
                     </Card>
 
                     <div className="flex justify-between items-center">
-                        <div className="text-sm text-gray-400">
+                        <div className="text-sm text-muted-foreground">
                             {chartImageUrl && "✓ 차트 이미지 캡처됨"}
                         </div>
                         <Button

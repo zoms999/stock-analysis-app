@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useTheme } from "next-themes";
 import {
     createChart,
     ColorType,
@@ -35,6 +36,10 @@ interface CandleDataWithVolume extends CandlestickData {
 }
 
 export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture }: ChartAnalyzerProps) {
+    const { theme, systemTheme } = useTheme();
+    const currentTheme = theme === 'system' ? systemTheme : theme;
+    const isDark = currentTheme === 'dark';
+
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -78,20 +83,20 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
 
         const chart = createChart(chartContainerRef.current, {
             layout: {
-                background: { type: ColorType.Solid, color: "#1a1a1a" },
-                textColor: "#9CA3AF",
+                background: { type: ColorType.Solid, color: isDark ? "#0a0a0a" : "#ffffff" },
+                textColor: isDark ? "#9CA3AF" : "#4B5563",
                 fontSize: 12,
             },
             width: chartContainerRef.current.clientWidth,
             height: 500,
             grid: {
                 vertLines: {
-                    color: "rgba(105, 105, 105, 0.2)",
+                    color: isDark ? "rgba(105, 105, 105, 0.2)" : "rgba(209, 213, 219, 0.3)",
                     style: 0,
                     visible: true,
                 },
                 horzLines: {
-                    color: "rgba(105, 105, 105, 0.2)",
+                    color: isDark ? "rgba(105, 105, 105, 0.2)" : "rgba(209, 213, 219, 0.3)",
                     style: 0,
                     visible: true,
                 },
@@ -100,10 +105,10 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
                 timeVisible: true,
                 secondsVisible: false,
                 rightOffset: 20,
-                borderColor: "#2a2a2a",
+                borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
             },
             rightPriceScale: {
-                borderColor: "#2a2a2a",
+                borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
                 scaleMargins: {
                     top: 0.1,
                     bottom: 0.2,
@@ -112,16 +117,16 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
             crosshair: {
                 mode: 0,
                 vertLine: {
-                    color: "#9CA3AF",
+                    color: isDark ? "#9CA3AF" : "#6B7280",
                     width: 1,
                     style: 3,
-                    labelBackgroundColor: "#374151",
+                    labelBackgroundColor: isDark ? "#374151" : "#E5E7EB",
                 },
                 horzLine: {
-                    color: "#9CA3AF",
+                    color: isDark ? "#9CA3AF" : "#6B7280",
                     width: 1,
                     style: 3,
-                    labelBackgroundColor: "#374151",
+                    labelBackgroundColor: isDark ? "#374151" : "#E5E7EB",
                 },
             },
         });
@@ -249,7 +254,7 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
             ma20SeriesRef.current = null;
             chartRef.current = null;
         };
-    }, []);
+    }, [isDark]);
 
     // Calculate Moving Average
     const calculateMA = (data: CandleDataWithVolume[], period: number) => {
@@ -414,22 +419,22 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
     };
 
     return (
-        <div className="relative w-full h-full bg-[#1a1a1a]">
+        <div className={`relative w-full h-full ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'}`}>
             {loading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-                    <span className="text-gray-300 animate-pulse">차트 로딩 중...</span>
+                <div className={`absolute inset-0 flex items-center justify-center ${isDark ? 'bg-black/50' : 'bg-white/50'} z-10`}>
+                    <span className={`${isDark ? 'text-gray-300' : 'text-gray-700'} animate-pulse`}>차트 로딩 중...</span>
                 </div>
             )}
 
             {error && !loading && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#1a1a1a] z-10">
+                <div className={`absolute inset-0 flex flex-col items-center justify-center ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'} z-10`}>
                     <div className="text-center space-y-4 p-8">
                         <div className="text-red-500 text-lg font-semibold">⚠️ {error}</div>
-                        <div className="text-gray-400 text-sm">
+                        <div className={`${isDark ? 'text-gray-400' : 'text-gray-600'} text-sm`}>
                             {interval === "1" && "1분봉 데이터는 최근 7일만 제공됩니다."}
                             {interval === "60" && "60분봉 데이터는 최근 60일만 제공됩니다."}
                         </div>
-                        <div className="text-gray-500 text-xs">
+                        <div className={`${isDark ? 'text-gray-500' : 'text-gray-500'} text-xs`}>
                             일봉, 주봉, 월봉 데이터를 권장합니다.
                         </div>
                     </div>
@@ -438,9 +443,9 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
 
             {/* Price Info Overlay */}
             {currentPrice && priceChange && (
-                <div className="absolute top-4 left-4 z-20 bg-gray-900/95 backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg border border-gray-700">
+                <div className={`absolute top-4 left-4 z-20 ${isDark ? 'bg-gray-900/95' : 'bg-white/95'} backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg ${isDark ? 'border border-gray-700' : 'border border-gray-200'}`}>
                     <div className="flex items-baseline gap-3">
-                        <span className="text-2xl font-bold text-white">
+                        <span className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                             {currentPrice.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}
                         </span>
                         <span className={`text-sm font-semibold ${priceChange.value >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
@@ -448,7 +453,7 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
                             {' '}({priceChange.percent >= 0 ? '+' : ''}{priceChange.percent.toFixed(2)}%)
                         </span>
                     </div>
-                    <div className="flex gap-4 mt-2 text-xs text-gray-400">
+                    <div className={`flex gap-4 mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                         <span className="flex items-center gap-1">
                             <span className="w-3 h-0.5 bg-amber-500"></span>
                             MA5
@@ -463,28 +468,28 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
 
             {/* Hover Tooltip */}
             {hoveredPrice && (
-                <div className="absolute top-20 left-4 z-20 bg-gray-900/95 backdrop-blur-sm rounded-lg px-4 py-3 shadow-lg text-white text-sm">
-                    <div className="font-semibold mb-2 text-gray-300">{hoveredPrice.time}</div>
+                <div className={`absolute top-20 left-4 z-20 ${isDark ? 'bg-gray-900/95 text-white' : 'bg-white/95 text-gray-900'} backdrop-blur-sm rounded-lg px-4 py-3 shadow-lg text-sm ${isDark ? 'border border-gray-700' : 'border border-gray-200'}`}>
+                    <div className={`font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{hoveredPrice.time}</div>
                     <div className="space-y-1">
                         <div className="flex justify-between gap-6">
-                            <span className="text-gray-400">시가:</span>
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>시가:</span>
                             <span className="font-medium">{hoveredPrice.open.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex justify-between gap-6">
-                            <span className="text-gray-400">고가:</span>
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>고가:</span>
                             <span className="font-medium text-red-400">{hoveredPrice.high.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex justify-between gap-6">
-                            <span className="text-gray-400">저가:</span>
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>저가:</span>
                             <span className="font-medium text-blue-400">{hoveredPrice.low.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex justify-between gap-6">
-                            <span className="text-gray-400">종가:</span>
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>종가:</span>
                             <span className="font-medium">{hoveredPrice.close.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
                         </div>
                         {hoveredPrice.volume && (
-                            <div className="flex justify-between gap-6 pt-1 border-t border-gray-700">
-                                <span className="text-gray-400">거래량:</span>
+                            <div className={`flex justify-between gap-6 pt-1 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`}>
+                                <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>거래량:</span>
                                 <span className="font-medium">{hoveredPrice.volume.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>
                             </div>
                         )}
@@ -500,7 +505,7 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
                         onClick={handleClearPoints}
                         variant="outline"
                         size="sm"
-                        className="shadow-md bg-gray-800 hover:bg-gray-700 text-white border-gray-600"
+                        className={`shadow-md ${isDark ? 'bg-gray-800 hover:bg-gray-700 text-white border-gray-600' : 'bg-white hover:bg-gray-50 text-gray-900 border-gray-300'}`}
                     >
                         예측 초기화 ({points.length})
                     </Button>

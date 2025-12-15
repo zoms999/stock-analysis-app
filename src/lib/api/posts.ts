@@ -106,3 +106,32 @@ export async function createPost(postData: PostData) {
 
   return data;
 }
+
+export async function fetchPostById(id: string): Promise<Post | null> {
+  const supabase = createClient();
+  
+  const { data, error } = await supabase
+    .from("posts")
+    .select(`
+      *,
+      profiles:user_id (
+        nickname,
+        avatar_url
+      )
+    `)
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    console.error("Error fetching post:", error);
+    return null;
+  }
+
+  // Increment view count
+  await supabase
+    .from("posts")
+    .update({ view_count: (data.view_count || 0) + 1 })
+    .eq("id", id);
+
+  return data;
+}

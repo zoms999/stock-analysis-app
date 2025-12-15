@@ -14,10 +14,10 @@ export async function GET(req: Request) {
     const intervalArg = searchParams.get("interval") ?? "1d";
 
     // Validate interval (yahoo-finance2 supports: 1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo)
-    const allowedIntervals = ["1d", "1wk", "1mo", "1m", "5m", "15m", "30m", "60m", "1h"];
+    const allowedIntervals = ["1d", "1wk", "1mo", "1m", "5m", "15m", "30m", "1h"];
     const intervalQuery = allowedIntervals.includes(intervalArg) ? intervalArg : "1d";
     // Yahoo expects specific types, cast it
-    const interval = intervalQuery as "1d" | "1wk" | "1mo" | "1m" | "5m" | "15m" | "30m" | "60m" | "1h";
+    const interval = intervalQuery as "1d" | "1wk" | "1mo" | "1m" | "5m" | "15m" | "30m" | "1h";
 
     const now = new Date();
     let from = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()); // Default 1 year
@@ -26,21 +26,50 @@ export async function GET(req: Request) {
     // Yahoo Finance limits:
     // 1m: 7 days
     // 5m, 15m, 30m: 60 days
-    // 60m, 1h: 730 days
-    if (["1m", "5m", "15m", "30m"].includes(interval)) {
-        from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days
-    } else if (["60m", "1h"].includes(interval)) {
-        from = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000); // 60 days
+    // 1h: 730 days
+    if (["1m"].includes(interval)) {
+      from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days
+    } else if (["5m", "15m", "30m"].includes(interval)) {
+      from = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000); // 60 days
+    } else if (["1h"].includes(interval)) {
+      from = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000); // 60 days for 1h
     }
 
     const queryOptions = {
       period1: from,
       period2: now,
-      interval: interval as any,
+      interval: interval,
     };
 
-    // Explicitly type the result to avoid inference issues with the library
-    const result = await yahooFinance.historical(symbol, queryOptions) as Array<{
+    // Use chart() for intraday data, historical() for daily+
+    let result: Array<{
+      date: Date;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      adjClose?: number;
+      volume: number;
+    }>;
+
+    if (["1m", "5m", "15m", "30m", "1h"].includes(interval)) {
+      // Use chart() for intraday intervals
+      const chartResult = await yahooFinance.chart(symbol, queryOptions);
+      result = chartResult.quotes.map(q => ({
+        date: new Date(q.date),
+        open: q.open ?? 0,
+        high: q.high ?? 0,
+        low: q.low ?? 0,
+        close: q.close ?? 0,
+        volume: q.volume ?? 0,
+      }));
+    } else {
+      // Use historical() for daily, weekly, monthly
+      result = await yahooFinance.historical(symbol, {
+        period1: from,
+        period2: now,
+        interval: interval as "1d" | "1wk" | "1mo",
+      }) as Array<{
         date: Date;
         open: number;
         high: number;
@@ -48,7 +77,8 @@ export async function GET(req: Request) {
         close: number;
         adjClose?: number;
         volume: number;
-    }>;
+      }>;
+    }
 
     // Transform to Lightweight Charts format
     const candles = result.map((quote) => {
@@ -74,10 +104,10 @@ export async function GET(req: Request) {
 
     // Sort by time just in case
     candles.sort((a, b) => {
-        if (typeof a.time === 'string' && typeof b.time === 'string') {
-            return a.time.localeCompare(b.time);
-        }
-        return (a.time as number) - (b.time as number);
+      if (typeof a.time === 'string' && typeof b.time === 'string') {
+        return a.time.localeCompare(b.time);
+      }
+      return (a.time as number) - (b.time as number);
     });
 
     return NextResponse.json(candles, {
@@ -87,10 +117,11 @@ export async function GET(req: Request) {
         "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
       },
     });
-  } catch (error: any) {
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`Yahoo Finance API Error (Symbol: ${searchParams.get("symbol")}, Interval: ${searchParams.get("interval")}):`, error);
     return NextResponse.json(
-      { error: "Failed to fetch from Yahoo Finance", details: error.message || String(error) },
+      { error: "Failed to fetch from Yahoo Finance", details: errorMessage },
       { status: 500 }
     );
   }

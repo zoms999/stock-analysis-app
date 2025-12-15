@@ -1,286 +1,511 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import { 
-  createChart, 
-  ColorType, 
-  IChartApi, 
-  CandlestickSeries, 
-  ISeriesApi,
-  Time,
-  LineSeries,
-  TickMarkType
+import { useEffect, useRef, useState, useCallback } from "react";
+import {
+    createChart,
+    ColorType,
+    IChartApi,
+    ISeriesApi,
+    Time,
+    TickMarkType,
+    MouseEventParams,
+    CandlestickData,
+    HistogramData,
+    CandlestickSeries,
+    HistogramSeries,
+    LineSeries
 } from "lightweight-charts";
-import { fetchYahooCandles } from "@/lib/api/yahoo"; // Reusing the yahoo api
+import { fetchYahooCandles } from "@/lib/api/yahoo";
 import { Button } from "@/components/ui/button";
 
 interface ChartAnalyzerProps {
-  symbol: string;
-  interval: string;
-  onPointsChange?: (points: PredictionPoint[]) => void;
-  onChartCapture?: (imageDataUrl: string) => void;
+    symbol: string;
+    interval: string;
+    onPointsChange?: (points: PredictionPoint[]) => void;
+    onChartCapture?: (imageDataUrl: string) => void;
 }
 
 interface PredictionPoint {
-  time: Time;
-  value: number;
+    time: Time;
+    value: number;
+}
+
+interface CandleDataWithVolume extends CandlestickData {
+    volume?: number;
 }
 
 export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture }: ChartAnalyzerProps) {
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const lineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
-  
-  const [points, setPoints] = useState<PredictionPoint[]>([]);
-  const [loading, setLoading] = useState(false);
+    const chartContainerRef = useRef<HTMLDivElement>(null);
+    const chartRef = useRef<IChartApi | null>(null);
+    const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+    const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+    const lineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const ma5SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const ma20SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
-  // Capture chart as image
-  const captureChart = useCallback(async () => {
-    if (!chartContainerRef.current) return null;
-    
-    try {
-      // Use html2canvas to capture the chart
-      const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(chartContainerRef.current, {
-        backgroundColor: '#1a1a1a',
-        scale: 2, // Higher quality
-      });
-      
-      const imageDataUrl = canvas.toDataURL('image/png');
-      if (onChartCapture) {
-        onChartCapture(imageDataUrl);
-      }
-      return imageDataUrl;
-    } catch (error) {
-      console.error('Failed to capture chart:', error);
-      return null;
-    }
-  }, [onChartCapture]);
+    const [points, setPoints] = useState<PredictionPoint[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+    const [priceChange, setPriceChange] = useState<{ value: number; percent: number } | null>(null);
+    const [hoveredPrice, setHoveredPrice] = useState<{ time: string; open: number; high: number; low: number; close: number; volume?: number } | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-  // 1. Initialize Chart
-  useEffect(() => {
-    if (!chartContainerRef.current) return;
+    // Capture chart as image
+    const captureChart = useCallback(async () => {
+        if (!chartContainerRef.current) return null;
 
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#9CA3AF",
-      },
-      width: chartContainerRef.current.clientWidth,
-      height: 500,
-      grid: {
-        vertLines: { color: "rgba(105, 105, 105, 0.2)" },
-        horzLines: { color: "rgba(105, 105, 105, 0.2)" },
-      },
-      timeScale: {
-        timeVisible: true,
-        secondsVisible: false,
-        rightOffset: 20, // Space for future drawing
-      },
-      crosshair: {
-        mode: 1, // Magnet mode
-      }
-    });
-
-    const candlestickSeries = chart.addSeries(CandlestickSeries, {
-        upColor: "#ef4444", 
-        downColor: "#3b82f6", 
-        borderVisible: false,
-        wickUpColor: "#ef4444",
-        wickDownColor: "#3b82f6",
-    });
-
-    // Line series for connecting prediction points
-    const lineSeries = chart.addSeries(LineSeries, {
-        color: '#2962FF',
-        lineWidth: 2,
-        lineStyle: 1, // Dotted? 0=Solid, 1=Dotted, 2=Dashed, 3=LargeDashed
-    });
-
-    candlestickSeriesRef.current = candlestickSeries;
-    lineSeriesRef.current = lineSeries;
-    chartRef.current = chart;
-
-    // Handle Resize
-    const handleResize = () => {
-        if (chartContainerRef.current) {
-            chart.applyOptions({ width: chartContainerRef.current.clientWidth });
-        }
-    };
-    window.addEventListener("resize", handleResize);
-
-    // Click Interaction
-    chart.subscribeClick((param) => {
-        if (!param.point || !param.time) return;
-        
-        // We only want to allow drawing in the future or extending from last point?
-        // For simplicity, allow clicking anywhere to add a point to the prediction line.
-        // Getting value from coordinate
-        const price = candlestickSeries.coordinateToPrice(param.point.y);
-        
-        if (price !== null) {
-             const newPoint = { time: param.time, value: price };
-             
-             setPoints(prev => {
-                const nextPoints = [...prev, newPoint];
-                // Sort by time
-                nextPoints.sort((a, b) => {
-                    if (typeof a.time === 'string' && typeof b.time === 'string') {
-                        return a.time.localeCompare(b.time);
-                    }
-                    return (a.time as number) - (b.time as number);
-                });
-                return nextPoints;
-             });
-        }
-    });
-
-    return () => {
-        window.removeEventListener("resize", handleResize);
-        chart.remove();
-        candlestickSeriesRef.current = null;
-        lineSeriesRef.current = null;
-        chartRef.current = null;
-    };
-  }, []);
-
-  // 2. Fetch Data
-  useEffect(() => {
-    const fetchData = async () => {
-        if (!candlestickSeriesRef.current) return;
-        setLoading(true);
         try {
-            // Map generic interval to Yahoo API interval
-            // "D" -> "1d", "W" -> "1wk", "M" -> "1mo"
-            let yahooInterval = "1d";
-            if (interval === "W") yahooInterval = "1wk";
-            if (interval === "M") yahooInterval = "1mo";
-            if (interval === "60") yahooInterval = "60m"; // 1 hour
-            if (interval === "1") yahooInterval = "1m"; // 1 minute
-            
-             // Basic support for now
-            
-            const data = await fetchYahooCandles(symbol, yahooInterval);
-            candlestickSeriesRef.current.setData(data as any);
-            
-            // Clear existing prediction points on symbol change?
-            setPoints([]); 
-            
-            if (chartRef.current) {
-                // Adjust time axis based on interval
-                // Hide time for D, W, M
-                const isIntraday = !["D", "W", "M"].includes(interval);
-                
-                chartRef.current.applyOptions({
-                    timeScale: {
-                        timeVisible: isIntraday,
-                        secondsVisible: false,
-                        tickMarkFormatter: (time: any, tickMarkType: TickMarkType, locale: string) => {
-                            // Convert to Date
-                            // time can be string 'YYYY-MM-DD' or number (unix timestamp)
-                            let date: Date;
-                            if (typeof time === 'string') {
-                                date = new Date(time);
-                            } else {
-                                date = new Date(time * 1000);
-                            }
-                            
-                            switch (tickMarkType) {
-                                case TickMarkType.Year:
-                                    return date.getFullYear().toString();
-                                case TickMarkType.Month:
-                                    return date.toLocaleDateString('en-US', { month: 'short' });
-                                case TickMarkType.DayOfMonth:
-                                    return date.getDate().toString();
-                                case TickMarkType.Time:
-                                case TickMarkType.TimeWithSeconds:
-                                    return date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
-                                default:
-                                    return "";
-                            }
-                        }
-                    }
-                });
+            const html2canvas = (await import('html2canvas')).default;
+            const canvas = await html2canvas(chartContainerRef.current, {
+                backgroundColor: '#ffffff',
+                scale: 2,
+            });
 
-                chartRef.current.timeScale().fitContent();
+            const imageDataUrl = canvas.toDataURL('image/png');
+            if (onChartCapture) {
+                onChartCapture(imageDataUrl);
+            }
+            return imageDataUrl;
+        } catch (error) {
+            console.error('Failed to capture chart:', error);
+            return null;
+        }
+    }, [onChartCapture]);
+
+    // 1. Initialize Chart
+    useEffect(() => {
+        if (!chartContainerRef.current) return;
+
+        const chart = createChart(chartContainerRef.current, {
+            layout: {
+                background: { type: ColorType.Solid, color: "#1a1a1a" },
+                textColor: "#9CA3AF",
+                fontSize: 12,
+            },
+            width: chartContainerRef.current.clientWidth,
+            height: 500,
+            grid: {
+                vertLines: {
+                    color: "rgba(105, 105, 105, 0.2)",
+                    style: 0,
+                    visible: true,
+                },
+                horzLines: {
+                    color: "rgba(105, 105, 105, 0.2)",
+                    style: 0,
+                    visible: true,
+                },
+            },
+            timeScale: {
+                timeVisible: true,
+                secondsVisible: false,
+                rightOffset: 20,
+                borderColor: "#2a2a2a",
+            },
+            rightPriceScale: {
+                borderColor: "#2a2a2a",
+                scaleMargins: {
+                    top: 0.1,
+                    bottom: 0.2,
+                },
+            },
+            crosshair: {
+                mode: 0,
+                vertLine: {
+                    color: "#9CA3AF",
+                    width: 1,
+                    style: 3,
+                    labelBackgroundColor: "#374151",
+                },
+                horzLine: {
+                    color: "#9CA3AF",
+                    width: 1,
+                    style: 3,
+                    labelBackgroundColor: "#374151",
+                },
+            },
+        });
+
+        // Original style: Red for up, Blue for down
+        const candlestickSeries = chart.addSeries(CandlestickSeries, {
+            upColor: "#ef4444",
+            downColor: "#3b82f6",
+            borderVisible: false,
+            wickUpColor: "#ef4444",
+            wickDownColor: "#3b82f6",
+            borderUpColor: "#ef4444",
+            borderDownColor: "#3b82f6",
+        });
+
+        // Volume histogram
+        const volumeSeries = chart.addSeries(HistogramSeries, {
+            color: '#26a69a',
+            priceFormat: {
+                type: 'volume',
+            },
+            priceScaleId: 'volume',
+        });
+
+        volumeSeries.priceScale().applyOptions({
+            scaleMargins: {
+                top: 0.8,
+                bottom: 0,
+            },
+        });
+
+        // Moving Average lines
+        const ma5Series = chart.addSeries(LineSeries, {
+            color: '#f59e0b',
+            lineWidth: 1,
+            crosshairMarkerVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+        });
+
+        const ma20Series = chart.addSeries(LineSeries, {
+            color: '#8b5cf6',
+            lineWidth: 1,
+            crosshairMarkerVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+        });
+
+        // Line series for connecting prediction points
+        const lineSeries = chart.addSeries(LineSeries, {
+            color: '#2962FF',
+            lineWidth: 2,
+            lineStyle: 2,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 4,
+        });
+
+        candlestickSeriesRef.current = candlestickSeries as ISeriesApi<"Candlestick">;
+        volumeSeriesRef.current = volumeSeries as ISeriesApi<"Histogram">;
+        lineSeriesRef.current = lineSeries as ISeriesApi<"Line">;
+        ma5SeriesRef.current = ma5Series as ISeriesApi<"Line">;
+        ma20SeriesRef.current = ma20Series as ISeriesApi<"Line">;
+        chartRef.current = chart;
+
+        // Handle Resize
+        const handleResize = () => {
+            if (chartContainerRef.current) {
+                chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+            }
+        };
+        window.addEventListener("resize", handleResize);
+
+        // Crosshair move handler for tooltip
+        chart.subscribeCrosshairMove((param: MouseEventParams) => {
+            if (!param.time || !param.seriesData || param.seriesData.size === 0) {
+                setHoveredPrice(null);
+                return;
             }
 
-            // Automatically capture chart after data loads
-            setTimeout(() => {
-                captureChart();
-            }, 500); // Small delay to ensure chart is fully rendered
+            const candleData = param.seriesData.get(candlestickSeries) as CandlestickData | undefined;
+            const volumeData = param.seriesData.get(volumeSeries) as { value: number } | undefined;
 
-        } catch (error) {
-            console.error("Failed to fetch data", error);
-        } finally {
-            setLoading(false);
+            if (candleData) {
+                setHoveredPrice({
+                    time: typeof param.time === 'string' ? param.time : new Date((param.time as number) * 1000).toLocaleDateString('ko-KR'),
+                    open: candleData.open,
+                    high: candleData.high,
+                    low: candleData.low,
+                    close: candleData.close,
+                    volume: volumeData?.value,
+                });
+            }
+        });
+
+        // Click Interaction - Fixed mouse pointer alignment
+        chart.subscribeClick((param: MouseEventParams) => {
+            if (!param.time || !param.point) return;
+
+            // Use coordinateToPrice with the actual mouse Y coordinate
+            const price = candlestickSeries.coordinateToPrice(param.point.y);
+
+            if (price !== null && price !== undefined) {
+                const newPoint = { time: param.time, value: price };
+
+                setPoints(prev => {
+                    const nextPoints = [...prev, newPoint];
+                    nextPoints.sort((a, b) => {
+                        if (typeof a.time === 'string' && typeof b.time === 'string') {
+                            return a.time.localeCompare(b.time);
+                        }
+                        return (a.time as number) - (b.time as number);
+                    });
+                    return nextPoints;
+                });
+            }
+        });
+
+        return () => {
+            window.removeEventListener("resize", handleResize);
+            chart.remove();
+            candlestickSeriesRef.current = null;
+            volumeSeriesRef.current = null;
+            lineSeriesRef.current = null;
+            ma5SeriesRef.current = null;
+            ma20SeriesRef.current = null;
+            chartRef.current = null;
+        };
+    }, []);
+
+    // Calculate Moving Average
+    const calculateMA = (data: CandleDataWithVolume[], period: number) => {
+        const result = [];
+        for (let i = period - 1; i < data.length; i++) {
+            const sum = data.slice(i - period + 1, i + 1).reduce((acc, d) => acc + d.close, 0);
+            result.push({
+                time: data[i].time,
+                value: sum / period,
+            });
         }
+        return result;
     };
-    
-    fetchData();
-  }, [symbol, interval]);
 
-  // 3. Update Prediction Line
-  useEffect(() => {
-    if (onPointsChange) {
-        onPointsChange(points);
-    }
+    // 2. Fetch Data
+    useEffect(() => {
+        const fetchData = async () => {
+            if (!candlestickSeriesRef.current || !volumeSeriesRef.current) return;
+            setLoading(true);
+            setError(null);
+            try {
+                let yahooInterval = "1d";
+                if (interval === "Y") yahooInterval = "1mo";
+                if (interval === "M") yahooInterval = "1mo";
+                if (interval === "W") yahooInterval = "1wk";
+                if (interval === "D") yahooInterval = "1d";
+                if (interval === "60") yahooInterval = "1h";
+                if (interval === "1") yahooInterval = "1m";
 
-    if (lineSeriesRef.current && points.length > 0) {
-        lineSeriesRef.current.setData(points);
-        
-        // Add markers for points
-        const markers = points.map(p => ({
-            time: p.time,
-            position: 'inBar' as const,
-            color: '#2962FF',
-            shape: 'circle' as const,
-            size: 1, // small dot
-            text: p == points[points.length-1] ? `$${p.value.toFixed(2)}` : undefined,
-        }));
-        
-        // Safety check and debug
-        if ('setMarkers' in lineSeriesRef.current && typeof (lineSeriesRef.current as any).setMarkers === 'function') {
-             (lineSeriesRef.current as any).setMarkers(markers);
-        } else {
-            console.warn("setMarkers not found on LineSeries", lineSeriesRef.current);
+                const data = await fetchYahooCandles(symbol, yahooInterval) as CandleDataWithVolume[];
+
+                if (!data || data.length === 0) {
+                    setError(`${interval === "1" ? "1분봉" : interval === "60" ? "60분봉" : ""} 데이터를 불러올 수 없습니다. 다른 시간대를 선택해주세요.`);
+                    setLoading(false);
+                    return;
+                }
+
+                const candleData = data.map(d => ({
+                    time: d.time,
+                    open: d.open,
+                    high: d.high,
+                    low: d.low,
+                    close: d.close,
+                }));
+
+                const volumeData: HistogramData[] = data
+                    .filter(d => d.volume !== undefined)
+                    .map(d => ({
+                        time: d.time,
+                        value: d.volume!,
+                        color: d.close >= d.open ? '#ef444480' : '#3b82f680',
+                    }));
+
+                candlestickSeriesRef.current.setData(candleData);
+                volumeSeriesRef.current.setData(volumeData);
+
+                // Calculate and set moving averages
+                if (ma5SeriesRef.current && ma20SeriesRef.current) {
+                    const ma5Data = calculateMA(data, 5);
+                    const ma20Data = calculateMA(data, 20);
+                    ma5SeriesRef.current.setData(ma5Data);
+                    ma20SeriesRef.current.setData(ma20Data);
+                }
+
+                // Set current price and change
+                if (data.length > 0) {
+                    const latest = data[data.length - 1];
+                    const previous = data[data.length - 2];
+                    setCurrentPrice(latest.close);
+                    if (previous) {
+                        const change = latest.close - previous.close;
+                        const changePercent = (change / previous.close) * 100;
+                        setPriceChange({ value: change, percent: changePercent });
+                    }
+                }
+
+                setPoints([]);
+
+                if (chartRef.current) {
+                    const isIntraday = ["60", "1"].includes(interval);
+
+                    chartRef.current.applyOptions({
+                        timeScale: {
+                            timeVisible: isIntraday,
+                            secondsVisible: false,
+                            borderColor: "#D1D5DB",
+                            tickMarkFormatter: (time: number | string, tickMarkType: TickMarkType) => {
+                                let date: Date;
+                                if (typeof time === 'string') {
+                                    date = new Date(time);
+                                } else {
+                                    date = new Date(time * 1000);
+                                }
+
+                                switch (tickMarkType) {
+                                    case TickMarkType.Year:
+                                        return date.getFullYear().toString();
+                                    case TickMarkType.Month:
+                                        return (date.getMonth() + 1).toString();
+                                    case TickMarkType.DayOfMonth:
+                                        return date.getDate().toString();
+                                    case TickMarkType.Time:
+                                    case TickMarkType.TimeWithSeconds:
+                                        return date.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
+                                    default:
+                                        return "";
+                                }
+                            }
+                        }
+                    });
+
+                    chartRef.current.timeScale().fitContent();
+                }
+
+                setTimeout(() => {
+                    captureChart();
+                }, 500);
+
+            } catch (error) {
+                console.error("Failed to fetch data", error);
+                setError("차트 데이터를 불러오는데 실패했습니다. 잠시 후 다시 시도해주세요.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, [symbol, interval, captureChart]);
+
+    // 3. Update Prediction Line
+    useEffect(() => {
+        if (onPointsChange) {
+            onPointsChange(points);
         }
 
-    } else if (lineSeriesRef.current) {
-        lineSeriesRef.current.setData([]);
-        // Clear markers if possible
-        if ('setMarkers' in lineSeriesRef.current && typeof (lineSeriesRef.current as any).setMarkers === 'function') {
-            (lineSeriesRef.current as any).setMarkers([]);
-       }
-    }
-  }, [points]);
+        if (lineSeriesRef.current && points.length > 0) {
+            lineSeriesRef.current.setData(points);
 
-  const handleSavePoints = () => {
-      console.log("Saving prediction points:", points);
-      // Pass this up to parent or save to state that parent can access?
-      // For now, assume parent accesses state or we use context/store.
-      // Or just a visual confirmation for this task.
-      alert(`Saved ${points.length} prediction points!`);
-  };
+            const markers = points.map((p, idx) => ({
+                time: p.time,
+                position: 'inBar' as const,
+                color: '#2962FF',
+                shape: 'circle' as const,
+                size: 2,
+                text: idx === points.length - 1 ? `${p.value.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}` : undefined,
+            }));
 
-  return (
-    <div className="relative w-full h-full">
-        {loading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
-                <span className="animate-pulse">Loading...</span>
-            </div>
-        )}
-        <div ref={chartContainerRef} className="w-full h-full" />
-        
-        {/* Floating Save Button Inside Chart Area */}
-        {points.length > 0 && (
-            <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-20">
-                <Button onClick={handleSavePoints} className="shadow-lg bg-[#4A90E2] hover:bg-[#357ABD] text-white">
-                    Save Point
-                </Button>
-            </div>
-        )}
-    </div>
-  );
+            if ('setMarkers' in lineSeriesRef.current && typeof (lineSeriesRef.current as { setMarkers?: (markers: unknown[]) => void }).setMarkers === 'function') {
+                (lineSeriesRef.current as { setMarkers: (markers: unknown[]) => void }).setMarkers(markers);
+            }
+
+        } else if (lineSeriesRef.current) {
+            lineSeriesRef.current.setData([]);
+            if ('setMarkers' in lineSeriesRef.current && typeof (lineSeriesRef.current as { setMarkers?: (markers: unknown[]) => void }).setMarkers === 'function') {
+                (lineSeriesRef.current as { setMarkers: (markers: unknown[]) => void }).setMarkers([]);
+            }
+        }
+    }, [points, onPointsChange]);
+
+    const handleClearPoints = () => {
+        setPoints([]);
+    };
+
+    return (
+        <div className="relative w-full h-full bg-[#1a1a1a]">
+            {loading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                    <span className="text-gray-300 animate-pulse">차트 로딩 중...</span>
+                </div>
+            )}
+
+            {error && !loading && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#1a1a1a] z-10">
+                    <div className="text-center space-y-4 p-8">
+                        <div className="text-red-500 text-lg font-semibold">⚠️ {error}</div>
+                        <div className="text-gray-400 text-sm">
+                            {interval === "1" && "1분봉 데이터는 최근 7일만 제공됩니다."}
+                            {interval === "60" && "60분봉 데이터는 최근 60일만 제공됩니다."}
+                        </div>
+                        <div className="text-gray-500 text-xs">
+                            일봉, 주봉, 월봉 데이터를 권장합니다.
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Price Info Overlay */}
+            {currentPrice && priceChange && (
+                <div className="absolute top-4 left-4 z-20 bg-gray-900/95 backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg border border-gray-700">
+                    <div className="flex items-baseline gap-3">
+                        <span className="text-2xl font-bold text-white">
+                            {currentPrice.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}
+                        </span>
+                        <span className={`text-sm font-semibold ${priceChange.value >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                            {priceChange.value >= 0 ? '+' : ''}{priceChange.value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}
+                            {' '}({priceChange.percent >= 0 ? '+' : ''}{priceChange.percent.toFixed(2)}%)
+                        </span>
+                    </div>
+                    <div className="flex gap-4 mt-2 text-xs text-gray-400">
+                        <span className="flex items-center gap-1">
+                            <span className="w-3 h-0.5 bg-amber-500"></span>
+                            MA5
+                        </span>
+                        <span className="flex items-center gap-1">
+                            <span className="w-3 h-0.5 bg-purple-500"></span>
+                            MA20
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {/* Hover Tooltip */}
+            {hoveredPrice && (
+                <div className="absolute top-20 left-4 z-20 bg-gray-900/95 backdrop-blur-sm rounded-lg px-4 py-3 shadow-lg text-white text-sm">
+                    <div className="font-semibold mb-2 text-gray-300">{hoveredPrice.time}</div>
+                    <div className="space-y-1">
+                        <div className="flex justify-between gap-6">
+                            <span className="text-gray-400">시가:</span>
+                            <span className="font-medium">{hoveredPrice.open.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between gap-6">
+                            <span className="text-gray-400">고가:</span>
+                            <span className="font-medium text-red-400">{hoveredPrice.high.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between gap-6">
+                            <span className="text-gray-400">저가:</span>
+                            <span className="font-medium text-blue-400">{hoveredPrice.low.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between gap-6">
+                            <span className="text-gray-400">종가:</span>
+                            <span className="font-medium">{hoveredPrice.close.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        {hoveredPrice.volume && (
+                            <div className="flex justify-between gap-6 pt-1 border-t border-gray-700">
+                                <span className="text-gray-400">거래량:</span>
+                                <span className="font-medium">{hoveredPrice.volume.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            <div ref={chartContainerRef} className="w-full h-full" />
+
+            {points.length > 0 && (
+                <div className="absolute top-4 right-4 z-20">
+                    <Button
+                        onClick={handleClearPoints}
+                        variant="outline"
+                        size="sm"
+                        className="shadow-md bg-gray-800 hover:bg-gray-700 text-white border-gray-600"
+                    >
+                        예측 초기화 ({points.length})
+                    </Button>
+                </div>
+            )}
+        </div>
+    );
 }

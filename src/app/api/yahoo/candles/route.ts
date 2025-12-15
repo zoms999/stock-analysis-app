@@ -14,18 +14,29 @@ export async function GET(req: Request) {
     const intervalArg = searchParams.get("interval") ?? "1d";
 
     // Validate interval (yahoo-finance2 supports: 1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo)
-    // We'll support a subset that makes sense for the chart
-    const allowedIntervals = ["1d", "1wk", "1mo"];
-    const interval = allowedIntervals.includes(intervalArg) ? (intervalArg as "1d" | "1wk" | "1mo") : "1d";
+    const allowedIntervals = ["1d", "1wk", "1mo", "1m", "5m", "15m", "30m", "60m", "1h"];
+    const intervalQuery = allowedIntervals.includes(intervalArg) ? intervalArg : "1d";
+    // Yahoo expects specific types, cast it
+    const interval = intervalQuery as "1d" | "1wk" | "1mo" | "1m" | "5m" | "15m" | "30m" | "60m" | "1h";
 
     const now = new Date();
-    // Fetch enough history. For daily, 1 year is good.
-    const from = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+    let from = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()); // Default 1 year
+
+    // Adjust history range based on interval constraints
+    // Yahoo Finance limits:
+    // 1m: 7 days
+    // 5m, 15m, 30m: 60 days
+    // 60m, 1h: 730 days
+    if (["1m", "5m", "15m", "30m"].includes(interval)) {
+        from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days
+    } else if (["60m", "1h"].includes(interval)) {
+        from = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000); // 60 days
+    }
 
     const queryOptions = {
       period1: from,
       period2: now,
-      interval: interval,
+      interval: interval as any,
     };
 
     // Explicitly type the result to avoid inference issues with the library
@@ -40,16 +51,34 @@ export async function GET(req: Request) {
     }>;
 
     // Transform to Lightweight Charts format
-    const candles = result.map((quote) => ({
-      time: Math.floor(new Date(quote.date).getTime() / 1000), // Unix timestamp in seconds
-      open: quote.open,
-      high: quote.high,
-      low: quote.low,
-      close: quote.close,
-    }));
+    const candles = result.map((quote) => {
+      let time: string | number = Math.floor(new Date(quote.date).getTime() / 1000); // Default to unix timestamp
+
+      // For daily/weekly/monthly, use YYYY-MM-DD string
+      if (["1d", "1wk", "1mo"].includes(interval)) {
+        const d = new Date(quote.date);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        time = `${yyyy}-${mm}-${dd}`;
+      }
+
+      return {
+        time,
+        open: quote.open,
+        high: quote.high,
+        low: quote.low,
+        close: quote.close,
+      };
+    });
 
     // Sort by time just in case
-    candles.sort((a, b) => (a.time as number) - (b.time as number));
+    candles.sort((a, b) => {
+        if (typeof a.time === 'string' && typeof b.time === 'string') {
+            return a.time.localeCompare(b.time);
+        }
+        return (a.time as number) - (b.time as number);
+    });
 
     return NextResponse.json(candles, {
       status: 200,

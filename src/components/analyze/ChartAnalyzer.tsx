@@ -8,7 +8,8 @@ import {
   CandlestickSeries, 
   ISeriesApi,
   Time,
-  LineSeries
+  LineSeries,
+  TickMarkType
 } from "lightweight-charts";
 import { fetchYahooCandles } from "@/lib/api/yahoo"; // Reusing the yahoo api
 import { Button } from "@/components/ui/button";
@@ -124,7 +125,12 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
              setPoints(prev => {
                 const nextPoints = [...prev, newPoint];
                 // Sort by time
-                nextPoints.sort((a, b) => (a.time as number) - (b.time as number));
+                nextPoints.sort((a, b) => {
+                    if (typeof a.time === 'string' && typeof b.time === 'string') {
+                        return a.time.localeCompare(b.time);
+                    }
+                    return (a.time as number) - (b.time as number);
+                });
                 return nextPoints;
              });
         }
@@ -150,6 +156,9 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
             let yahooInterval = "1d";
             if (interval === "W") yahooInterval = "1wk";
             if (interval === "M") yahooInterval = "1mo";
+            if (interval === "60") yahooInterval = "60m"; // 1 hour
+            if (interval === "1") yahooInterval = "1m"; // 1 minute
+            
              // Basic support for now
             
             const data = await fetchYahooCandles(symbol, yahooInterval);
@@ -159,6 +168,41 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
             setPoints([]); 
             
             if (chartRef.current) {
+                // Adjust time axis based on interval
+                // Hide time for D, W, M
+                const isIntraday = !["D", "W", "M"].includes(interval);
+                
+                chartRef.current.applyOptions({
+                    timeScale: {
+                        timeVisible: isIntraday,
+                        secondsVisible: false,
+                        tickMarkFormatter: (time: any, tickMarkType: TickMarkType, locale: string) => {
+                            // Convert to Date
+                            // time can be string 'YYYY-MM-DD' or number (unix timestamp)
+                            let date: Date;
+                            if (typeof time === 'string') {
+                                date = new Date(time);
+                            } else {
+                                date = new Date(time * 1000);
+                            }
+                            
+                            switch (tickMarkType) {
+                                case TickMarkType.Year:
+                                    return date.getFullYear().toString();
+                                case TickMarkType.Month:
+                                    return date.toLocaleDateString('en-US', { month: 'short' });
+                                case TickMarkType.DayOfMonth:
+                                    return date.getDate().toString();
+                                case TickMarkType.Time:
+                                case TickMarkType.TimeWithSeconds:
+                                    return date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+                                default:
+                                    return "";
+                            }
+                        }
+                    }
+                });
+
                 chartRef.current.timeScale().fitContent();
             }
 

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { Search, Save } from "lucide-react";
+import { Search, Save, BarChart2, LineChart } from "lucide-react";
 import { ChartAnalyzer } from "@/components/analyze/ChartAnalyzer";
 import { createPost } from "@/lib/api/posts";
 import { useRouter } from "next/navigation";
@@ -22,6 +22,7 @@ export default function AnalyzePage() {
     const router = useRouter();
     const [symbol, setSymbol] = useState("BTC-USD");
     const [interval, setInterval] = useState("D");
+    const [chartStyle, setChartStyle] = useState<"candle" | "line">("candle");
     const [content, setContent] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [points, setPoints] = useState<PredictionPoint[]>([]);
@@ -155,12 +156,32 @@ export default function AnalyzePage() {
                                     ))}
                                 </TabsList>
                             </Tabs>
+
+                            <div className="flex items-center bg-card border border-border rounded-lg p-0.5 h-8">
+                                <Button
+                                    variant="ghost" 
+                                    size="sm"
+                                    className={`h-7 px-2 rounded-sm ${chartStyle === 'candle' ? 'bg-blue-600 text-white hover:bg-blue-700 hover:text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                                    onClick={() => setChartStyle('candle')}
+                                >
+                                    <BarChart2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                    variant="ghost" 
+                                    size="sm"
+                                    className={`h-7 px-2 rounded-sm ${chartStyle === 'line' ? 'bg-blue-600 text-white hover:bg-blue-700 hover:text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                                    onClick={() => setChartStyle('line')}
+                                >
+                                    <LineChart className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
                     </div>
                     <div className="h-[550px] w-full relative">
                         <ChartAnalyzer
                             symbol={symbol}
                             interval={interval}
+                            chartStyle={chartStyle}
                             onPointsChange={setPoints}
                             onChartCapture={setChartImageUrl}
                         />

@@ -14,7 +14,8 @@ import {
     HistogramData,
     CandlestickSeries,
     HistogramSeries,
-    LineSeries
+    LineSeries,
+    AreaSeries
 } from "lightweight-charts";
 import { fetchYahooCandles } from "@/lib/api/yahoo";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import { Button } from "@/components/ui/button";
 interface ChartAnalyzerProps {
     symbol: string;
     interval: string;
+    chartStyle?: "candle" | "line";
     onPointsChange?: (points: PredictionPoint[]) => void;
     onChartCapture?: (imageDataUrl: string) => void;
 }
@@ -35,7 +37,7 @@ interface CandleDataWithVolume extends CandlestickData {
     volume?: number;
 }
 
-export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture }: ChartAnalyzerProps) {
+export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPointsChange, onChartCapture }: ChartAnalyzerProps) {
     const { theme, systemTheme } = useTheme();
     const currentTheme = theme === 'system' ? systemTheme : theme;
     const isDark = currentTheme === 'dark';
@@ -43,6 +45,7 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+    const areaSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
     const lineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
     const ma5SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -140,6 +143,16 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
             wickDownColor: "#3b82f6",
             borderUpColor: "#ef4444",
             borderDownColor: "#3b82f6",
+            visible: chartStyle === 'candle',
+        });
+
+        // Area Series (Line Chart)
+        const areaSeries = chart.addSeries(AreaSeries, {
+            topColor: 'rgba(41, 98, 255, 0.4)',
+            bottomColor: 'rgba(41, 98, 255, 0.0)',
+            lineColor: '#2962FF',
+            lineWidth: 2,
+            visible: chartStyle === 'line',
         });
 
         // Volume histogram
@@ -185,6 +198,7 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
         });
 
         candlestickSeriesRef.current = candlestickSeries as ISeriesApi<"Candlestick">;
+        areaSeriesRef.current = areaSeries as ISeriesApi<"Area">;
         volumeSeriesRef.current = volumeSeries as ISeriesApi<"Histogram">;
         lineSeriesRef.current = lineSeries as ISeriesApi<"Line">;
         ma5SeriesRef.current = ma5Series as ISeriesApi<"Line">;
@@ -207,15 +221,25 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
             }
 
             const candleData = param.seriesData.get(candlestickSeries) as CandlestickData | undefined;
+            const areaData = param.seriesData.get(areaSeries) as { value: number } | undefined;
             const volumeData = param.seriesData.get(volumeSeries) as { value: number } | undefined;
 
-            if (candleData) {
+            if (chartStyle === 'candle' && candleData) {
                 setHoveredPrice({
                     time: typeof param.time === 'string' ? param.time : new Date((param.time as number) * 1000).toLocaleDateString('ko-KR'),
                     open: candleData.open,
                     high: candleData.high,
                     low: candleData.low,
                     close: candleData.close,
+                    volume: volumeData?.value,
+                });
+            } else if (chartStyle === 'line' && areaData) {
+                 setHoveredPrice({
+                    time: typeof param.time === 'string' ? param.time : new Date((param.time as number) * 1000).toLocaleDateString('ko-KR'),
+                    open: areaData.value,
+                    high: areaData.value,
+                    low: areaData.value,
+                    close: areaData.value,
                     volume: volumeData?.value,
                 });
             }
@@ -226,7 +250,8 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
             if (!param.time || !param.point) return;
 
             // Use coordinateToPrice with the actual mouse Y coordinate
-            const price = candlestickSeries.coordinateToPrice(param.point.y);
+            const activeSeries = chartStyle === 'line' ? areaSeries : candlestickSeries;
+            const price = activeSeries.coordinateToPrice(param.point.y);
 
             if (price !== null && price !== undefined) {
                 const newPoint = { time: param.time, value: price };
@@ -248,13 +273,14 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
             window.removeEventListener("resize", handleResize);
             chart.remove();
             candlestickSeriesRef.current = null;
+            areaSeriesRef.current = null;
             volumeSeriesRef.current = null;
             lineSeriesRef.current = null;
             ma5SeriesRef.current = null;
             ma20SeriesRef.current = null;
             chartRef.current = null;
         };
-    }, [isDark]);
+    }, [isDark, chartStyle]);
 
     // Calculate Moving Average
     const calculateMA = (data: CandleDataWithVolume[], period: number) => {
@@ -272,7 +298,7 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
     // 2. Fetch Data
     useEffect(() => {
         const fetchData = async () => {
-            if (!candlestickSeriesRef.current || !volumeSeriesRef.current) return;
+            if (!candlestickSeriesRef.current || !areaSeriesRef.current || !volumeSeriesRef.current) return;
             setLoading(true);
             setError(null);
             try {
@@ -300,6 +326,11 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
                     close: d.close,
                 }));
 
+                const areaData = data.map(d => ({
+                    time: d.time,
+                    value: d.close,
+                }));
+
                 const volumeData: HistogramData[] = data
                     .filter(d => d.volume !== undefined)
                     .map(d => ({
@@ -309,6 +340,7 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
                     }));
 
                 candlestickSeriesRef.current.setData(candleData);
+                areaSeriesRef.current.setData(areaData);
                 volumeSeriesRef.current.setData(volumeData);
 
                 // Calculate and set moving averages
@@ -382,7 +414,7 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
         };
 
         fetchData();
-    }, [symbol, interval, captureChart]);
+    }, [symbol, interval, captureChart, chartStyle]);
 
     // 3. Update Prediction Line
     useEffect(() => {

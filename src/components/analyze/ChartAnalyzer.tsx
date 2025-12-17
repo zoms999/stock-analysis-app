@@ -48,8 +48,7 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
     const areaSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
     const lineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
-    const ma5SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
-    const ma20SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+
 
     const [points, setPoints] = useState<PredictionPoint[]>([]);
     const [loading, setLoading] = useState(false);
@@ -171,22 +170,7 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
             },
         });
 
-        // Moving Average lines
-        const ma5Series = chart.addSeries(LineSeries, {
-            color: '#f59e0b',
-            lineWidth: 1,
-            crosshairMarkerVisible: false,
-            lastValueVisible: false,
-            priceLineVisible: false,
-        });
 
-        const ma20Series = chart.addSeries(LineSeries, {
-            color: '#8b5cf6',
-            lineWidth: 1,
-            crosshairMarkerVisible: false,
-            lastValueVisible: false,
-            priceLineVisible: false,
-        });
 
         // Line series for connecting prediction points
         const lineSeries = chart.addSeries(LineSeries, {
@@ -201,8 +185,7 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
         areaSeriesRef.current = areaSeries as ISeriesApi<"Area">;
         volumeSeriesRef.current = volumeSeries as ISeriesApi<"Histogram">;
         lineSeriesRef.current = lineSeries as ISeriesApi<"Line">;
-        ma5SeriesRef.current = ma5Series as ISeriesApi<"Line">;
-        ma20SeriesRef.current = ma20Series as ISeriesApi<"Line">;
+
         chartRef.current = chart;
 
         // Handle Resize
@@ -276,24 +259,12 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
             areaSeriesRef.current = null;
             volumeSeriesRef.current = null;
             lineSeriesRef.current = null;
-            ma5SeriesRef.current = null;
-            ma20SeriesRef.current = null;
+
             chartRef.current = null;
         };
     }, [isDark, chartStyle]);
 
-    // Calculate Moving Average
-    const calculateMA = (data: CandleDataWithVolume[], period: number) => {
-        const result = [];
-        for (let i = period - 1; i < data.length; i++) {
-            const sum = data.slice(i - period + 1, i + 1).reduce((acc, d) => acc + d.close, 0);
-            result.push({
-                time: data[i].time,
-                value: sum / period,
-            });
-        }
-        return result;
-    };
+
 
     // 2. Fetch Data
     useEffect(() => {
@@ -343,13 +314,7 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
                 areaSeriesRef.current.setData(areaData);
                 volumeSeriesRef.current.setData(volumeData);
 
-                // Calculate and set moving averages
-                if (ma5SeriesRef.current && ma20SeriesRef.current) {
-                    const ma5Data = calculateMA(data, 5);
-                    const ma20Data = calculateMA(data, 20);
-                    ma5SeriesRef.current.setData(ma5Data);
-                    ma20SeriesRef.current.setData(ma20Data);
-                }
+
 
                 // Set current price and change
                 if (data.length > 0) {
@@ -485,16 +450,7 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
                             {' '}({priceChange.percent >= 0 ? '+' : ''}{priceChange.percent.toFixed(2)}%)
                         </span>
                     </div>
-                    <div className={`flex gap-4 mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                        <span className="flex items-center gap-1">
-                            <span className="w-3 h-0.5 bg-amber-500"></span>
-                            MA5
-                        </span>
-                        <span className="flex items-center gap-1">
-                            <span className="w-3 h-0.5 bg-purple-500"></span>
-                            MA20
-                        </span>
-                    </div>
+
                 </div>
             )}
 

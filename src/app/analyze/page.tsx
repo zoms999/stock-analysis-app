@@ -22,7 +22,7 @@ export default function AnalyzePage() {
     const router = useRouter();
     const [symbol, setSymbol] = useState("BTC-USD");
     const [interval, setInterval] = useState("D");
-    const [chartStyle, setChartStyle] = useState<"candle" | "line">("candle");
+    const [chartStyle, setChartStyle] = useState<"candle" | "line">("line");
     const [content, setContent] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [points, setPoints] = useState<PredictionPoint[]>([]);

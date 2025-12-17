@@ -14,7 +14,6 @@ const TechChart = dynamic(() => import("@/components/chart/TechChart").then(mod 
 interface ChartCardProps {
   id: number;
   symbol: string;
-  source: "upbit" | "finnhub" | "yahoo";
   title: string;
   user: {
     name: string;
@@ -29,7 +28,7 @@ interface ChartCardProps {
   };
 }
 
-export function ChartCard({ id, symbol, source, title, user, stats }: ChartCardProps) {
+export function ChartCard({ id, symbol, title, user, stats }: ChartCardProps) {
   return (
     <div className="flex flex-col gap-4">
       {/* Chart Section */}
@@ -41,7 +40,7 @@ export function ChartCard({ id, symbol, source, title, user, stats }: ChartCardP
         {/* Chart Area - Fixed Height */}
         <div className="h-[180px] w-full pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity">
              {/* Pass a special "mini" prop or just use as is for now */}
-            <TechChart source={source} symbol={symbol} /> 
+            <TechChart symbol={symbol} interval="1d" /> 
         </div>
 
         {/* Floating Action Button */}

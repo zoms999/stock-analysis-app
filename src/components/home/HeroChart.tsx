@@ -31,10 +31,10 @@ export function HeroChart() {
       {/* Right: Representative Chart */}
       <div className="w-full md:w-[500px] lg:w-[600px]">
           <div className="rounded-2xl border border-border bg-card p-4 shadow-xl relative overflow-hidden group">
-            <div className="flex justify-between items-center mb-4 px-2">
+             <div className="flex justify-between items-center mb-4 px-2">
                  <div>
                     <h3 className="font-bold text-lg">Bitcoin (BTC) Price</h3>
-                    <p className="text-xs text-muted-foreground">Upbit Real-time</p>
+                    <p className="text-xs text-muted-foreground">Yahoo Finance Real-time</p>
                  </div>
                  <div className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
                     Live
@@ -44,7 +44,7 @@ export function HeroChart() {
             <div className="rounded-xl overflow-hidden border border-border bg-background">
                  {/* Fixed Height Wrapper for Hero Chart */}
                  <div className="h-[280px]">
-                    <TechChart source="upbit" symbol="KRW-BTC" />
+                    <TechChart symbol="BTC-USD" interval="1d" />
                  </div>
             </div>
 

@@ -1,4 +1,11 @@
-import { CandleData } from "./upbit";
+export interface CandleData {
+  time: string | number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+}
 
 export async function fetchYahooCandles(symbol: string = "AAPL", interval: string = "1d"): Promise<CandleData[]> {
   try {

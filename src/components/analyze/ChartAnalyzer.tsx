@@ -39,8 +39,14 @@ interface CandleDataWithVolume extends CandlestickData {
 
 export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPointsChange, onChartCapture }: ChartAnalyzerProps) {
     const { theme, systemTheme } = useTheme();
-    const currentTheme = theme === 'system' ? systemTheme : theme;
-    const isDark = currentTheme === 'dark';
+    const [mounted, setMounted] = useState(false);
+    const [isDark, setIsDark] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+        const currentTheme = theme === 'system' ? systemTheme : theme;
+        setIsDark(currentTheme === 'dark');
+    }, [theme, systemTheme]);
 
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
@@ -55,6 +61,8 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
     const [currentPrice, setCurrentPrice] = useState<number | null>(null);
     const [priceChange, setPriceChange] = useState<{ value: number; percent: number } | null>(null);
     const [hoveredPrice, setHoveredPrice] = useState<{ time: string; open: number; high: number; low: number; close: number; volume?: number } | null>(null);
+    const [lastCandle, setLastCandle] = useState<{ time: Time; value: number } | null>(null);
+    const [dataCount, setDataCount] = useState<number>(0);
     const [error, setError] = useState<string | null>(null);
 
     // Capture chart as image
@@ -81,7 +89,7 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
 
     // 1. Initialize Chart
     useEffect(() => {
-        if (!chartContainerRef.current) return;
+        if (!chartContainerRef.current || !mounted) return;
 
         const chart = createChart(chartContainerRef.current, {
             layout: {
@@ -106,7 +114,7 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
             timeScale: {
                 timeVisible: true,
                 secondsVisible: false,
-                rightOffset: 20,
+                rightOffset: 90,
                 borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
             },
             rightPriceScale: {
@@ -209,7 +217,7 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
 
             if (chartStyle === 'candle' && candleData) {
                 setHoveredPrice({
-                    time: typeof param.time === 'string' ? param.time : new Date((param.time as number) * 1000).toLocaleDateString('ko-KR'),
+                    time: new Date((param.time as number) * 1000).toLocaleDateString('ko-KR'),
                     open: candleData.open,
                     high: candleData.high,
                     low: candleData.low,
@@ -217,8 +225,8 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
                     volume: volumeData?.value,
                 });
             } else if (chartStyle === 'line' && areaData) {
-                 setHoveredPrice({
-                    time: typeof param.time === 'string' ? param.time : new Date((param.time as number) * 1000).toLocaleDateString('ko-KR'),
+                setHoveredPrice({
+                    time: new Date((param.time as number) * 1000).toLocaleDateString('ko-KR'),
                     open: areaData.value,
                     high: areaData.value,
                     low: areaData.value,
@@ -230,21 +238,61 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
 
         // Click Interaction - Fixed mouse pointer alignment
         chart.subscribeClick((param: MouseEventParams) => {
-            if (!param.time || !param.point) return;
+            if (!param.point) return;
+
+            // Handle future prediction timestamps (empty space clicks)
+            let time: Time | undefined = param.time;
+            if (!time && dataCount > 0 && lastCandle) {
+                const logical = chart.timeScale().coordinateToLogical(param.point.x);
+                if (logical !== null) {
+                    const lastIndex = dataCount - 1;
+                    // Check if we are clicking to the right of the last candle
+                    if (logical > lastIndex) {
+                        const logicalDiff = Math.max(1, Math.round(logical - lastIndex));
+                         // Determine step size in seconds
+                        let step = 86400; // default 1d
+                        if (interval === "1") step = 60;
+                        if (interval === "60") step = 3600;
+                        if (interval === "D") step = 86400;
+                        if (interval === "W") step = 604800; // 7 days
+                        if (interval === "M") step = 2592000; // 30 days
+                        if (interval === "Y") step = 31536000; // 365 days
+
+                        time = (lastCandle.time as number) + (logicalDiff * step) as Time;
+                    }
+                }
+            }
+             
+             // Fallback to snapping if time was found via coordinateToTime
+             if (!time) {
+                const coordinateTime = chart.timeScale().coordinateToTime(param.point.x);
+                if (coordinateTime !== null) {
+                    // Snap to interval
+                    let step = 60; // default 1m
+                    if (interval === "60") step = 3600;
+                    if (interval === "D") step = 86400;
+                    if (interval === "W") step = 604800;
+                    if (interval === "M") step = 2592000; // ~30 days
+                    if (interval === "Y") step = 31536000; // ~365 days
+
+                    const rawTime = coordinateTime as number;
+                    // Round to nearest step
+                    time = (Math.round(rawTime / step) * step) as Time;
+                }
+            }
+
+            if (!time) return;
 
             // Use coordinateToPrice with the actual mouse Y coordinate
             const activeSeries = chartStyle === 'line' ? areaSeries : candlestickSeries;
             const price = activeSeries.coordinateToPrice(param.point.y);
 
             if (price !== null && price !== undefined) {
-                const newPoint = { time: param.time, value: price };
+                const newPoint = { time: time as Time, value: price };
 
                 setPoints(prev => {
                     const nextPoints = [...prev, newPoint];
                     nextPoints.sort((a, b) => {
-                        if (typeof a.time === 'string' && typeof b.time === 'string') {
-                            return a.time.localeCompare(b.time);
-                        }
                         return (a.time as number) - (b.time as number);
                     });
                     return nextPoints;
@@ -262,14 +310,14 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
 
             chartRef.current = null;
         };
-    }, [isDark, chartStyle]);
+    }, [isDark, chartStyle, mounted]);
 
 
 
     // 2. Fetch Data
     useEffect(() => {
         const fetchData = async () => {
-            if (!candlestickSeriesRef.current || !areaSeriesRef.current || !volumeSeriesRef.current) return;
+            if (!candlestickSeriesRef.current || !areaSeriesRef.current || !volumeSeriesRef.current || !mounted) return;
             setLoading(true);
             setError(null);
             try {
@@ -326,6 +374,8 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
                         const changePercent = (change / previous.close) * 100;
                         setPriceChange({ value: change, percent: changePercent });
                     }
+                    setLastCandle({ time: latest.time as Time, value: latest.close });
+                    setDataCount(data.length);
                 }
 
                 setPoints([]);
@@ -339,20 +389,19 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
                             secondsVisible: false,
                             borderColor: "#D1D5DB",
                             tickMarkFormatter: (time: number | string, tickMarkType: TickMarkType) => {
-                                let date: Date;
-                                if (typeof time === 'string') {
-                                    date = new Date(time);
-                                } else {
-                                    date = new Date(time * 1000);
-                                }
+                                // Time is always unix timestamp (number) now
+                                const date = new Date((time as number) * 1000);
+                                const year = date.getFullYear();
+                                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                                const day = date.getDate().toString().padStart(2, '0');
 
                                 switch (tickMarkType) {
                                     case TickMarkType.Year:
-                                        return date.getFullYear().toString();
+                                        return year.toString();
                                     case TickMarkType.Month:
-                                        return (date.getMonth() + 1).toString();
+                                        return `${year}.${month}`;
                                     case TickMarkType.DayOfMonth:
-                                        return date.getDate().toString();
+                                        return `${month}.${day}`;
                                     case TickMarkType.Time:
                                     case TickMarkType.TimeWithSeconds:
                                         return date.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
@@ -372,14 +421,15 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
 
             } catch (error) {
                 console.error("Failed to fetch data", error);
-                setError("차트 데이터를 불러오는데 실패했습니다. 잠시 후 다시 시도해주세요.");
+                const errorMessage = error instanceof Error ? error.message : "차트 데이터를 불러오는데 실패했습니다.";
+                setError(errorMessage);
             } finally {
                 setLoading(false);
             }
         };
 
         fetchData();
-    }, [symbol, interval, captureChart, chartStyle]);
+    }, [symbol, interval, captureChart, chartStyle, mounted]);
 
     // 3. Update Prediction Line
     useEffect(() => {
@@ -387,51 +437,88 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
             onPointsChange(points);
         }
 
-        if (lineSeriesRef.current && points.length > 0) {
-            lineSeriesRef.current.setData(points);
+        if (lineSeriesRef.current) {
+            let dataToShow = [...points];
 
-            const markers = points.map((p, idx) => ({
-                time: p.time,
-                position: 'inBar' as const,
-                color: '#2962FF',
-                shape: 'circle' as const,
-                size: 2,
-                text: idx === points.length - 1 ? `${p.value.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}` : undefined,
-            }));
-
-            if ('setMarkers' in lineSeriesRef.current && typeof (lineSeriesRef.current as { setMarkers?: (markers: unknown[]) => void }).setMarkers === 'function') {
-                (lineSeriesRef.current as { setMarkers: (markers: unknown[]) => void }).setMarkers(markers);
+            // Connect to the last candle if available and we have points
+            if (lastCandle && points.length > 0) {
+                // Check if the first point is effectively the same as last candle to avoid duplicates
+                if (points[0].time !== lastCandle.time) {
+                    dataToShow = [lastCandle, ...points];
+                }
             }
 
-        } else if (lineSeriesRef.current) {
-            lineSeriesRef.current.setData([]);
-            if ('setMarkers' in lineSeriesRef.current && typeof (lineSeriesRef.current as { setMarkers?: (markers: unknown[]) => void }).setMarkers === 'function') {
-                (lineSeriesRef.current as { setMarkers: (markers: unknown[]) => void }).setMarkers([]);
+            // Remove duplicates and ensure sorted (Lightweight Charts requires unique timestamps)
+            const uniqueData = new Map<number, number>();
+            dataToShow.forEach(d => {
+                const timeNum = d.time as number;
+                // Keep the last value if there are duplicates
+                uniqueData.set(timeNum, d.value);
+            });
+
+            // Convert back to array and sort
+            const sortedData = Array.from(uniqueData.entries())
+                .sort((a, b) => a[0] - b[0])
+                .map(([time, value]) => ({ time: time as Time, value }));
+
+            if (sortedData.length > 0) {
+                lineSeriesRef.current.setData(sortedData);
+
+                // Only put markers on the user-defined points (not the connecting start point)
+                const markers = points.map((p, idx) => ({
+                    time: p.time,
+                    position: 'inBar' as const,
+                    color: '#2962FF',
+                    shape: 'circle' as const,
+                    size: 4,
+                    text: idx === points.length - 1 ? `${p.value.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}` : undefined,
+                }));
+
+                if ('setMarkers' in lineSeriesRef.current && typeof (lineSeriesRef.current as { setMarkers?: (markers: unknown[]) => void }).setMarkers === 'function') {
+                    (lineSeriesRef.current as { setMarkers: (markers: unknown[]) => void }).setMarkers(markers);
+                }
+            } else {
+                // Clear if no data
+                lineSeriesRef.current.setData([]);
+                if ('setMarkers' in lineSeriesRef.current && typeof (lineSeriesRef.current as { setMarkers?: (markers: unknown[]) => void }).setMarkers === 'function') {
+                    (lineSeriesRef.current as { setMarkers: (markers: unknown[]) => void }).setMarkers([]);
+                }
             }
         }
-    }, [points, onPointsChange]);
+    }, [points, onPointsChange, lastCandle]);
 
     const handleClearPoints = () => {
         setPoints([]);
     };
 
+    // Prevent hydration mismatch
+    if (!mounted) {
+        return (
+            <div className="relative w-full h-full bg-background">
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-muted-foreground animate-pulse">차트 로딩 중...</span>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className={`relative w-full h-full ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'}`}>
+        <div className="relative w-full h-full bg-white dark:bg-[#1a1a1a]">
             {loading && (
-                <div className={`absolute inset-0 flex items-center justify-center ${isDark ? 'bg-black/50' : 'bg-white/50'} z-10`}>
-                    <span className={`${isDark ? 'text-gray-300' : 'text-gray-700'} animate-pulse`}>차트 로딩 중...</span>
+                <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 z-10">
+                    <span className="text-gray-700 dark:text-gray-300 animate-pulse">차트 로딩 중...</span>
                 </div>
             )}
 
             {error && !loading && (
-                <div className={`absolute inset-0 flex flex-col items-center justify-center ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'} z-10`}>
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white dark:bg-[#1a1a1a] z-10">
                     <div className="text-center space-y-4 p-8">
                         <div className="text-red-500 text-lg font-semibold">⚠️ {error}</div>
-                        <div className={`${isDark ? 'text-gray-400' : 'text-gray-600'} text-sm`}>
+                        <div className="text-gray-600 dark:text-gray-400 text-sm">
                             {interval === "1" && "1분봉 데이터는 최근 7일만 제공됩니다."}
                             {interval === "60" && "60분봉 데이터는 최근 60일만 제공됩니다."}
                         </div>
-                        <div className={`${isDark ? 'text-gray-500' : 'text-gray-500'} text-xs`}>
+                        <div className="text-gray-500 dark:text-gray-500 text-xs">
                             일봉, 주봉, 월봉 데이터를 권장합니다.
                         </div>
                     </div>
@@ -440,9 +527,9 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
 
             {/* Price Info Overlay */}
             {currentPrice && priceChange && (
-                <div className={`absolute top-4 left-4 z-20 ${isDark ? 'bg-gray-900/95' : 'bg-white/95'} backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg ${isDark ? 'border border-gray-700' : 'border border-gray-200'}`}>
+                <div className="absolute top-4 left-4 z-20 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg border border-gray-200 dark:border-gray-700">
                     <div className="flex items-baseline gap-3">
-                        <span className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        <span className="text-2xl font-bold text-gray-900 dark:text-white">
                             {currentPrice.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}
                         </span>
                         <span className={`text-sm font-semibold ${priceChange.value >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
@@ -456,28 +543,28 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
 
             {/* Hover Tooltip */}
             {hoveredPrice && (
-                <div className={`absolute top-20 left-4 z-20 ${isDark ? 'bg-gray-900/95 text-white' : 'bg-white/95 text-gray-900'} backdrop-blur-sm rounded-lg px-4 py-3 shadow-lg text-sm ${isDark ? 'border border-gray-700' : 'border border-gray-200'}`}>
-                    <div className={`font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{hoveredPrice.time}</div>
+                <div className="absolute top-20 left-4 z-20 bg-white/95 dark:bg-gray-900/95 text-gray-900 dark:text-white backdrop-blur-sm rounded-lg px-4 py-3 shadow-lg text-sm border border-gray-200 dark:border-gray-700">
+                    <div className="font-semibold mb-2 text-gray-700 dark:text-gray-300">{hoveredPrice.time}</div>
                     <div className="space-y-1">
                         <div className="flex justify-between gap-6">
-                            <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>시가:</span>
+                            <span className="text-gray-600 dark:text-gray-400">시가:</span>
                             <span className="font-medium">{hoveredPrice.open.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex justify-between gap-6">
-                            <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>고가:</span>
+                            <span className="text-gray-600 dark:text-gray-400">고가:</span>
                             <span className="font-medium text-red-400">{hoveredPrice.high.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex justify-between gap-6">
-                            <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>저가:</span>
+                            <span className="text-gray-600 dark:text-gray-400">저가:</span>
                             <span className="font-medium text-blue-400">{hoveredPrice.low.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex justify-between gap-6">
-                            <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>종가:</span>
+                            <span className="text-gray-600 dark:text-gray-400">종가:</span>
                             <span className="font-medium">{hoveredPrice.close.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
                         </div>
                         {hoveredPrice.volume && (
-                            <div className={`flex justify-between gap-6 pt-1 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`}>
-                                <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>거래량:</span>
+                            <div className="flex justify-between gap-6 pt-1 border-t border-gray-200 dark:border-gray-700">
+                                <span className="text-gray-600 dark:text-gray-400">거래량:</span>
                                 <span className="font-medium">{hoveredPrice.volume.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>
                             </div>
                         )}
@@ -493,7 +580,7 @@ export function ChartAnalyzer({ symbol, interval, chartStyle = "candle", onPoint
                         onClick={handleClearPoints}
                         variant="outline"
                         size="sm"
-                        className={`shadow-md ${isDark ? 'bg-gray-800 hover:bg-gray-700 text-white border-gray-600' : 'bg-white hover:bg-gray-50 text-gray-900 border-gray-300'}`}
+                        className="shadow-md bg-white hover:bg-gray-50 text-gray-900 border-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-white dark:border-gray-600"
                     >
                         예측 초기화 ({points.length})
                     </Button>

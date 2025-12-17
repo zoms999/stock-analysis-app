@@ -108,16 +108,21 @@ export default function AnalyzePage() {
                 </div>
 
                 {/* 1. Search Bar */}
-                <div className="flex justify-center">
-                    <form onSubmit={handleSearch} className="relative w-full max-w-2xl">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <Input
-                            placeholder="종목 검색 (예: BTC-USD, AAPL, TSLA)"
-                            className="pl-12 h-12 text-base rounded-lg bg-card border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500 focus-visible:border-blue-500 shadow-sm"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </form>
+                <div className="space-y-2">
+                    <div className="flex justify-center">
+                        <form onSubmit={handleSearch} className="relative w-full max-w-2xl">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                            <Input
+                                placeholder="종목 검색 (예: BTC-USD, AAPL, TSLA)"
+                                className="pl-12 h-12 text-base rounded-lg bg-card border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500 focus-visible:border-blue-500 shadow-sm"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </form>
+                    </div>
+                    <div className="text-center text-xs text-muted-foreground">
+                        💡 암호화폐: BTC-USD, ETH-USD | 미국 주식: AAPL, TSLA, GOOGL | 한국 주식: 005930.KS (삼성전자)
+                    </div>
                 </div>
 
                 {/* 2. Intervals moved to Chart Header */}
@@ -135,15 +140,15 @@ export default function AnalyzePage() {
                                 {interval === "60" && "60분봉"}
                                 {interval === "1" && "1분봉"}
                             </span>
-                             {(interval === "1" || interval === "60") && (
+                            {(interval === "1" || interval === "60") && (
                                 <span className="text-xs text-amber-500 hidden sm:inline-block">
                                     ⚠️ {interval === "1" ? "최근 7일" : "최근 60일"}
                                 </span>
                             )}
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
-                             <Tabs value={interval} onValueChange={setInterval} className="w-full sm:w-auto">
+                            <Tabs value={interval} onValueChange={setInterval} className="w-full sm:w-auto">
                                 <TabsList className="bg-background border border-border h-8 p-0.5">
                                     {activeIntervals.map((item) => (
                                         <TabsTrigger
@@ -159,7 +164,7 @@ export default function AnalyzePage() {
 
                             <div className="flex items-center bg-card border border-border rounded-lg p-0.5 h-8">
                                 <Button
-                                    variant="ghost" 
+                                    variant="ghost"
                                     size="sm"
                                     className={`h-7 px-2 rounded-sm ${chartStyle === 'candle' ? 'bg-blue-600 text-white hover:bg-blue-700 hover:text-white' : 'text-muted-foreground hover:text-foreground'}`}
                                     onClick={() => setChartStyle('candle')}
@@ -167,7 +172,7 @@ export default function AnalyzePage() {
                                     <BarChart2 className="h-4 w-4" />
                                 </Button>
                                 <Button
-                                    variant="ghost" 
+                                    variant="ghost"
                                     size="sm"
                                     className={`h-7 px-2 rounded-sm ${chartStyle === 'line' ? 'bg-blue-600 text-white hover:bg-blue-700 hover:text-white' : 'text-muted-foreground hover:text-foreground'}`}
                                     onClick={() => setChartStyle('line')}

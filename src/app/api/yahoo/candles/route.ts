@@ -55,6 +55,10 @@ export async function GET(req: Request) {
     if (["1m", "5m", "15m", "30m", "1h"].includes(interval)) {
       // Use chart() for intraday intervals
       const chartResult = await yahooFinance.chart(symbol, queryOptions);
+      if (!chartResult || !chartResult.quotes) {
+        console.error("Yahoo Finance Chart result invalid:", chartResult);
+        throw new Error("No chart data received from Yahoo Finance");
+      }
       result = chartResult.quotes.map(q => ({
         date: new Date(q.date),
         open: q.open ?? 0,
@@ -80,33 +84,29 @@ export async function GET(req: Request) {
       }>;
     }
 
+    if (!Array.isArray(result)) {
+      console.error("Yahoo Finance Historical result invalid:", result);
+      throw new Error("No historical data received from Yahoo Finance");
+    }
+
     // Transform to Lightweight Charts format
-    const candles = result.map((quote) => {
-      let time: string | number = Math.floor(new Date(quote.date).getTime() / 1000); // Default to unix timestamp
-
-      // For daily/weekly/monthly, use YYYY-MM-DD string
-      if (["1d", "1wk", "1mo"].includes(interval)) {
-        const d = new Date(quote.date);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        time = `${yyyy}-${mm}-${dd}`;
-      }
-
-      return {
-        time,
-        open: quote.open,
-        high: quote.high,
-        low: quote.low,
-        close: quote.close,
-      };
-    });
+    const candles = result
+      .filter(quote => quote && quote.date) // Ensure quote and date exist
+      .map((quote) => {
+        // Always use UNIX timestamp (seconds) for consistent handling in frontend
+        const time = Math.floor(new Date(quote.date).getTime() / 1000);
+        return {
+          time,
+          open: quote.open,
+          high: quote.high,
+          low: quote.low,
+          close: quote.close,
+        };
+      })
+      .filter(candle => !isNaN(candle.time) && candle.time > 0); // Filter out invalid timestamps
 
     // Sort by time just in case
     candles.sort((a, b) => {
-      if (typeof a.time === 'string' && typeof b.time === 'string') {
-        return a.time.localeCompare(b.time);
-      }
       return (a.time as number) - (b.time as number);
     });
 
@@ -120,8 +120,17 @@ export async function GET(req: Request) {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`Yahoo Finance API Error (Symbol: ${searchParams.get("symbol")}, Interval: ${searchParams.get("interval")}):`, error);
+
+    // Provide more helpful error messages
+    let userMessage = "차트 데이터를 불러올 수 없습니다.";
+    if (errorMessage.includes("No data found") || errorMessage.includes("delisted")) {
+      userMessage = "종목을 찾을 수 없습니다. 올바른 심볼을 입력했는지 확인해주세요. (예: BTC-USD, AAPL, TSLA)";
+    } else if (errorMessage.includes("Invalid")) {
+      userMessage = "잘못된 요청입니다. 종목 심볼과 시간대를 확인해주세요.";
+    }
+
     return NextResponse.json(
-      { error: "Failed to fetch from Yahoo Finance", details: errorMessage },
+      { error: userMessage, details: errorMessage },
       { status: 500 }
     );
   }

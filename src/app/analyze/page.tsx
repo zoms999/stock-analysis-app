@@ -119,36 +119,14 @@ export default function AnalyzePage() {
                     </form>
                 </div>
 
-                {/* 2. Interval Tabs */}
-                <div className="space-y-2">
-                    <div className="flex justify-center">
-                        <Tabs defaultValue="D" onValueChange={setInterval} className="w-full max-w-xl">
-                            <TabsList className="grid w-full grid-cols-6 bg-card border border-border h-11 p-1 rounded-lg shadow-sm">
-                                {activeIntervals.map((item) => (
-                                    <TabsTrigger
-                                        key={item.value}
-                                        value={item.value}
-                                        className="data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold rounded-md text-muted-foreground hover:text-foreground transition-all"
-                                    >
-                                        {item.label}
-                                    </TabsTrigger>
-                                ))}
-                            </TabsList>
-                        </Tabs>
-                    </div>
-                    {(interval === "1" || interval === "60") && (
-                        <div className="text-center text-xs text-amber-500">
-                            ⚠️ {interval === "1" ? "1분봉은 최근 7일" : "60분봉은 최근 60일"} 데이터만 제공됩니다
-                        </div>
-                    )}
-                </div>
+                {/* 2. Intervals moved to Chart Header */}
 
                 {/* 3. Main Chart Area */}
                 <Card className="border border-border shadow-sm overflow-hidden bg-card">
-                    <div className="px-6 py-3 border-b border-border flex justify-between items-center bg-muted/50">
+                    <div className="px-4 py-2 border-b border-border flex flex-col sm:flex-row justify-between items-center bg-muted/30 gap-4">
                         <div className="flex items-center gap-3">
-                            <h2 className="font-bold text-xl text-foreground">{symbol}</h2>
-                            <span className="text-sm text-muted-foreground">
+                            <h2 className="font-bold text-lg text-foreground">{symbol}</h2>
+                            <span className="text-sm text-muted-foreground mr-2">
                                 {interval === "Y" && "연봉"}
                                 {interval === "M" && "월봉"}
                                 {interval === "W" && "주봉"}
@@ -156,12 +134,28 @@ export default function AnalyzePage() {
                                 {interval === "60" && "60분봉"}
                                 {interval === "1" && "1분봉"}
                             </span>
+                             {(interval === "1" || interval === "60") && (
+                                <span className="text-xs text-amber-500 hidden sm:inline-block">
+                                    ⚠️ {interval === "1" ? "최근 7일" : "최근 60일"}
+                                </span>
+                            )}
                         </div>
-                        {points.length > 0 && (
-                            <div className="text-sm text-blue-500 font-medium">
-                                예측 포인트: {points.length}개
-                            </div>
-                        )}
+                        
+                        <div className="flex items-center gap-2">
+                             <Tabs value={interval} onValueChange={setInterval} className="w-full sm:w-auto">
+                                <TabsList className="bg-background border border-border h-8 p-0.5">
+                                    {activeIntervals.map((item) => (
+                                        <TabsTrigger
+                                            key={item.value}
+                                            value={item.value}
+                                            className="text-xs px-3 h-7 data-[state=active]:bg-blue-600 data-[state=active]:text-white rounded-sm"
+                                        >
+                                            {item.label}
+                                        </TabsTrigger>
+                                    ))}
+                                </TabsList>
+                            </Tabs>
+                        </div>
                     </div>
                     <div className="h-[550px] w-full relative">
                         <ChartAnalyzer

@@ -98,7 +98,7 @@ export function ChartAnalyzer({ symbol, interval, onPointsChange, onChartCapture
                 horzLines: {
                     color: isDark ? "rgba(105, 105, 105, 0.2)" : "rgba(209, 213, 219, 0.3)",
                     style: 0,
-                    visible: true,
+                    visible: false,
                 },
             },
             timeScale: {

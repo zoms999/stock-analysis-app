@@ -101,7 +101,7 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
           height: 400,
           grid: {
             vertLines: { color: "rgba(105, 105, 105, 0.2)" },
-            horzLines: { color: "rgba(105, 105, 105, 0.2)" },
+            horzLines: { color: "rgba(105, 105, 105, 0.2)", visible: false },
           },
           timeScale: {
             timeVisible: true,

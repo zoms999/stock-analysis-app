@@ -441,7 +441,52 @@ layout: {
             rangeSeriesRef.current = null;
             chartRef.current = null;
         };
-    }, [isDark, chartStyle, mounted]);
+    }, [mounted]);
+
+    // Update chart theme/style without recreating
+    useEffect(() => {
+        const chart = chartRef.current;
+        const candleSeries = candlestickSeriesRef.current;
+        const areaSeries = areaSeriesRef.current;
+        
+        if (!chart || !candleSeries || !areaSeries) return;
+
+        // Update layout colors
+        chart.applyOptions({
+            layout: {
+                background: { type: ColorType.Solid, color: isDark ? "#0a0a0a" : "#ffffff" },
+                textColor: isDark ? "#9CA3AF" : "#4B5563",
+            },
+            grid: {
+                vertLines: {
+                    color: isDark ? "rgba(105, 105, 105, 0.2)" : "rgba(209, 213, 219, 0.3)",
+                },
+                horzLines: {
+                    color: isDark ? "rgba(105, 105, 105, 0.2)" : "rgba(209, 213, 219, 0.3)",
+                },
+            },
+            timeScale: {
+                borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
+            },
+            rightPriceScale: {
+                borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
+            },
+            crosshair: {
+                vertLine: {
+                    color: isDark ? "#9CA3AF" : "#6B7280",
+                    labelBackgroundColor: isDark ? "#374151" : "#E5E7EB",
+                },
+                horzLine: {
+                    color: isDark ? "#9CA3AF" : "#6B7280",
+                    labelBackgroundColor: isDark ? "#374151" : "#E5E7EB",
+                },
+            },
+        });
+
+        // Update series visibility based on chartStyle
+        candleSeries.applyOptions({ visible: chartStyle === "candle" });
+        areaSeries.applyOptions({ visible: chartStyle === "line" });
+    }, [isDark, chartStyle]);
 
     // 2) Fetch Data
     useEffect(() => {
@@ -766,12 +811,15 @@ layout: {
 
             {/* Future Range Controls */}
             <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2">
-                <div className="flex items-center bg-white/95 dark:bg-gray-900/95 border border-gray-200 dark:border-gray-700 rounded-lg p-1 shadow-md">
+                <div className="flex items-center bg-white/95 dark:bg-gray-950/80 border border-gray-200 dark:border-white/10 rounded-lg p-1 shadow-md">
                     <Button
                         variant="ghost"
                         size="sm"
-                        className={`h-7 px-2 rounded-md ${futureMode === "1m" ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white" : ""
-                            }`}
+                        className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${
+                            futureMode === "1m"
+                                ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
+                                : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
+                        }`}
                         onClick={() => setFutureMode("1m")}
                     >
                         1개월
@@ -779,8 +827,11 @@ layout: {
                     <Button
                         variant="ghost"
                         size="sm"
-                        className={`h-7 px-2 rounded-md ${futureMode === "3m" ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white" : ""
-                            }`}
+                        className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${
+                            futureMode === "3m"
+                                ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
+                                : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
+                        }`}
                         onClick={() => setFutureMode("3m")}
                     >
                         3개월
@@ -788,8 +839,11 @@ layout: {
                     <Button
                         variant="ghost"
                         size="sm"
-                        className={`h-7 px-2 rounded-md ${futureMode === "custom" ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white" : ""
-                            }`}
+                        className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${
+                            futureMode === "custom"
+                                ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
+                                : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
+                        }`}
                         onClick={() => setFutureMode("custom")}
                     >
                         직접
@@ -797,7 +851,7 @@ layout: {
                 </div>
 
                 {futureMode === "custom" && (
-                    <div className="flex items-center bg-white/95 dark:bg-gray-900/95 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 shadow-md">
+                    <div className="flex items-center bg-white/95 dark:bg-gray-950/80 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 shadow-md">
                         <span className="text-xs text-gray-600 dark:text-gray-300 mr-1">일</span>
                         <input
                             type="number"

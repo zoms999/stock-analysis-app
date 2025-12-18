@@ -35,25 +35,27 @@ export default function PostDetailPage() {
   }
 
   if (!post) {
-      return (
-        <div className="container mx-auto max-w-4xl py-10 text-center">
-            <h1 className="text-2xl font-bold mb-4">게시글을 찾을 수 없습니다.</h1>
-            <Link href="/">
-                <Button>홈으로 돌아가기</Button>
-            </Link>
-        </div>
-      );
+    return (
+      <div className="container mx-auto max-w-4xl py-10 text-center">
+        <h1 className="text-2xl font-bold mb-4">게시글을 찾을 수 없습니다.</h1>
+        <Link href="/">
+          <Button>홈으로 돌아가기</Button>
+        </Link>
+      </div>
+    );
   }
 
   // Extract chart config
   const chartConfig = post.chart_config || {};
   const interval = chartConfig.interval || "D";
   const predictionPoints = chartConfig.prediction_points || [];
-  
+  const chartStyle = chartConfig.chartStyle || "candle";
+
   // Debug logging
   console.log("Post chart_config:", post.chart_config);
   console.log("Extracted interval:", interval);
   console.log("Extracted predictionPoints:", predictionPoints);
+  console.log("Extracted chartStyle:", chartStyle);
 
   return (
     <div className="container mx-auto max-w-4xl py-6 pb-20 space-y-6">
@@ -66,100 +68,101 @@ export default function PostDetailPage() {
       {/* Chart Section */}
       <section className="rounded-xl border border-border bg-card p-4 md:p-6 shadow-sm">
         <div className="mb-4">
-            <h2 className="text-sm font-medium text-muted-foreground mb-1">차트 분석</h2>
-            <div className="h-[400px] w-full rounded-lg overflow-hidden border border-border">
-                <SavedChartViewer 
-                  symbol={post.ticker_symbol} 
-                  interval={interval}
-                  predictionPoints={predictionPoints}
-                />
-            </div>
+          <h2 className="text-sm font-medium text-muted-foreground mb-1">차트 분석</h2>
+          <div className="h-[400px] w-full rounded-lg overflow-hidden border border-border">
+            <SavedChartViewer
+              symbol={post.ticker_symbol}
+              interval={interval}
+              predictionPoints={predictionPoints}
+              chartStyle={chartStyle}
+            />
+          </div>
         </div>
       </section>
 
       {/* Post Content */}
       <article className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <header className="mb-6 border-b border-border pb-6">
-            <div className="flex items-center gap-2 mb-3">
-                 <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
-                    {post.ticker_symbol}
-                 </span>
-                 <span className="text-xs text-muted-foreground">
-                   {new Date(post.created_at).toLocaleDateString('ko-KR', { 
-                     year: 'numeric', 
-                     month: 'long', 
-                     day: 'numeric',
-                     hour: '2-digit',
-                     minute: '2-digit'
-                   })}
-                 </span>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
+              {post.ticker_symbol}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {new Date(post.created_at).toLocaleDateString('ko-KR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-3 leading-tight">
+            {post.title}
+          </h1>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
+                {(post.profiles?.nickname || 'U')[0]}
+              </div>
+              <div>
+                <p className="text-sm font-medium">{post.profiles?.nickname || '익명'}</p>
+                <p className="text-xs text-muted-foreground">조회 {post.view_count || 0}</p>
+              </div>
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-3 leading-tight">
-                {post.title}
-            </h1>
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
-                        {(post.profiles?.nickname || 'U')[0]}
-                    </div>
-                    <div>
-                        <p className="text-sm font-medium">{post.profiles?.nickname || '익명'}</p>
-                        <p className="text-xs text-muted-foreground">조회 {post.view_count || 0}</p>
-                    </div>
-                </div>
-                <div className="flex gap-2">
-                     <Button variant="outline" size="sm" className="h-8 gap-1">
-                        <Share2 className="h-4 w-4" />
-                        <span className="hidden sm:inline">공유</span>
-                     </Button>
-                </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="h-8 gap-1">
+                <Share2 className="h-4 w-4" />
+                <span className="hidden sm:inline">공유</span>
+              </Button>
             </div>
+          </div>
         </header>
 
-        <div 
-            className="prose prose-invert max-w-none text-muted-foreground leading-relaxed mb-8"
-            dangerouslySetInnerHTML={{ __html: post.content }}
+        <div
+          className="prose prose-invert max-w-none text-muted-foreground leading-relaxed mb-8"
+          dangerouslySetInnerHTML={{ __html: post.content }}
         />
 
         <div className="flex items-center gap-3 pt-4 border-t border-border">
-            <Button variant="outline" className="gap-2 group">
-                <ThumbsUp className="h-4 w-4 group-hover:text-primary transition-colors" />
-                좋아요 0
-            </Button>
-             <Button variant="ghost" className="gap-2">
-                <MessageSquare className="h-4 w-4" />
-                댓글 0
-            </Button>
+          <Button variant="outline" className="gap-2 group">
+            <ThumbsUp className="h-4 w-4 group-hover:text-primary transition-colors" />
+            좋아요 0
+          </Button>
+          <Button variant="ghost" className="gap-2">
+            <MessageSquare className="h-4 w-4" />
+            댓글 0
+          </Button>
         </div>
       </article>
 
       {/* Comments Section */}
       <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-            댓글 <span className="text-primary">0</span>
+          댓글 <span className="text-primary">0</span>
         </h3>
-        
+
         {/* Comment Input */}
         <div className="flex gap-3 mb-8">
-            <div className="h-10 w-10 rounded-full bg-muted/50 flex-shrink-0" />
-            <div className="flex-1">
-                <textarea 
-                    className="w-full min-h-[80px] rounded-lg border border-border bg-secondary/50 p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-                    placeholder="매너있는 댓글을 남겨주세요."
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                />
-                <div className="flex justify-end mt-2">
-                    <Button size="sm" disabled={!comment.trim()}>등록</Button>
-                </div>
+          <div className="h-10 w-10 rounded-full bg-muted/50 flex-shrink-0" />
+          <div className="flex-1">
+            <textarea
+              className="w-full min-h-[80px] rounded-lg border border-border bg-secondary/50 p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              placeholder="매너있는 댓글을 남겨주세요."
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+            />
+            <div className="flex justify-end mt-2">
+              <Button size="sm" disabled={!comment.trim()}>등록</Button>
             </div>
+          </div>
         </div>
 
         {/* Comment List */}
         <div className="space-y-6">
-            <div className="text-center py-8 text-muted-foreground text-sm">
-                아직 댓글이 없습니다. 첫 번째 댓글을 남겨보세요!
-            </div>
+          <div className="text-center py-8 text-muted-foreground text-sm">
+            아직 댓글이 없습니다. 첫 번째 댓글을 남겨보세요!
+          </div>
         </div>
       </section>
     </div>

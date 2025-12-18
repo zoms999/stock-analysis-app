@@ -4,16 +4,18 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PredictionStatus } from "@/lib/api/posts";
 
-// Simple dynamic import for a lightweight chart version (or Reuse TechChart with interactive=false)
-const TechChart = dynamic(() => import("@/components/chart/TechChart").then(mod => mod.TechChart), {
+// Use SavedChartViewer for displaying saved charts with configuration
+const SavedChartViewer = dynamic(() => import("@/components/analyze/SavedChartViewer").then(mod => mod.SavedChartViewer), {
   ssr: false,
   loading: () => <div className="h-[180px] w-full bg-muted/10 animate-pulse" />
 });
 
 interface ChartCardProps {
-  id: number;
+  id: string;
   symbol: string;
+  source?: "upbit" | "yahoo" | "finnhub";
   title: string;
   user: {
     name: string;
@@ -26,21 +28,52 @@ interface ChartCardProps {
     winRate: string; // e.g., "최근 80%"
     count: string; // e.g., "전체 70% 102개"
   };
+  predictionStatus?: PredictionStatus;
+  chartConfig?: any; // Chart configuration from post
 }
 
-export function ChartCard({ id, symbol, title, user, stats }: ChartCardProps) {
+export function ChartCard({ id, symbol, title, user, stats, predictionStatus, chartConfig }: ChartCardProps) {
+  const statusColors = {
+    SUCCESS: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/50",
+    FAIL: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/50",
+    WAITING: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/50",
+    TIMEOUT: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/50",
+  };
+
+  const statusLabels = {
+    SUCCESS: "성공",
+    FAIL: "실패",
+    WAITING: "진행중",
+    TIMEOUT: "만료",
+  };
+
+  // Extract chart configuration
+  const interval = chartConfig?.interval || "D";
+  const predictionPoints = chartConfig?.prediction_points || [];
+  const chartStyle = chartConfig?.chartStyle || "line";
+
   return (
     <div className="flex flex-col gap-4">
       {/* Chart Section */}
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm hover:shadow-md transition-all group relative">
         <div className="p-4 pb-2 flex justify-between items-center">
             <h3 className="font-bold text-sm text-foreground/80">{symbol} Price</h3>
+            {predictionStatus && (
+              <span className={`px-2 py-0.5 rounded-md border text-[10px] font-bold ${statusColors[predictionStatus]}`}>
+                {statusLabels[predictionStatus]}
+              </span>
+            )}
         </div>
         
         {/* Chart Area - Fixed Height */}
         <div className="h-[180px] w-full pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity">
-             {/* Pass a special "mini" prop or just use as is for now */}
-            <TechChart symbol={symbol} interval="1d" /> 
+            <SavedChartViewer
+              symbol={symbol}
+              interval={interval}
+              predictionPoints={predictionPoints}
+              chartStyle={chartStyle}
+              showStyleToggle={false}
+            />
         </div>
 
         {/* Floating Action Button */}

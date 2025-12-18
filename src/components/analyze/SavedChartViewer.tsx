@@ -251,7 +251,7 @@ export function SavedChartViewer({
 
         const range = chart.addSeries(LineSeries, {
             color: "rgba(0,0,0,0)",
-            lineWidth: 0,
+            lineWidth: 1,
             lineStyle: 0,
             crosshairMarkerVisible: false,
             priceLineVisible: false,

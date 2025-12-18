@@ -6,7 +6,10 @@ import { ArrowLeft, MessageSquare, Heart, Share2, ThumbsUp } from "lucide-react"
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { SavedChartViewer } from "@/components/analyze/SavedChartViewer";
+import { PredictionInfo } from "@/components/analyze/PredictionInfo";
 import { fetchPostById, Post } from "@/lib/api/posts";
+import { getCurrentPrice } from "@/lib/api/prices";
+import { calculateAccuracy } from "@/lib/utils/accuracy";
 
 
 export default function PostDetailPage() {
@@ -15,12 +18,20 @@ export default function PostDetailPage() {
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState("");
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadPost() {
       setLoading(true);
       const data = await fetchPostById(id);
       setPost(data);
+      
+      // Fetch current price if prediction exists
+      if (data?.prediction_type && data.ticker_symbol) {
+        const price = await getCurrentPrice(data.ticker_symbol, "yahoo");
+        setCurrentPrice(price);
+      }
+      
       setLoading(false);
     }
     loadPost();
@@ -51,11 +62,20 @@ export default function PostDetailPage() {
   const predictionPoints = chartConfig.prediction_points || [];
   const chartStyle = chartConfig.chartStyle || "candle";
 
-  // Debug logging
-  console.log("Post chart_config:", post.chart_config);
-  console.log("Extracted interval:", interval);
-  console.log("Extracted predictionPoints:", predictionPoints);
-  console.log("Extracted chartStyle:", chartStyle);
+  // Calculate accuracy if prediction exists
+  let accuracyResult = null;
+  if (post.prediction_type && post.entry_price && post.target_price && post.stop_loss_price && post.target_date && currentPrice) {
+    accuracyResult = calculateAccuracy(
+      {
+        predictionType: post.prediction_type,
+        entryPrice: post.entry_price,
+        targetPrice: post.target_price,
+        stopLossPrice: post.stop_loss_price,
+        targetDate: new Date(post.target_date),
+      },
+      currentPrice
+    );
+  }
 
   return (
     <div className="container mx-auto max-w-4xl py-6 pb-20 space-y-6">
@@ -64,6 +84,20 @@ export default function PostDetailPage() {
         <ArrowLeft className="mr-2 h-4 w-4" />
         목록으로 돌아가기
       </Link>
+
+      {/* Prediction Info (if exists) */}
+      {post.prediction_type && post.entry_price && post.target_price && post.stop_loss_price && post.target_date && (
+        <PredictionInfo
+          predictionType={post.prediction_type}
+          entryPrice={post.entry_price}
+          targetPrice={post.target_price}
+          stopLossPrice={post.stop_loss_price}
+          targetDate={post.target_date}
+          currentPrice={currentPrice || undefined}
+          profitPercentage={accuracyResult?.profitPercentage}
+          status={accuracyResult?.status || post.prediction_status}
+        />
+      )}
 
       {/* Chart Section */}
       <section className="rounded-xl border border-border bg-card p-4 md:p-6 shadow-sm">

@@ -65,7 +65,7 @@ export function PostFeed() {
           {MOCK_GRID_DATA.map((post) => (
              <ChartCard
                 key={post.id}
-                id={post.id}
+                id={post.id.toString()}
                 symbol={post.symbol}
                 source={post.source as "upbit" | "finnhub" | "yahoo"}
                 title={post.title}

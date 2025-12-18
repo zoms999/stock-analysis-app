@@ -1,5 +1,5 @@
 import { HeroChart } from "@/components/home/HeroChart";
-import { PostFeed } from "@/components/home/PostFeed";
+import { ChartBoardList } from "@/components/home/ChartBoardList";
 
 
 export default function Home() {
@@ -8,8 +8,8 @@ export default function Home() {
       {/* Hero Section */}
       <HeroChart />
 
-      {/* Main Feed Section */}
-      <PostFeed />
+      {/* Chart Board List */}
+      <ChartBoardList />
     </div>
   );
 }

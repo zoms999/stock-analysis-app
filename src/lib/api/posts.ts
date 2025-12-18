@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/client";
 
+export type PredictionType = "LONG" | "SHORT";
+export type PredictionStatus = "WAITING" | "SUCCESS" | "FAIL" | "TIMEOUT";
+
 export interface Post {
   id: string;
   user_id: string;
@@ -11,10 +14,21 @@ export interface Post {
   required_level: number;
   view_count: number;
   created_at: string;
+  // Prediction fields
+  prediction_type?: PredictionType;
+  entry_price?: number;
+  target_price?: number;
+  stop_loss_price?: number;
+  target_date?: string;
+  prediction_status?: PredictionStatus;
+  // Relations
   profiles?: {
     nickname: string;
     avatar_url?: string;
   };
+  // Calculated fields (not in DB)
+  currentPrice?: number;
+  profitPercentage?: number;
 }
 
 export async function fetchPosts(limit: number = 20, offset: number = 0): Promise<Post[]> {
@@ -46,6 +60,12 @@ export interface PostData {
   ticker_symbol: string;
   chart_config: any; // JSONB
   chart_image_url?: string;
+  // Prediction fields (optional)
+  prediction_type?: PredictionType;
+  entry_price?: number;
+  target_price?: number;
+  stop_loss_price?: number;
+  target_date?: string;
 }
 
 export async function createPost(postData: PostData) {
@@ -89,6 +109,12 @@ export async function createPost(postData: PostData) {
       ticker_symbol: postData.ticker_symbol,
       chart_config: postData.chart_config,
       chart_image_url: postData.chart_image_url,
+      prediction_type: postData.prediction_type,
+      entry_price: postData.entry_price,
+      target_price: postData.target_price,
+      stop_loss_price: postData.stop_loss_price,
+      target_date: postData.target_date,
+      prediction_status: postData.prediction_type ? "WAITING" : null,
     })
     .select()
     .single();

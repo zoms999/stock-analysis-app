@@ -81,6 +81,57 @@ export function ChartAnalyzer({
     const [dataCount, setDataCount] = useState<number>(0);
     const [error, setError] = useState<string | null>(null);
 
+    // --- [HTML Overlay Logic] ---
+    const [overlayMarkers, setOverlayMarkers] = useState<{ id: string; x: number; y: number; time: Time; value: number }[]>([]);
+
+    const updateOverlayPositions = useCallback(() => {
+        const chart = chartRef.current;
+        const series = predictionSeriesRef.current;
+        if (!chart || !series || points.length === 0) {
+            setOverlayMarkers([]);
+            return;
+        }
+
+        const newMarkers = points.map((p) => {
+            const timeScale = chart.timeScale();
+            // timeToCoordinate gives X (allows undefined if off-screen, but we handle that)
+            const x = timeScale.timeToCoordinate(p.time); 
+            const y = series.priceToCoordinate(p.value);
+
+            return {
+                id: `${p.time}-${p.value}`,
+                x: x ?? -1000,
+                y: y ?? -1000,
+                time: p.time,
+                value: p.value,
+            };
+        });
+
+        setOverlayMarkers(newMarkers);
+    }, [points]);
+
+    // Update overlay when points change or chart moves
+    useEffect(() => {
+        updateOverlayPositions();
+        
+        const chart = chartRef.current;
+        if (!chart) return;
+
+        const handleChartUpdate = () => {
+             // Use RAF to debounce/sync with render cycle
+            requestAnimationFrame(updateOverlayPositions);
+        };
+
+        // Subscribe to events that change coordinate mapping
+        chart.timeScale().subscribeVisibleLogicalRangeChange(handleChartUpdate);
+        chart.timeScale().subscribeSizeChange(handleChartUpdate);
+
+        return () => {
+            chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleChartUpdate);
+            chart.timeScale().unsubscribeSizeChange(handleChartUpdate);
+        };
+    }, [points, updateOverlayPositions]);
+
     // --- [Future Range UI] ---
     const [futureMode, setFutureMode] = useState<"1m" | "3m" | "custom">("1m");
     const [customDays, setCustomDays] = useState<number>(30);
@@ -172,13 +223,14 @@ export function ChartAnalyzer({
         if (!chartContainerRef.current || !mounted) return;
 
         const chart = createChart(chartContainerRef.current, {
-            layout: {
-                background: { type: ColorType.Solid, color: isDark ? "#0a0a0a" : "#ffffff" },
-                textColor: isDark ? "#9CA3AF" : "#4B5563",
-                fontSize: 12,
-            },
+layout: {
+  background: { type: ColorType.Solid, color: isDark ? "#0a0a0a" : "#ffffff" },
+  textColor: isDark ? "#9CA3AF" : "#4B5563",
+  fontSize: 12,
+  fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Segoe UI Symbol"',
+},
             width: chartContainerRef.current.clientWidth,
-            height: 500,
+            height: chartContainerRef.current.clientHeight,
             grid: {
                 vertLines: {
                     color: isDark ? "rgba(105, 105, 105, 0.2)" : "rgba(209, 213, 219, 0.3)",
@@ -277,7 +329,12 @@ export function ChartAnalyzer({
         chartRef.current = chart;
 
         const handleResize = () => {
-            if (chartContainerRef.current) chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+             if (chartContainerRef.current) {
+                 chart.applyOptions({ 
+                    width: chartContainerRef.current.clientWidth,
+                    height: chartContainerRef.current.clientHeight
+                });
+             }
         };
         window.addEventListener("resize", handleResize);
 
@@ -551,6 +608,7 @@ export function ChartAnalyzer({
     }, [futureMode, customDays]);
 
     // 3) Update Prediction Line + Markers
+    // 3) Update Prediction Line (Keep line, remove native markers)
     useEffect(() => {
         onPointsChange?.(points);
 
@@ -576,28 +634,15 @@ export function ChartAnalyzer({
 
         if (sorted.length > 0) {
             series.setData(sorted);
-
-            // Markers only for user points
-            const markers = points.map((p, idx) => ({
-                time: p.time,
-                position: "inBar" as const,
-                color: "#f59e0b",
-                shape: "circle" as const,
-                size: 4,
-                text:
-                    idx === points.length - 1
-                        ? `${p.value.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}`
-                        : undefined,
-            }));
-
-            const anySeries = series as unknown as { setMarkers?: (m: unknown[]) => void };
-            if (typeof anySeries.setMarkers === "function") anySeries.setMarkers(markers);
+            // Native markers removed
         } else {
             series.setData([]);
-            const anySeries = series as unknown as { setMarkers?: (m: unknown[]) => void };
-            if (typeof anySeries.setMarkers === "function") anySeries.setMarkers([]);
         }
     }, [points, onPointsChange, lastCandle]);
+
+    const handleRemovePoint = (time: Time) => {
+        setPoints(prev => prev.filter(p => p.time !== time));
+    };
 
     const handleClearPoints = () => setPoints([]);
 
@@ -691,7 +736,33 @@ export function ChartAnalyzer({
                 </div>
             )}
 
-            <div ref={chartContainerRef} className="w-full h-full" />
+            <div ref={chartContainerRef} className="w-full h-full relative" />
+
+            {/* HTML Overlay Markers */}
+            {overlayMarkers.map((marker) => (
+                <div
+                    key={marker.id}
+                    className="absolute z-30 transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer"
+                    style={{
+                        left: marker.x,
+                        top: marker.y,
+                        // Hide if outside visible bounds
+                        display: (marker.x < 0 || marker.y < 0) ? 'none' : 'flex'
+                    }}
+                    onClick={(e) => {
+                        e.stopPropagation(); // Prevent chart click
+                        handleRemovePoint(marker.time);
+                    }}
+                >
+                    <div className="w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 shadow-sm border border-white flex items-center justify-center transition-all">
+                        <span className="text-white font-bold text-xs select-none">✕</span>
+                    </div>
+                     {/* Tooltip on hover */}
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                        삭제
+                    </div>
+                </div>
+            ))}
 
             {/* Future Range Controls */}
             <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2">

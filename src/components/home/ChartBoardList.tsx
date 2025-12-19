@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { ChartCard } from "./ChartCard";
-import { fetchPosts, Post } from "@/lib/api/posts";
+import { fetchPosts, Post, PostSortOption } from "@/lib/api/posts";
 import { getCurrentPrice, getBatchPrices } from "@/lib/api/prices";
 import { calculateAccuracy } from "@/lib/utils/accuracy";
+import { SyncPriceButton } from "@/components/admin/SyncPriceButton";
 
 type SortOption =
   | "all"
@@ -38,29 +39,51 @@ export function ChartBoardList() {
     async function loadPosts() {
       setLoading(true);
       
-      // Fetch posts
-      const fetchedPosts = await fetchPosts(50);
-      console.log("Fetched posts:", fetchedPosts);
-      console.log("Number of posts:", fetchedPosts.length);
+      // Map UI sort to API sort
+      let apiSort: PostSortOption = 'latest';
+      if (sortBy === 'accuracy' || sortBy === 'recent_accuracy') apiSort = 'accuracy';
+      if (sortBy === 'most_analyzed') apiSort = 'views';
+      if (sortBy === 'daily_accuracy') apiSort = 'accuracy_1day';
+      if (sortBy === 'accuracy_5day') apiSort = 'accuracy_5day';
+      if (sortBy === 'accuracy_10day') apiSort = 'accuracy_10day';
       
-      // Fetch current prices for posts with predictions
+      // Fetch posts with server-side sorting
+      const fetchedPosts = await fetchPosts(50, 0, apiSort);
+      
+      // Client-side Price Fetching (Hybrid)
+      // Even if we have accuracy_score from DB, we might want *Live* price for the card display.
+      // But for the sake of the list, we can trust the DB score for sorting order.
+      // Let's still fetch prices to show "Current Price" on the card.
+      
       const symbolsToFetch = fetchedPosts
         .filter((p) => p.prediction_type && p.ticker_symbol)
         .map((p) => ({ symbol: p.ticker_symbol, source: "yahoo" as const }));
       
-      console.log("Symbols to fetch prices for:", symbolsToFetch);
+      let prices = new Map<string, number>();
+      if (symbolsToFetch.length > 0) {
+        prices = await getBatchPrices(symbolsToFetch);
+      }
       
-      const prices = await getBatchPrices(symbolsToFetch);
-      console.log("Fetched prices:", prices);
+      // Merge Live Prices + DB Accuracy
+      // We can use DB accuracy_score as fallback or primary.
+      // If we want "Live Accuracy", we calculate it. If we want "Ranking Accuracy", we use DB.
+      // Let's use DB accuracy_score for sorting (already done by SQL) and display.
+      // BUT, if we have live price, maybe we show live profit?
+      // Let's prioritize Live Profit for display if available, but use DB score if not?
+      // Actually the user wants "Ranked by Accuracy". The DB score is the 'Official' score.
+      // Let's use the DB score for 'profitPercentage' if available, or calc it.
       
-      // Calculate accuracy for each post
-      const postsWithAccuracy = fetchedPosts.map((post) => {
-        if (post.prediction_type && post.entry_price && post.target_price && post.stop_loss_price && post.target_date) {
-          const priceKey = `yahoo:${post.ticker_symbol}`;
-          const currentPrice = prices.get(priceKey);
-          
-          if (currentPrice) {
-            const accuracy = calculateAccuracy(
+      const postsWithData = fetchedPosts.map((post) => {
+        const priceKey = `yahoo:${post.ticker_symbol}`;
+        const currentPrice = prices.get(priceKey);
+        
+        // Use DB Accuracy if available, otherwise calc
+        let profit = post.accuracy_score;
+        let status = post.prediction_status;
+
+        // Optional: Re-calc if we have live price (for display 'flashiness')
+        if (currentPrice && post.prediction_type && post.entry_price && post.target_price && post.stop_loss_price && post.target_date) {
+             const accuracy = calculateAccuracy(
               {
                 predictionType: post.prediction_type,
                 entryPrice: post.entry_price,
@@ -70,61 +93,31 @@ export function ChartBoardList() {
               },
               currentPrice
             );
-            
-            return {
-              ...post,
-              currentPrice,
-              profitPercentage: accuracy.profitPercentage,
-              prediction_status: accuracy.status,
-            };
-          }
+            // We can decide to show the Live Profit or the Stored Score.
+            // Let's show Live Profit for "Active" posts, and Stored Score for sorting?
+            // Simpler: Just override with Live calc for display.
+            profit = accuracy.profitPercentage;
+            status = accuracy.status;
         }
-        return post;
+
+        return {
+          ...post,
+          currentPrice,
+          profitPercentage: profit,
+          prediction_status: status
+        };
       });
       
-      console.log("Posts with accuracy:", postsWithAccuracy);
-      setPosts(postsWithAccuracy);
+      setPosts(postsWithData);
       setLoading(false);
     }
     
     loadPosts();
-  }, []);
+  }, [sortBy]); // Re-fetch when sort changes
 
-  // Sort posts based on selected option
-  const sortedPosts = [...posts].sort((a, b) => {
-    switch (sortBy) {
-      case "accuracy":
-        // Sort by success rate (SUCCESS > WAITING > FAIL)
-        const statusOrder = { SUCCESS: 3, WAITING: 2, FAIL: 1, TIMEOUT: 0 };
-        return (statusOrder[b.prediction_status || "WAITING"] || 0) - (statusOrder[a.prediction_status || "WAITING"] || 0);
-      
-      case "recent_accuracy":
-        // Sort by profit percentage
-        return (b.profitPercentage || 0) - (a.profitPercentage || 0);
-      
-      case "most_analyzed":
-        // Sort by view count (proxy for popularity)
-        return (b.view_count || 0) - (a.view_count || 0);
-      
-      case "latest":
-        // Sort by creation date (newest first)
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      
-      case "completed":
-        // Sort by completed predictions (SUCCESS or FAIL)
-        const isCompleted = (status?: string) => status === "SUCCESS" || status === "FAIL";
-        return (isCompleted(b.prediction_status) ? 1 : 0) - (isCompleted(a.prediction_status) ? 1 : 0);
-      
-      case "daily_accuracy":
-      case "accuracy_5day":
-      case "accuracy_10day":
-        // For now, sort by profit percentage (can be enhanced with time-based filtering)
-        return (b.profitPercentage || 0) - (a.profitPercentage || 0);
-      
-      default:
-        return 0;
-    }
-  });
+  // Client-side simple fallback sort or identical to posts if server did it
+  // We can just use 'posts' directly since server sorted them.
+  const sortedPosts = posts;
 
   if (loading) {
     return (
@@ -137,12 +130,15 @@ export function ChartBoardList() {
   return (
     <section className="space-y-6">
       {/* Header with Sort Dropdown */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">차트 게시판</h2>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-bold">차트 게시판</h2>
+          <SyncPriceButton />
+        </div>
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as SortOption)}
-          className="px-4 py-2 rounded-lg border border-border bg-card text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary"
+          className="px-4 py-2 rounded-lg border border-border bg-card text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto"
         >
           {SORT_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>

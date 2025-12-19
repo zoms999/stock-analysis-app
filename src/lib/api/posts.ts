@@ -21,6 +21,7 @@ export interface Post {
   stop_loss_price?: number;
   target_date?: string;
   prediction_status?: PredictionStatus;
+  accuracy_score?: number;
   // Relations
   profiles?: {
     nickname: string;
@@ -31,10 +32,56 @@ export interface Post {
   profitPercentage?: number;
 }
 
-export async function fetchPosts(limit: number = 20, offset: number = 0): Promise<Post[]> {
+export type PostSortOption = 'latest' | 'accuracy' | 'views' | 'accuracy_1day' | 'accuracy_5day' | 'accuracy_10day';
+
+export async function fetchPosts(limit: number = 20, offset: number = 0, sort: PostSortOption = 'latest'): Promise<Post[]> {
   const supabase = createClient();
   
-  const { data, error } = await supabase
+  // Handle RPC-based Advanced Sorting
+  if (sort === 'accuracy_1day' || sort === 'accuracy_5day' || sort === 'accuracy_10day') {
+    const days = sort === 'accuracy_1day' ? 1 : sort === 'accuracy_5day' ? 5 : 10;
+    
+    // 1. Call RPC to get ranked IDs
+    const { data: rankedPosts, error: rpcError } = await supabase
+      .rpc('get_posts_by_accuracy_days', { p_days: days, p_limit: limit + offset }); // Fetch slightly more to handle offset
+      
+    if (rpcError) {
+      console.error(`Error calling RPC for ${sort}:`, rpcError);
+      return [];
+    }
+    
+    if (!rankedPosts || rankedPosts.length === 0) return [];
+
+    // Slice for pagination (since we fetched 0 to limit+offset)
+    const pageIds = rankedPosts.slice(offset, offset + limit).map((p: any) => p.id);
+    
+    if (pageIds.length === 0) return [];
+
+    // 2. Fetch full details for these IDs
+    const { data: fullPosts, error: fetchError } = await supabase
+      .from("posts")
+      .select(`
+        *,
+        profiles:user_id (
+          nickname,
+          avatar_url
+        )
+      `)
+      .in('id', pageIds);
+
+    if (fetchError) {
+        console.error("Error fetching full post details:", fetchError);
+        return [];
+    }
+
+    // 3. Re-sort to match RPC order (Postgres 'IN' does not guarantee order)
+    const posts = fullPosts || [];
+    const sortedDetails = pageIds.map((id: string) => posts.find((p: any) => p.id === id)).filter((p: any): p is Post => !!p);
+    return sortedDetails;
+  }
+
+  // Standard Sorting
+  let query = supabase
     .from("posts")
     .select(`
       *,
@@ -42,9 +89,22 @@ export async function fetchPosts(limit: number = 20, offset: number = 0): Promis
         nickname,
         avatar_url
       )
-    `)
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+    `);
+
+  switch (sort) {
+    case 'accuracy':
+      query = query.order("accuracy_score", { ascending: false, nullsFirst: false });
+      break;
+    case 'views':
+      query = query.order("view_count", { ascending: false });
+      break;
+    case 'latest':
+    default:
+      query = query.order("created_at", { ascending: false });
+      break;
+  }
+
+  const { data, error } = await query.range(offset, offset + limit - 1);
 
   if (error) {
     console.error("Error fetching posts:", error);
@@ -97,6 +157,45 @@ export async function createPost(postData: PostData) {
     if (createError) {
       console.error("Failed to create profile:", createError);
       throw new Error("Failed to create user profile. Please contact support.");
+    }
+  }
+
+  // Auto-register Asset if not exists (To satisfy Foreign Key)
+  if (postData.ticker_symbol) {
+    let assetType = 'UNKNOWN';
+    let isActive = true; // Use true since user is tracking it
+
+    try {
+        // Call our own API to identify the asset
+        // Note: Using relative URL since this runs in browser
+        const response = await fetch(`/api/assets/identify?symbol=${postData.ticker_symbol}`);
+        if (response.ok) {
+            const result = await response.json();
+            if (result.valid) {
+                assetType = result.asset_type;
+            }
+        }
+    } catch (e) {
+        console.warn("Failed to identify asset type, defaulting to UNKNOWN", e);
+    }
+
+    const { error: assetError } = await supabase
+      .from('assets')
+      .upsert(
+        { 
+          symbol: postData.ticker_symbol, 
+          // Only update api_id if it's missing or we want to enforce it? 
+          // Let's keep it simple.
+          api_id: postData.ticker_symbol, 
+          asset_type: assetType, 
+          is_active: isActive 
+        },
+        { onConflict: 'symbol' } // Removed ignoreDuplicates: true to allow updating is_active
+      );
+      
+    if (assetError) {
+      console.error("Warning: Failed to auto-register asset:", assetError);
+      // We continue, but insert might fail if it really didn't exist
     }
   }
 

@@ -41,8 +41,10 @@ export function ChartBoardList() {
       
       // Map UI sort to API sort
       let apiSort: PostSortOption = 'latest';
-      if (sortBy === 'accuracy' || sortBy === 'recent_accuracy') apiSort = 'accuracy';
+      if (sortBy === 'accuracy') apiSort = 'accuracy';
+      if (sortBy === 'recent_accuracy') apiSort = 'recent_accuracy';
       if (sortBy === 'most_analyzed') apiSort = 'views';
+      if (sortBy === 'completed') apiSort = 'completed';
       if (sortBy === 'daily_accuracy') apiSort = 'accuracy_1day';
       if (sortBy === 'accuracy_5day') apiSort = 'accuracy_5day';
       if (sortBy === 'accuracy_10day') apiSort = 'accuracy_10day';
@@ -164,7 +166,7 @@ export function ChartBoardList() {
               avatar: post.profiles?.avatar_url,
             }}
             stats={{
-              profit: post.profitPercentage
+              profit: typeof post.profitPercentage === 'number'
                 ? `${post.profitPercentage >= 0 ? "+" : ""}${post.profitPercentage.toFixed(2)}%`
                 : "예측 없음",
               winRate: post.prediction_status || "대기",

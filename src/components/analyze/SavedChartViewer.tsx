@@ -92,7 +92,7 @@ export function SavedChartViewer({
             case TickMarkType.TimeWithSeconds:
                 return date.toLocaleTimeString("ko-KR", { hour12: false, hour: "2-digit", minute: "2-digit" });
             default:
-                return "";
+                return date.toLocaleDateString();
         }
     };
 
@@ -181,12 +181,13 @@ export function SavedChartViewer({
                 fontSize: 12,
             },
             width: chartContainerRef.current.clientWidth,
-            height: 420,
+            height: chartContainerRef.current.clientHeight,
             grid: {
                 vertLines: { color: isDark ? "rgba(105,105,105,0.2)" : "rgba(209,213,219,0.3)", visible: true },
                 horzLines: { color: isDark ? "rgba(105,105,105,0.2)" : "rgba(209,213,219,0.3)", visible: true },
             },
             timeScale: {
+                visible: true,
                 timeVisible: true,
                 secondsVisible: false,
                 rightOffset: 20,
@@ -268,12 +269,21 @@ export function SavedChartViewer({
         // time formatter
         const isIntraday = ["60", "1"].includes(interval);
         chart.applyOptions({
-            timeScale: { timeVisible: isIntraday, secondsVisible: false, tickMarkFormatter: formatTick },
+            timeScale: {
+                visible: true,
+                timeVisible: isIntraday,
+                secondsVisible: false,
+                tickMarkFormatter: formatTick,
+                borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
+            },
         });
 
         const handleResize = () => {
             if (!chartContainerRef.current) return;
-            chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+            chart.applyOptions({ 
+                width: chartContainerRef.current.clientWidth,
+                height: chartContainerRef.current.clientHeight
+            });
         };
         window.addEventListener("resize", handleResize);
 

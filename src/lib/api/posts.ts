@@ -32,7 +32,7 @@ export interface Post {
   profitPercentage?: number;
 }
 
-export type PostSortOption = 'latest' | 'accuracy' | 'views' | 'accuracy_1day' | 'accuracy_5day' | 'accuracy_10day';
+export type PostSortOption = 'latest' | 'accuracy' | 'views' | 'accuracy_1day' | 'accuracy_5day' | 'accuracy_10day' | 'completed' | 'recent_accuracy';
 
 export async function fetchPosts(limit: number = 20, offset: number = 0, sort: PostSortOption = 'latest'): Promise<Post[]> {
   const supabase = createClient();
@@ -95,8 +95,24 @@ export async function fetchPosts(limit: number = 20, offset: number = 0, sort: P
     case 'accuracy':
       query = query.order("accuracy_score", { ascending: false, nullsFirst: false });
       break;
+    case 'recent_accuracy':
+      // weight accuracy by recency (simple implementation: accuracy * (1 / days_old)) ?
+      // or just filter for recent posts (last 30 days) and sort by accuracy?
+      // Let's do: Sort by accuracy, but filter created_at > 30 days ago
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      query = query
+        .gte("created_at", thirtyDaysAgo.toISOString())
+        .order("accuracy_score", { ascending: false, nullsFirst: false });
+      break;
     case 'views':
       query = query.order("view_count", { ascending: false });
+      break;
+    case 'completed':
+      // Sort by target_date desc, filter where status is NOT WAITING
+      query = query
+        .neq("prediction_status", "WAITING")
+        .order("target_date", { ascending: false, nullsFirst: false }); // most recently completed first
       break;
     case 'latest':
     default:

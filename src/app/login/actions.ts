@@ -27,6 +27,24 @@ export async function login(formData: FormData) {
   redirect('/')
 }
 
+
+async function getSiteUrl() {
+  // 1. First priority: Check Host header
+  const headersList = await headers();
+  const host = headersList.get('host') || '';
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+     return `http://${host}`;
+  }
+
+  // 2. Second priority: Environment variable (standard compliant)
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:3000';
+  }
+
+  // 3. Fallback: Production URL
+  return process.env.NEXT_PUBLIC_SITE_URL || 'https://stock-analysis-app-two.vercel.app';
+}
+
 export async function signup(formData: FormData) {
   const supabase = await createClient()
   
@@ -39,6 +57,8 @@ export async function signup(formData: FormData) {
     redirect('/login?error=비밀번호는_6자_이상이어야_합니다')
   }
 
+  const siteUrl = await getSiteUrl();
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -46,7 +66,7 @@ export async function signup(formData: FormData) {
       data: {
         nickname: nickname || `User_${Date.now()}`,
       },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`,
+      emailRedirectTo: `${siteUrl}/auth/callback`,
     }
   })
 
@@ -66,12 +86,12 @@ export async function signup(formData: FormData) {
 
 export async function signInWithGoogle() {
   const supabase = await createClient()
-  const origin = (await headers()).get('origin') || 'http://localhost:3000'
+  const siteUrl = await getSiteUrl()
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${origin}/auth/callback`,
+      redirectTo: `${siteUrl}/auth/callback`,
     }
   })
 
@@ -87,12 +107,12 @@ export async function signInWithGoogle() {
 
 export async function signInWithFacebook() {
   const supabase = await createClient()
-  const origin = (await headers()).get('origin') || 'http://localhost:3000'
+  const siteUrl = await getSiteUrl()
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'facebook',
     options: {
-      redirectTo: `${origin}/auth/callback`,
+      redirectTo: `${siteUrl}/auth/callback`,
       scopes: 'public_profile,email',
     }
   })

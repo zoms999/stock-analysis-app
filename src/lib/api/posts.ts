@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import { checkAccessLevel, checkViewLimit, checkWriteLimit, incrementViewCount, incrementWriteCount } from "@/lib/api/subscription";
+import { consumeView, consumeWrite } from "@/lib/api/subscription";
 
 export type PredictionType = "LONG" | "SHORT";
 export type PredictionStatus = "WAITING" | "SUCCESS" | "FAIL" | "TIMEOUT";
@@ -179,7 +179,7 @@ export async function createPost(postData: PostData) {
   }
 
   // Check Subscription Limits (Write)
-  await checkWriteLimit(user.id);
+  await consumeWrite(user.id);
 
 
   // Auto-register Asset if not exists (To satisfy Foreign Key)
@@ -251,9 +251,9 @@ export async function createPost(postData: PostData) {
     throw error;
   }
 
-  // Increment Usage Count
-  await incrementWriteCount(user.id);
-
+  // Increment Usage Count logic is handled by consumeWrite above
+  // await incrementWriteCount(user.id);
+  
   return data;
 }
 
@@ -288,18 +288,10 @@ export async function fetchPostById(id: string): Promise<Post | null> {
   if (user) {
     if (user.id !== data.user_id) { // Don't limit the author viewing their own post
         try {
-            // 1. Check Access Level (e.g. Premium Content)
-            if (data.required_level > 0) {
-               await checkAccessLevel(user.id, data.required_level);
-            }
-            
-            // 2. Check View Limit
-            await checkViewLimit(user.id);
-            
-            // 3. Increment View Usage
-            // We do this non-blockingly or blockingly?
-            // To ensure strict enforcement, we should await.
-            await incrementViewCount(user.id);
+            // Atomic View Consumption (Level Check + Limit Check + Increment)
+            // '0' means we use the post's required_level or default to 0 if undefined?
+            // data.required_level is number
+            await consumeView(user.id, data.required_level || 0);
         } catch (e: any) {
             console.error("Subscription limit reached:", e.message);
             // Optionally we can return null, or a special "Blocked" object, or throw.

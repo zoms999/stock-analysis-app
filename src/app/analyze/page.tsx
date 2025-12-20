@@ -12,6 +12,7 @@ import { createPost } from "@/lib/api/posts";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Time } from "lightweight-charts";
+import { LimitPopup } from "@/components/subscription/LimitPopup";
 
 interface PredictionPoint {
     time: Time;
@@ -28,6 +29,8 @@ export default function AnalyzePage() {
     const [points, setPoints] = useState<PredictionPoint[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [chartImageUrl, setChartImageUrl] = useState<string>("");
+
+    const [showLimitPopup, setShowLimitPopup] = useState(false);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -91,9 +94,13 @@ export default function AnalyzePage() {
 
             toast.success("분석이 저장되었습니다.");
             router.push("/");
-        } catch (error) {
+        } catch (error: any) {
             console.error("Save error:", error);
-            toast.error(error instanceof Error ? error.message : "저장에 실패했습니다.");
+            if (error?.code === "LIMIT_REACHED" || error?.message?.includes("한도를 초과")) {
+                setShowLimitPopup(true);
+            } else {
+                toast.error(error instanceof Error ? error.message : "저장에 실패했습니다.");
+            }
         } finally {
             setIsSaving(false);
         }
@@ -225,6 +232,16 @@ export default function AnalyzePage() {
                     </div>
                 </div>
             </div>
+
+            <LimitPopup 
+                isOpen={showLimitPopup} 
+                onClose={() => setShowLimitPopup(false)} 
+                type="WRITE"
+                onSuccess={() => {
+                   toast.success("포인트가 사용되었습니다. 다시 저장을 눌러주세요.");
+                   setShowLimitPopup(false);
+                }}
+            />
         </div>
     );
 }

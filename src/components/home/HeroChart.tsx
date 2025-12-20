@@ -3,6 +3,7 @@
 
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 const TechChart = dynamic(() => import("@/components/chart/TechChart").then(mod => mod.TechChart), {
   ssr: false,
@@ -23,8 +24,12 @@ export function HeroChart() {
             실시간 데이터와 전문적인 분석 도구를 제공합니다.
          </p>
          <div className="flex gap-3 pt-2">
-            <Button size="lg" className="px-8 font-bold">지금 시작</Button>
-            <Button size="lg" variant="outline" className="px-8">더 알아보기</Button>
+            <Link href="/subscription">
+                <Button size="lg" className="px-8 font-bold">지금 시작</Button>
+            </Link>
+            <Link href="/analyze">
+                <Button size="lg" variant="outline" className="px-8">더 알아보기</Button>
+            </Link>
          </div>
       </div>
 

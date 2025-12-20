@@ -1,10 +1,11 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, MessageSquare, Heart, Share2, ThumbsUp } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { LimitPopup } from "@/components/subscription/LimitPopup";
 import { SavedChartViewer } from "@/components/analyze/SavedChartViewer";
 import { PredictionInfo } from "@/components/analyze/PredictionInfo";
 import { fetchPostById, Post } from "@/lib/api/posts";
@@ -20,19 +21,31 @@ export default function PostDetailPage() {
   const [comment, setComment] = useState("");
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
 
+  const [showLimitPopup, setShowLimitPopup] = useState(false);
+  const router = useRouter();
+
   useEffect(() => {
     async function loadPost() {
       setLoading(true);
-      const data = await fetchPostById(id);
-      setPost(data);
-      
-      // Fetch current price if prediction exists
-      if (data?.prediction_type && data.ticker_symbol) {
-        const price = await getCurrentPrice(data.ticker_symbol, "yahoo");
-        setCurrentPrice(price);
+      try {
+        const data = await fetchPostById(id);
+        setPost(data);
+        
+        // Fetch current price if prediction exists
+        if (data?.prediction_type && data.ticker_symbol) {
+          const price = await getCurrentPrice(data.ticker_symbol, "yahoo");
+          setCurrentPrice(price);
+        }
+      } catch (e: any) {
+        if (e?.code === "LIMIT_REACHED" || e?.message?.includes("한도를 초과")) {
+          setShowLimitPopup(true);
+        } else {
+          console.error(e);
+          // Optional: handle other errors
+        }
+      } finally {
+        setLoading(false);
       }
-      
-      setLoading(false);
     }
     loadPost();
   }, [id]);
@@ -199,6 +212,13 @@ export default function PostDetailPage() {
           </div>
         </div>
       </section>
+      {/* Limit Popup */}
+      <LimitPopup 
+        isOpen={showLimitPopup} 
+        onClose={() => setShowLimitPopup(false)}
+        type="VIEW"
+        onSuccess={() => window.location.reload()}
+      />
     </div>
   );
 }

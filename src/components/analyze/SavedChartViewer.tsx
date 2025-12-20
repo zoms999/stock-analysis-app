@@ -67,7 +67,7 @@ export function SavedChartViewer({
     const baseCandleRef = useRef<CandlestickData[]>([]);
     const baseAreaRef = useRef<{ time: Time; value: number }[]>([]);
     const baseVolumeRef = useRef<HistogramData[]>([]);
-    const lastRealRef = useRef<{ time: number; close: number } | null>(null);
+    const lastRealRef = useRef<{ time: Time; close: number } | null>(null);
 
     const getIntervalSeconds = (itv: string) => {
         if (itv === "1") return 60;
@@ -106,22 +106,65 @@ export function SavedChartViewer({
 
         let maxPred = lastTime;
         for (const p of predictionPoints || []) {
-            const t = p.time as number;
-            if (t > maxPred) maxPred = t;
+            let t = p.time;
+            // If we are compared against string time, we might need conversion or just rely on value check?
+            // Actually comparing string "2024..." > "2024..." works generally for ISO format.
+            // But p.time might be number (timestamp) while lastTime is string.
+            if (typeof t === 'number' && typeof lastTime === 'string') {
+                 // Convert timestamp p.time to string for comparison?
+                 // Or just assume mixed types won't happen often if we sync them. 
+                 // For safety:
+                 const d = new Date(t * 1000);
+                 const year = d.getFullYear();
+                 const month = String(d.getMonth() + 1).padStart(2, '0');
+                 const day = String(d.getDate()).padStart(2, '0');
+                 t = `${year}-${month}-${day}`;
+            }
+            
+            if (t > maxPred) maxPred = t as any;
         }
 
         if (maxPred <= lastTime) return 20;
 
-        const diffSeconds = maxPred - lastTime;
+        let diffSeconds = 0;
+        if (typeof maxPred === 'string' && typeof lastTime === 'string') {
+             diffSeconds = (new Date(maxPred).getTime() - new Date(lastTime).getTime()) / 1000;
+        } else {
+             diffSeconds = (maxPred as number) - (lastTime as number);
+        }
         const needBars = Math.ceil(diffSeconds / step) + 5;
         return Math.max(20, needBars);
     }, [predictionPoints, interval]);
 
-    const buildRangeData = (lastTime: number, lastValue: number, itv: string, bars: number) => {
+    const buildRangeData = (lastTime: Time, lastValue: number, itv: string, bars: number) => {
         const step = getIntervalSeconds(itv);
-        const arr: { time: Time; value: number }[] = [{ time: lastTime as Time, value: lastValue }];
+        const arr: { time: Time; value: number }[] = [{ time: lastTime, value: lastValue }];
+        
+        // Helper to add days to YYYY-MM-DD
+        const addDays = (dateStr: string, days: number) => {
+            const d = new Date(dateStr);
+            d.setDate(d.getDate() + days);
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
         for (let i = 1; i <= bars; i++) {
-            arr.push({ time: (lastTime + step * i) as Time, value: lastValue });
+             if (typeof lastTime === 'string') {
+                // Assuming daily/weekly/monthly steps represent ~1 day or more
+                // For simplified "business day" logic, we just increment calendar days for the range filler
+                // Since this is just a visual filler line, exact business day skipping isn't strictly required 
+                // but nice to have. For now, simple day addition.
+                let daysToAdd = i; 
+                if (itv === '1wk') daysToAdd = i * 7;
+                if (itv === '1mo') daysToAdd = i * 30; // Approx
+                
+                const nextDate = addDays(lastTime, daysToAdd);
+                arr.push({ time: nextDate as Time, value: lastValue });
+             } else {
+                arr.push({ time: ((lastTime as number) + step * i) as Time, value: lastValue });
+             }
         }
         return arr;
     };
@@ -353,7 +396,7 @@ export function SavedChartViewer({
                 baseVolumeRef.current = volumeData;
 
                 const last = candleData[candleData.length - 1];
-                lastRealRef.current = { time: last.time as number, close: last.close };
+                lastRealRef.current = { time: last.time, close: last.close };
 
                 // ✅ 방금 로드한 base를 현재 시리즈에 반영
                 applyBaseDataToSeries();

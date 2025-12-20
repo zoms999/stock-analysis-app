@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { checkAccessLevel, checkViewLimit, checkWriteLimit, incrementViewCount, incrementWriteCount } from "@/lib/api/subscription";
 
 export type PredictionType = "LONG" | "SHORT";
 export type PredictionStatus = "WAITING" | "SUCCESS" | "FAIL" | "TIMEOUT";
@@ -162,6 +163,7 @@ export async function createPost(postData: PostData) {
     console.log("Profile not found, creating one for user:", user.id);
     
     // Create profile automatically
+    // ... (omitted for brevity, keep existing code) ...
     const { error: createError } = await supabase
       .from("profiles")
       .insert({
@@ -171,10 +173,14 @@ export async function createPost(postData: PostData) {
       });
 
     if (createError) {
-      console.error("Failed to create profile:", createError);
-      throw new Error("Failed to create user profile. Please contact support.");
+       // ...
+       throw new Error("Failed to create user profile. Please contact support.");
     }
   }
+
+  // Check Subscription Limits (Write)
+  await checkWriteLimit(user.id);
+
 
   // Auto-register Asset if not exists (To satisfy Foreign Key)
   if (postData.ticker_symbol) {
@@ -245,6 +251,9 @@ export async function createPost(postData: PostData) {
     throw error;
   }
 
+  // Increment Usage Count
+  await incrementWriteCount(user.id);
+
   return data;
 }
 
@@ -268,11 +277,37 @@ export async function fetchPostById(id: string): Promise<Post | null> {
     return null;
   }
 
-  // Increment view count
+  // Increment post view count (public metric)
   await supabase
     .from("posts")
     .update({ view_count: (data.view_count || 0) + 1 })
     .eq("id", id);
+  
+  // Subscription Checks for Viewer (if logged in)
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    if (user.id !== data.user_id) { // Don't limit the author viewing their own post
+        try {
+            // 1. Check Access Level (e.g. Premium Content)
+            if (data.required_level > 0) {
+               await checkAccessLevel(user.id, data.required_level);
+            }
+            
+            // 2. Check View Limit
+            await checkViewLimit(user.id);
+            
+            // 3. Increment View Usage
+            // We do this non-blockingly or blockingly?
+            // To ensure strict enforcement, we should await.
+            await incrementViewCount(user.id);
+        } catch (e: any) {
+            console.error("Subscription limit reached:", e.message);
+            // Optionally we can return null, or a special "Blocked" object, or throw.
+            // Throwing is easiest to handle in the UI (error boundary or try/catch).
+            throw e; 
+        }
+    }
+  }
 
   return data;
 }

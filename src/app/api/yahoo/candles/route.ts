@@ -93,8 +93,20 @@ export async function GET(req: Request) {
     const candles = result
       .filter(quote => quote && quote.date) // Ensure quote and date exist
       .map((quote) => {
-        // Always use UNIX timestamp (seconds) for consistent handling in frontend
-        const time = Math.floor(new Date(quote.date).getTime() / 1000);
+        // For Daily/Weekly/Monthly, use YYYY-MM-DD string to handle non-trading days (weekends) automatically
+        // For Intraday, use UNIX timestamp
+        let time: string | number;
+        if (["1d", "1wk", "1mo"].includes(interval)) {
+           // Format to YYYY-MM-DD
+           const d = new Date(quote.date);
+           const year = d.getFullYear();
+           const month = String(d.getMonth() + 1).padStart(2, '0');
+           const day = String(d.getDate()).padStart(2, '0');
+           time = `${year}-${month}-${day}`;
+        } else {
+           time = Math.floor(new Date(quote.date).getTime() / 1000);
+        }
+
         return {
           time,
           open: quote.open,
@@ -103,10 +115,17 @@ export async function GET(req: Request) {
           close: quote.close,
         };
       })
-      .filter(candle => !isNaN(candle.time) && candle.time > 0); // Filter out invalid timestamps
+      .filter(candle => {
+         if (typeof candle.time === 'number') return !isNaN(candle.time) && candle.time > 0;
+         return !!candle.time;
+      });
 
     // Sort by time just in case
+    // Sort by time
     candles.sort((a, b) => {
+      if (typeof a.time === 'string' && typeof b.time === 'string') {
+        return a.time.localeCompare(b.time);
+      }
       return (a.time as number) - (b.time as number);
     });
 

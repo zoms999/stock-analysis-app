@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import { consumeView, consumeWrite } from "@/lib/api/subscription";
+import { consumeView, consumeWrite, getUserSubscription, getTodayUsage } from "@/lib/api/subscription";
 
 export type PredictionType = "LONG" | "SHORT";
 export type PredictionStatus = "WAITING" | "SUCCESS" | "FAIL" | "TIMEOUT";
@@ -257,6 +257,76 @@ export async function createPost(postData: PostData) {
   return data;
 }
 
+/**
+ * Check if the current user can view a post (without consuming view count)
+ * Returns { canView: true } if allowed
+ * Returns { canView: false, reason: string } if blocked
+ */
+export async function checkCanViewPost(postId: string): Promise<{ canView: boolean; reason?: string; requiredLevel?: number }> {
+  const supabase = createClient();
+  
+  // Get post data
+  const { data: post, error } = await supabase
+    .from("posts")
+    .select("id, user_id, required_level")
+    .eq("id", postId)
+    .single();
+
+  if (error || !post) {
+    return { canView: false, reason: "게시물을 찾을 수 없습니다." };
+  }
+
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    return { canView: true }; // Allow anonymous viewing (will be handled by fetchPostById -> logic logic there should check again?)
+    // Actually, fetchPostById might just return data. 
+    // If anonymous view is not allowed, this should return false.
+    // However, the original code returned true for anonymous, so preserving behavior.
+  }
+
+  // Author can always view their own post
+  if (user.id === post.user_id) {
+    return { canView: true };
+  }
+
+  // Check user's subscription status using robust shared logic
+  const subscription = await getUserSubscription(user.id);
+  const usage = await getTodayUsage(user.id);
+
+  if (!subscription) {
+      // Should not happen with robust logic, but satisfy type check
+       return { canView: false, reason: "구독 정보를 찾을 수 없습니다." };
+  }
+
+  // Check level requirement
+  if (post.required_level && subscription.userLevel < post.required_level) {
+    return { 
+      canView: false, 
+      reason: `이 글을 읽으려면 레벨 ${post.required_level} 이상이 필요합니다.`,
+      requiredLevel: post.required_level
+    };
+  }
+
+  // Check daily view limit
+  // Limit is correct (base limit), need to add purchased views?
+  // getTodayUsage returns total limit (base + additional)?
+  // Let's check getTodayUsage... 
+  // It returns: viewLimit: subscription.dailyViewLimit
+  // And usage counts: viewCount, additionalViewCount.
+  // Wait, the logic in SQL was: 
+  // IF v_current_view_count >= (v_daily_view_limit + v_additional_view_count) THEN LIMIT_REACHED
+  
+  // Let's replicate strict logic:
+  const totalLimit = usage.viewLimit + usage.additionalViewCount;
+  if (usage.viewCount >= totalLimit) {
+    return { canView: false, reason: "일일 열람 한도를 초과했습니다." };
+  }
+
+  return { canView: true };
+}
+
 export async function fetchPostById(id: string): Promise<Post | null> {
   const supabase = createClient();
   
@@ -291,7 +361,7 @@ export async function fetchPostById(id: string): Promise<Post | null> {
             // Atomic View Consumption (Level Check + Limit Check + Increment)
             // '0' means we use the post's required_level or default to 0 if undefined?
             // data.required_level is number
-            await consumeView(user.id, data.required_level || 0);
+            await consumeView(user.id, data.required_level || 0, id);
         } catch (e: any) {
             console.error("Subscription limit reached:", e.message);
             // Optionally we can return null, or a special "Blocked" object, or throw.

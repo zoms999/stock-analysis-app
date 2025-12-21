@@ -1,3 +1,5 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Check, Loader2 } from "lucide-react";
@@ -25,8 +27,8 @@ const PLANS = [
         price: "9,900원/월",
         desc: "가볍게 매일 더 많이",
         costRaw: 9900,
-        priceId: "price_REPLACE_WITH_STRIPE_PRICE_ID_LIGHT", 
-        planId: "REPLACE_WITH_DB_PLAN_UUID_LIGHT",
+        priceId: "price_1SgamsJJrcmsp83Oc4UAJicn", 
+        planId: "2",
         features: [
             "하루 열람 6회",
             "하루 글쓰기 10회",
@@ -41,8 +43,8 @@ const PLANS = [
         price: "19,900원/월",
         desc: "분석/열람을 충분히",
         costRaw: 19900,
-        priceId: "price_REPLACE_WITH_STRIPE_PRICE_ID_STANDARD",
-        planId: "REPLACE_WITH_DB_PLAN_UUID_STANDARD",
+        priceId: "price_1SgaojJJrcmsp83OGGqv56aT",
+        planId: "3",
         features: [
             "하루 열람 12회",
             "하루 글쓰기 20회",
@@ -57,8 +59,8 @@ const PLANS = [
         price: "39,900원/월",
         desc: "본격적으로 활용",
         costRaw: 39900,
-        priceId: "price_REPLACE_WITH_STRIPE_PRICE_ID_PREMIUM",
-        planId: "REPLACE_WITH_DB_PLAN_UUID_PREMIUM",
+        priceId: "price_1SgaozJJrcmsp83Oe0INYKiY",
+        planId: "4",
         features: [
             "하루 열람 24회",
             "하루 글쓰기 30회",
@@ -73,8 +75,8 @@ const PLANS = [
         price: "79,900원/월",
         desc: "무제한 + 모든 레벨",
         costRaw: 79900,
-        priceId: "price_REPLACE_WITH_STRIPE_PRICE_ID_VIP",
-        planId: "REPLACE_WITH_DB_PLAN_UUID_VIP",
+        priceId: "price_1SgapLJJrcmsp83OatlHn1vg",
+        planId: "5",
         features: [
             "하루 열람 무제한",
             "하루 글쓰기 무제한",

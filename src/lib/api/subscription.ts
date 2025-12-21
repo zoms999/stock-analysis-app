@@ -1,19 +1,147 @@
 import { createClient } from "@/lib/supabase/client";
 
+
 // Re-export types if needed
 export interface Plan { /* ... tied to DB now ... */ }
+
+export interface UserSubscription {
+  id: string;
+  planName: string;
+  planPrice: number;
+  status: string;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  dailyViewLimit: number;
+  dailyWriteLimit: number;
+  accessMaxLevel: number;
+  userLevel: number; // Added for checkCanViewPost
+}
+
+export interface TodayUsage {
+  viewCount: number;
+  writeCount: number;
+  additionalViewCount: number;
+  additionalWriteCount: number;
+  viewLimit: number;
+  writeLimit: number;
+}
+
+/**
+ * 현재 사용자의 구독 정보 조회 (RPC/View 대체)
+ * Free Tier 처리를 포함하여 항상 유효한 값을 반환하도록 보장
+ */
+export async function getUserSubscription(userId: string): Promise<UserSubscription> {
+  const supabase = createClient();
+  
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select(`
+      id,
+      status,
+      current_period_start,
+      current_period_end,
+      plan_id,
+      plans!inner (
+        name,
+        price,
+        daily_view_limit,
+        daily_write_limit,
+        access_max_level
+      )
+    `)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // 사용자 레벨 조회 (Profiles)
+  const { data: profile } = await supabase
+      .from('profiles')
+      .select('level')
+      .eq('id', userId)
+      .single();
+  
+  const userLevel = profile?.level || 1; // Default to level 1
+
+  if (!data) {
+    // 구독이 없으면 Free 플랜 반환
+    return {
+      id: '',
+      planName: 'Free',
+      planPrice: 0,
+      status: 'active',
+      currentPeriodStart: new Date().toISOString(),
+      currentPeriodEnd: new Date().toISOString(),
+      dailyViewLimit: 3,
+      dailyWriteLimit: 5,
+      accessMaxLevel: 5,
+      userLevel,
+    };
+  }
+
+  const plan = data.plans as any;
+  
+  return {
+    id: data.id,
+    planName: plan.name,
+    planPrice: plan.price,
+    status: data.status,
+    currentPeriodStart: data.current_period_start,
+    currentPeriodEnd: data.current_period_end,
+    dailyViewLimit: plan.daily_view_limit,
+    dailyWriteLimit: plan.daily_write_limit,
+    accessMaxLevel: plan.access_max_level,
+    userLevel,
+  };
+}
+
+/**
+ * 오늘 사용량 조회
+ */
+export async function getTodayUsage(userId: string): Promise<TodayUsage> {
+  const supabase = createClient();
+  const today = new Date().toISOString().split('T')[0];
+  
+  const { data, error } = await supabase
+    .from('daily_usage')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('usage_date', today)
+    .single();
+
+  // 사용 기록이 없으면 0으로 초기화된 객체 (Limits는 Subscription에서 가져와야 함)
+  const currentUsage = data || {
+      view_count: 0,
+      write_count: 0,
+      additional_view_count: 0,
+      additional_write_count: 0
+  };
+
+  // 구독 정보에서 한도 가져오기
+  const subscription = await getUserSubscription(userId);
+  
+  return {
+    viewCount: currentUsage.view_count || 0,
+    writeCount: currentUsage.write_count || 0,
+    additionalViewCount: currentUsage.additional_view_count || 0,
+    additionalWriteCount: currentUsage.additional_write_count || 0,
+    viewLimit: subscription.dailyViewLimit,
+    writeLimit: subscription.dailyWriteLimit,
+  };
+}
 
 /**
  * Consumes a view count for the user.
  * Checks Access Level AND View Limit atomically via RPC.
  * Returns 'OK' if allowed, throws error otherwise.
  */
-export async function consumeView(userId: string, requiredLevel: number) {
+export async function consumeView(userId: string, requiredLevel: number, postId?: string) {
   const supabase = createClient();
   
   const { data: status, error } = await supabase.rpc('consume_view', {
     p_user_id: userId,
-    p_required_level: requiredLevel
+    p_required_level: requiredLevel,
+    p_post_id: postId || null
   });
 
   if (error) {

@@ -1,10 +1,12 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PredictionStatus } from "@/lib/api/posts";
+import { checkCanViewPost } from "@/lib/api/posts";
+import { toast } from "sonner";
 
 // Use SavedChartViewer for displaying saved charts with configuration
 const SavedChartViewer = dynamic(() => import("@/components/analyze/SavedChartViewer").then(mod => mod.SavedChartViewer), {
@@ -33,6 +35,8 @@ interface ChartCardProps {
 }
 
 export function ChartCard({ id, symbol, title, user, stats, predictionStatus, chartConfig }: ChartCardProps) {
+  const router = useRouter();
+  
   const statusColors = {
     SUCCESS: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/50",
     FAIL: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/50",
@@ -51,6 +55,26 @@ export function ChartCard({ id, symbol, title, user, stats, predictionStatus, ch
   const interval = chartConfig?.interval || "D";
   const predictionPoints = chartConfig?.prediction_points || [];
   const chartStyle = chartConfig?.chartStyle || "line";
+
+  // Handle card click with view limit check
+  const handleCardClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    // Check if user can view this post
+    const { canView, reason } = await checkCanViewPost(id);
+    
+    if (!canView) {
+      // Show toast notification
+      toast.error(reason || "게시물을 볼 수 없습니다.", {
+        description: "구독 플랜을 업그레이드하거나 포인트로 추가 열람권을 구매하세요.",
+        duration: 4000,
+      });
+      return;
+    }
+    
+    // Navigate to post detail page
+    router.push(`/posts/${id}`);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -85,7 +109,7 @@ export function ChartCard({ id, symbol, title, user, stats, predictionStatus, ch
       </div>
 
       {/* User Info Section */}
-      <Link href={`/posts/${id}`} className="flex items-start gap-3 group/info cursor-pointer">
+      <div onClick={handleCardClick} className="flex items-start gap-3 group/info cursor-pointer">
         <div className="flex flex-col items-center gap-1">
              <Avatar className="h-10 w-10 border border-border">
                 <AvatarImage src={user.avatar} />
@@ -107,7 +131,8 @@ export function ChartCard({ id, symbol, title, user, stats, predictionStatus, ch
                 {stats.winRate} • {stats.count}
             </div>
         </div>
-      </Link>
+      </div>
     </div>
   );
 }
+

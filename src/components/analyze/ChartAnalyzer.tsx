@@ -188,15 +188,38 @@ export function ChartAnalyzer({
     const clampFutureTime = (t: number, maxT: number) => Math.min(t, maxT);
 
     // Dummy range points for rangeSeries (time range extension)
-    const buildFutureRange = (lastTime: number, lastValue: number, itv: string, bars: number) => {
+    const buildFutureRange = (lastTime: Time, lastValue: number, itv: string, bars: number) => {
         const step = getIntervalSeconds(itv);
-        // include start point + future points (>=2 points is safer for some versions)
-        const arr: { time: Time; value: number }[] = [{ time: lastTime as Time, value: lastValue }];
+        const arr: { time: Time; value: number }[] = [{ time: lastTime, value: lastValue }];
+        
+        // Helper to add days to YYYY-MM-DD string
+        const addDays = (dateStr: string, days: number) => {
+            const d = new Date(dateStr);
+            d.setDate(d.getDate() + days);
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+        
         for (let i = 1; i <= bars; i++) {
-            arr.push({ time: (lastTime + step * i) as Time, value: lastValue });
+            if (typeof lastTime === 'string') {
+                // For daily/weekly/monthly intervals, use date string arithmetic
+                let daysToAdd = i;
+                if (itv === 'W' || itv === '1wk') daysToAdd = i * 7;
+                if (itv === 'M' || itv === '1mo') daysToAdd = i * 30;
+                if (itv === 'D' || itv === '1d') daysToAdd = i;
+                
+                const nextDate = addDays(lastTime, daysToAdd);
+                arr.push({ time: nextDate as Time, value: lastValue });
+            } else {
+                // For intraday intervals (numeric timestamps), add seconds
+                arr.push({ time: ((lastTime as number) + step * i) as Time, value: lastValue });
+            }
         }
         return arr;
     };
+
 
     // Capture chart as image
     const captureChart = useCallback(async () => {
@@ -567,7 +590,7 @@ layout: {
                 const futureBars = getFutureBars(interval, futureSeconds);
 
                 const lastReal = candleData[candleData.length - 1];
-                const lastRealTime = lastReal.time as number;
+                const lastRealTime = lastReal.time; // Keep as Time (can be string or number)
                 const lastRealClose = lastReal.close;
 
                 const rangeData = buildFutureRange(lastRealTime, lastRealClose, interval, futureBars);
@@ -584,7 +607,8 @@ layout: {
                             borderColor: "#D1D5DB",
                             rightOffset: futureBars,
                             tickMarkFormatter: (t: number | string, tickMarkType: TickMarkType) => {
-                                const date = new Date((t as number) * 1000);
+                                // Handle both string dates (YYYY-MM-DD) and numeric timestamps
+                                const date = typeof t === 'string' ? new Date(t) : new Date((t as number) * 1000);
                                 const year = date.getFullYear();
                                 const month = (date.getMonth() + 1).toString().padStart(2, "0");
                                 const day = date.getDate().toString().padStart(2, "0");
@@ -641,7 +665,7 @@ layout: {
         const futureBars = getFutureBars(itv, futureSeconds);
 
         const lastReal = baseC[baseC.length - 1];
-        const lastTime = lastReal.time as number;
+        const lastTime = lastReal.time; // Keep as Time (can be string or number)
         const lastClose = lastReal.close;
 
         const rangeData = buildFutureRange(lastTime, lastClose, itv, futureBars);
@@ -669,13 +693,30 @@ layout: {
             }
         }
 
-        // Ensure unique timestamps
-        const unique = new Map<number, number>();
-        dataToShow.forEach((d) => unique.set(d.time as number, d.value));
+        // Ensure unique timestamps and proper sorting
+        // Handle both string dates (YYYY-MM-DD) and numeric timestamps
+        const unique = new Map<Time, number>();
+        dataToShow.forEach((d) => unique.set(d.time, d.value));
 
         const sorted = Array.from(unique.entries())
-            .sort((a, b) => a[0] - b[0])
-            .map(([t, v]) => ({ time: t as Time, value: v }));
+            .sort((a, b) => {
+                const timeA = a[0];
+                const timeB = b[0];
+                
+                // Both are strings (dates)
+                if (typeof timeA === 'string' && typeof timeB === 'string') {
+                    return timeA.localeCompare(timeB);
+                }
+                // Both are numbers (timestamps)
+                if (typeof timeA === 'number' && typeof timeB === 'number') {
+                    return timeA - timeB;
+                }
+                // Mixed types - convert string to timestamp for comparison
+                const tsA: number = typeof timeA === 'string' ? new Date(timeA).getTime() / 1000 : (timeA as number);
+                const tsB: number = typeof timeB === 'string' ? new Date(timeB).getTime() / 1000 : (timeB as number);
+                return tsA - tsB;
+            })
+            .map(([t, v]) => ({ time: t, value: v }));
 
         if (sorted.length > 0) {
             series.setData(sorted);

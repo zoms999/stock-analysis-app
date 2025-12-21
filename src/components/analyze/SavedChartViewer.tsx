@@ -152,22 +152,23 @@ export function SavedChartViewer({
 
         for (let i = 1; i <= bars; i++) {
              if (typeof lastTime === 'string') {
-                // Assuming daily/weekly/monthly steps represent ~1 day or more
-                // For simplified "business day" logic, we just increment calendar days for the range filler
-                // Since this is just a visual filler line, exact business day skipping isn't strictly required 
-                // but nice to have. For now, simple day addition.
+                // For daily/weekly/monthly intervals, use date string arithmetic
+                // Determine days to add based on interval
                 let daysToAdd = i; 
-                if (itv === '1wk') daysToAdd = i * 7;
-                if (itv === '1mo') daysToAdd = i * 30; // Approx
+                if (itv === 'W' || itv === '1wk') daysToAdd = i * 7;
+                if (itv === 'M' || itv === '1mo') daysToAdd = i * 30; // Approx
+                if (itv === 'D' || itv === '1d') daysToAdd = i; // Daily
                 
                 const nextDate = addDays(lastTime, daysToAdd);
                 arr.push({ time: nextDate as Time, value: lastValue });
              } else {
+                // For intraday intervals (numeric timestamps), add seconds
                 arr.push({ time: ((lastTime as number) + step * i) as Time, value: lastValue });
              }
         }
         return arr;
     };
+
 
     // ✅ 핵심: 차트가 재생성되었을 때 “base 데이터”를 새 시리즈에 다시 주입
     const applyBaseDataToSeries = useCallback(() => {
@@ -419,16 +420,33 @@ export function SavedChartViewer({
         if (!s) return;
 
         if (predictionPoints && predictionPoints.length > 0) {
-            s.setData(predictionPoints);
+            // ✅ Sort by time to ensure lightweight-charts doesn't crash
+            // (assertion failed: data must be asc ordered by time)
+            const sortedPoints = [...predictionPoints].sort((a, b) => {
+                const getVal = (t: Time) => {
+                    if (typeof t === 'string') return new Date(t).getTime();
+                    if (typeof t === 'number') return t;
+                    // Handle BusinessDay object if expected, though usually string/number here
+                    if (typeof t === 'object' && 'year' in t) {
+                         const m = String(t.month).padStart(2, '0');
+                         const d = String(t.day).padStart(2, '0');
+                         return new Date(`${t.year}-${m}-${d}`).getTime();
+                    }
+                    return 0;
+                };
+                return getVal(a.time) - getVal(b.time);
+            });
 
-            const markers = predictionPoints.map((p, idx) => ({
+            s.setData(sortedPoints);
+
+            const markers = sortedPoints.map((p, idx) => ({
                 time: p.time,
                 position: "inBar" as const,
                 color: "#f59e0b",
                 shape: "circle" as const,
                 size: 4,
                 text:
-                    idx === predictionPoints.length - 1
+                    idx === sortedPoints.length - 1
                         ? `${p.value.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}`
                         : undefined,
             }));

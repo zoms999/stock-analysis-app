@@ -5,9 +5,16 @@ import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
 
 export async function POST(req: Request) {
+  console.log('[WEBHOOK] Received request');
+  
   const body = await req.text();
-  const headersList = await headers(); // Fix: await headers()
+  const headersList = await headers();
   const signature = headersList.get("Stripe-Signature") as string;
+
+  if (!signature) {
+    console.error('[WEBHOOK] No signature found');
+    return new NextResponse("No signature", { status: 400 });
+  }
 
   let event: Stripe.Event;
 
@@ -17,13 +24,17 @@ export async function POST(req: Request) {
       signature,
       process.env.STRIPE_WEBHOOK_SECRET!
     );
+    console.log('[WEBHOOK] Event verified:', event.type);
   } catch (error: any) {
+    console.error('[WEBHOOK] Signature verification failed:', error.message);
     return new NextResponse(`Webhook Error: ${error.message}`, { status: 400 });
   }
 
   const session = event.data.object as Stripe.Checkout.Session;
 
   if (event.type === "checkout.session.completed") {
+    console.log('[WEBHOOK] Processing checkout.session.completed');
+    
     const subscriptionId = session.subscription as string;
     const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
 
@@ -33,30 +44,35 @@ export async function POST(req: Request) {
     );
     
     const userId = session.metadata?.userId;
-    const planId = session.metadata?.planId; // Now available!
+    const planId = session.metadata?.planId;
+    
+    console.log('[WEBHOOK] User ID:', userId, 'Plan ID:', planId);
 
     if (userId && planId) {
-        // Upsert subscription
-        const { error } = await supabase
+        const subscriptionData = {
+            user_id: userId,
+            plan_id: parseInt(planId), // Convert to integer
+            stripe_subscription_id: subscriptionId,
+            status: subscription.status,
+            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+        };
+        
+        console.log('[WEBHOOK] Inserting subscription:', subscriptionData);
+        
+        const { data, error } = await supabase
             .from('subscriptions')
-            .upsert({
-                user_id: userId,
-                plan_id: planId, // UUID from metadata
-                stripe_subscription_id: subscriptionId,
-                status: subscription.status,
-                current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-                current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-                updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id' }); // Assuming one active sub per user or composite key? 
-            // If composite (user_id, plan_id), then onConflict might differ. 
-            // But usually 1 user = 1 active sub. Let's assume onConflict on user_id or unique constraint.
-            // If multiple plans allowed, we'd need a unique constraint on (user_id, plan_id).
-            // For now, let's assume one sub row per user or simple insert.
+            .insert(subscriptionData)
+            .select();
             
          if (error) {
-             console.error('Error updating subscription:', error);
+             console.error('[WEBHOOK] Database error:', error);
              return new NextResponse('Database Error', { status: 500 });
          }
+         
+         console.log('[WEBHOOK] Subscription created:', data);
+    } else {
+      console.error('[WEBHOOK] Missing userId or planId');
     }
   }
 

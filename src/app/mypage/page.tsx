@@ -3,33 +3,52 @@
 import { usePoints } from "@/hooks/use-points";
 import { PointHistory } from "@/components/point/PointHistory";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
+import { getUserSubscription, getTodayUsage, UserSubscription, TodayUsage } from "@/lib/api/mypage";
+import { getUserActivity, ActivityItem } from "@/lib/api/activity";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Settings, CreditCard, User as UserIcon } from "lucide-react";
-
-const HISTORY_DATA = [
-    { id: '1', date: '2023.12.07 14:30', description: '일일 차트 분석글 작성', amount: 500, type: 'earn' as const },
-    { id: '2', date: '2023.12.06 09:15', description: '토너먼트 참가비', amount: -1000, type: 'spend' as const },
-    { id: '3', date: '2023.12.05 18:20', description: '친구 초대 보상', amount: 500, type: 'earn' as const },
-    { id: '4', date: '2023.12.05 10:00', description: '출석체크', amount: 50, type: 'earn' as const },
-];
-
-
+import { Settings, CreditCard, User as UserIcon, BarChart3, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function MyPage() {
+  const router = useRouter();
   const { points } = usePoints();
   const [user, setUser] = useState<any>(null);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [usage, setUsage] = useState<TodayUsage | null>(null);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
   useEffect(() => {
-    const getUser = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        setUser(user);
-    };
-    getUser();
+    loadUserData();
   }, []);
+
+  const loadUserData = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      
+      if (user) {
+        const [subData, usageData, activityData] = await Promise.all([
+          getUserSubscription(user.id),
+          getTodayUsage(user.id),
+          getUserActivity(user.id, 10),
+        ]);
+        setSubscription(subData);
+        setUsage(usageData);
+        setActivity(activityData);
+      }
+    } catch (error) {
+      console.error('Failed to load user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="container py-8 max-w-5xl mx-auto space-y-8">
@@ -47,10 +66,10 @@ export default function MyPage() {
             <p className="text-muted-foreground">{user?.email || "로그인이 필요합니다"}</p>
             <div className="flex items-center justify-center md:justify-start gap-2 pt-2">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                    Level 1
+                    Level {subscription?.accessMaxLevel || 1}
                 </span>
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
-                    무료 멤버십
+                    {subscription?.planName || '무료 멤버십'}
                 </span>
             </div>
         </div>
@@ -60,6 +79,131 @@ export default function MyPage() {
             <p className="text-3xl font-bold text-primary">{points.toLocaleString()} P</p>
         </div>
       </section>
+
+      {/* Subscription & Usage Cards */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Subscription Card */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-primary" />
+                <CardTitle>구독 정보</CardTitle>
+              </div>
+              <CardDescription>현재 구독 중인 플랜</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xl font-bold">{subscription?.planName}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {subscription?.planPrice === 0 
+                      ? '무료' 
+                      : `${subscription?.planPrice.toLocaleString()}원/월`}
+                  </p>
+                </div>
+                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  subscription?.status === 'active' 
+                    ? 'bg-green-500/10 text-green-500' 
+                    : 'bg-gray-500/10 text-gray-500'
+                }`}>
+                  {subscription?.status === 'active' ? '활성' : '비활성'}
+                </div>
+              </div>
+
+              {subscription?.planName !== 'Free' && (
+                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                  <div>
+                    <p className="text-xs text-muted-foreground">다음 결제일</p>
+                    <p className="text-sm font-medium">
+                      {new Date(subscription?.currentPeriodEnd || '').toLocaleDateString('ko-KR')}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">일일 한도</p>
+                    <p className="text-sm font-medium">
+                      열람 {subscription?.dailyViewLimit}회 / 글쓰기 {subscription?.dailyWriteLimit}회
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <Button 
+                className="w-full" 
+                onClick={() => router.push('/subscription')}
+              >
+                {subscription?.planName === 'Free' ? '플랜 업그레이드' : '플랜 변경'}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Usage Card */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-primary" />
+                <CardTitle>오늘 사용량</CardTitle>
+              </div>
+              <CardDescription>일일 한도 및 사용 현황</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 열람 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">열람</p>
+                  <p className="text-sm text-muted-foreground">
+                    {usage?.viewCount} / {(usage?.viewLimit || 0) + (usage?.additionalViewCount || 0)}회
+                  </p>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div 
+                    className="bg-primary h-2 rounded-full transition-all"
+                    style={{ 
+                      width: `${Math.min(100, ((usage?.viewCount || 0) / ((usage?.viewLimit || 0) + (usage?.additionalViewCount || 0))) * 100)}%` 
+                    }}
+                  />
+                </div>
+                {usage?.additionalViewCount ? (
+                  <p className="text-xs text-muted-foreground">
+                    추가 구매: +{usage.additionalViewCount}회
+                  </p>
+                ) : null}
+              </div>
+
+              {/* 글쓰기 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">글쓰기</p>
+                  <p className="text-sm text-muted-foreground">
+                    {usage?.writeCount} / {(usage?.writeLimit || 0) + (usage?.additionalWriteCount || 0)}회
+                  </p>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div 
+                    className="bg-primary h-2 rounded-full transition-all"
+                    style={{ 
+                      width: `${Math.min(100, ((usage?.writeCount || 0) / ((usage?.writeLimit || 0) + (usage?.additionalWriteCount || 0))) * 100)}%` 
+                    }}
+                  />
+                </div>
+                {usage?.additionalWriteCount ? (
+                  <p className="text-xs text-muted-foreground">
+                    추가 구매: +{usage.additionalWriteCount}회
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="pt-2 text-xs text-muted-foreground text-center">
+                매일 자정에 초기화됩니다
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="points" className="w-full">
@@ -71,7 +215,13 @@ export default function MyPage() {
 
         <TabsContent value="points" className="space-y-6">
             <div className="max-w-3xl mx-auto">
-                <PointHistory history={HISTORY_DATA} />
+                {activity.length > 0 ? (
+                  <PointHistory history={activity} />
+                ) : (
+                  <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
+                    <p>아직 포인트 거래 내역이 없습니다.</p>
+                  </div>
+                )}
             </div>
         </TabsContent>
 
@@ -79,7 +229,9 @@ export default function MyPage() {
             <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground min-h-[300px] flex flex-col items-center justify-center">
                 <UserIcon className="h-12 w-12 mb-4 opacity-50" />
                 <p>아직 활동 내역이 없습니다.</p>
-                <Button variant="link" className="mt-2">커뮤니티 글 쓰러가기</Button>
+                <Button variant="link" className="mt-2" onClick={() => router.push('/analyze')}>
+                  커뮤니티 글 쓰러가기
+                </Button>
             </div>
         </TabsContent>
         

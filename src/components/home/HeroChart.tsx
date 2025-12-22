@@ -11,6 +11,7 @@ const TechChart = dynamic(() => import("@/components/chart/TechChart").then(mod 
 });
 
 export function HeroChart() {
+  const router = require("next/navigation").useRouter();
   return (
     <section className="flex flex-col md:flex-row items-center justify-between gap-8 py-8 md:py-12 border-b border-border/50">
       {/* Left: Text Content */}
@@ -24,9 +25,17 @@ export function HeroChart() {
             실시간 데이터와 전문적인 분석 도구를 제공합니다.
          </p>
          <div className="flex gap-3 pt-2">
-            <Link href="/subscription">
-                <Button size="lg" className="px-8 font-bold">지금 시작</Button>
-            </Link>
+             <Button size="lg" className="px-8 font-bold" onClick={async () => {
+                const supabase = await import("@/lib/supabase/client").then(mod => mod.createClient());
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                    router.push("/analyze");
+                } else {
+                    router.push("/login"); 
+                }
+             }}>
+                지금 시작
+             </Button>
             <Link href="/analyze">
                 <Button size="lg" variant="outline" className="px-8">더 알아보기</Button>
             </Link>

@@ -5,14 +5,22 @@ import YahooFinance from 'yahoo-finance2';
 const yahooFinance = new YahooFinance();
 
 // Initialize Supabase Client
-// Note: In a real production environment, you should use the SERVICE_ROLE_KEY for background jobs
-// to bypass RLS. For now, we assume using the ANON key or that environment variables are set.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function updateMarketPrices() {
-  console.log('Starting market price update...');
+  const logs: string[] = [];
+  const log = (msg: string, ...args: any[]) => {
+      console.log(msg, ...args);
+      logs.push(`${msg} ${args.map(a => JSON.stringify(a)).join(' ')}`);
+  };
+  const errorLog = (msg: string, ...args: any[]) => {
+      console.error(msg, ...args);
+      logs.push(`[ERROR] ${msg} ${args.map(a => JSON.stringify(a)).join(' ')}`);
+  }
+
+  log('Starting market price update...');
 
   try {
     // 1. Get Active Assets (System Defaults)
@@ -22,7 +30,7 @@ export async function updateMarketPrices() {
       .eq('is_active', true);
 
     if (assetsError) {
-      console.error('Error fetching assets:', assetsError);
+      errorLog('Error fetching assets:', assetsError);
       throw assetsError;
     }
 
@@ -33,7 +41,7 @@ export async function updateMarketPrices() {
       .eq('prediction_status', 'WAITING');
 
     if (postsError) {
-      console.error('Error fetching active posts:', postsError);
+      errorLog('Error fetching active posts:', postsError);
       throw postsError;
     }
 
@@ -47,51 +55,36 @@ export async function updateMarketPrices() {
     });
 
     // Add User Post Tickers
-    // If the ticker is already in assets, the Map handles deduplication (we use the predefined api_id).
-    // If NOT in assets, we assume the user input ticker is the valid API ID (or we use it as is).
-    // Ideally, we should lookup the asset table again, but here we simply check if it's already in the map.
-    
-    // To handle the case where post ticker matches an asset symbol:
-    // We already populated the map with assets. So we just need to handle new ones.
     activePosts?.forEach(post => {
       const symbol = post.ticker_symbol;
       if (!targetTickers.has(symbol)) {
-        // New ticker not in assets table. We assume symbol == api_id
         targetTickers.set(symbol, symbol);
       }
     });
 
     const uniqueApiIds = Array.from(new Set(targetTickers.values()));
-    console.log(`Targeting ${uniqueApiIds.length} unique tickers:`, uniqueApiIds);
+    log(`Targeting ${uniqueApiIds.length} unique tickers:`, uniqueApiIds);
 
     if (uniqueApiIds.length === 0) {
-      console.log('No tickers to update.');
-      return;
+      log('No tickers to update.');
+      return { success: true, updated: 0, logs };
     }
 
     // 4. Fetch Prices from Yahoo Finance
-    const results = await yahooFinance.quote(uniqueApiIds);
-    // yahooFinance.quote returns an array if multiple symbols, or single object if one.
-    // Ensure it's an array.
-    const quotes = Array.isArray(results) ? results : [results];
+    log(`Fetching prices for:`, uniqueApiIds);
+    let quotes: any[] = [];
+    try {
+        const results = await yahooFinance.quote(uniqueApiIds);
+        quotes = Array.isArray(results) ? results : [results];
+        log(`Received ${quotes.length} quotes from Yahoo.`);
+    } catch (e) {
+        errorLog("Yahoo Finance Quote Failed", e);
+    }
 
-    // 5. Insert into DB
-    const insertData = [];
-
-    // We need to map back from Api ID to our internal Symbol if possible.
-    // However, our market_prices table has a foreign key to `assets(symbol)`.
-    // Wait! If the user added a ticker 'DOGE-USD' that is NOT in `assets` table,
-    // we cannot insert it into `market_prices` because of the Foreign Key Constraint!
-    
-    // Critical Fix: We must first ensure all tracked tickers exist in `assets` table.
-    // If a dynamic ticker from a post is not in `assets`, we should insert it first.
-    
-    // Let's identify missing assets.
-    // validSymbols are keys of our map that came from 'assets' query initially.
+    // 5. Identify missing assets and create them
     const knownSymbols = new Set(assets?.map(a => a.symbol));
     const newAssetsToCreate: { symbol: string, api_id: string, asset_type: string, is_active: boolean }[] = [];
 
-    // Re-iterate activePosts to find missing ones
     const activePostSymbols = new Set(activePosts?.map(p => p.ticker_symbol));
     
     for (const symbol of activePostSymbols) {
@@ -100,38 +93,35 @@ export async function updateMarketPrices() {
                 symbol: symbol,
                 api_id: symbol, // Assume same
                 asset_type: 'UNKNOWN', // Default type
-                is_active: false // It's dynamic, not system fixed, so maybe false? 
-                // Using 'false' is fine because our query selects 'WAITING' posts anyway. 
-                // If we set true, it becomes permanent. Let's keep it false (dynamic only).
+                is_active: false 
             });
-            knownSymbols.add(symbol); // Prevent duplicates in this loop
+            knownSymbols.add(symbol); 
         }
     }
 
     if (newAssetsToCreate.length > 0) {
-        console.log(`Creating ${newAssetsToCreate.length} new temporary assets...`);
+        log(`Creating ${newAssetsToCreate.length} new temporary assets...`);
         const { error: createError } = await supabase
             .from('assets')
             .upsert(newAssetsToCreate, { onConflict: 'symbol' }); // safe upsert
         
         if (createError) {
-             console.error('Error creating new assets:', createError);
-             // Proceeding might fail for foreign keys, but let's try.
+             errorLog('Error creating new assets:', createError);
         }
     }
 
-    // Now prepare insert data
+    // 6. Insert into DB
+    const insertData = [];
+    
     for (const quote of quotes) {
       if (!quote) continue;
       
       const price = quote.regularMarketPrice;
       const symbol = quote.symbol; // Yahoo symbol (api_id)
+      log(`Processing quote: ${symbol}, Price: ${price}`);
 
-      // We need to find the internal 'symbol' that corresponds to this 'api_id'.
       let internalSymbol = null;
       
-      // 1. Try to find by matching API ID (Value in Map)
-      // This is the most correct way: We requested 'api_id', we got 'symbol' back. They should match.
       for (const [key, apiId] of targetTickers.entries()) {
           if (apiId === symbol || apiId.toUpperCase() === symbol.toUpperCase()) {
               internalSymbol = key;
@@ -139,15 +129,12 @@ export async function updateMarketPrices() {
           }
       }
       
-      // 2. Fallback: Check if the returned symbol acts as a key directly (Self-referencing asset)
       if (!internalSymbol && targetTickers.has(symbol)) {
           internalSymbol = symbol;
       }
-
-      // 3. Fallback: Check if we have a key that *contains* this symbol? (Dangerous, skip)
       
       if (!internalSymbol) {
-         console.warn(`Warning: Could not map Yahoo symbol '${symbol}' back to internal asset. Skipping.`);
+         log(`Warning: Could not map Yahoo symbol '${symbol}' back to internal asset. Skipping.`);
          continue; 
       }
 
@@ -155,10 +142,12 @@ export async function updateMarketPrices() {
         insertData.push({
           ticker_symbol: internalSymbol,
           price: price,
-          recorded_at: new Date().toISOString() // Or use quote.regularMarketTime
+          recorded_at: new Date().toISOString()
         });
       }
     }
+
+    log(`Prepared ${insertData.length} records for insertion.`);
 
     if (insertData.length > 0) {
       const { error: insertError } = await supabase
@@ -166,15 +155,15 @@ export async function updateMarketPrices() {
         .insert(insertData);
 
       if (insertError) {
-        console.error('Error inserting prices:', insertError);
+        errorLog('Error inserting prices:', insertError);
         throw insertError;
       }
-      console.log(`Successfully updated ${insertData.length} prices.`);
+      log(`Successfully updated ${insertData.length} prices.`);
     }
 
-    return { success: true, updated: insertData.length };
+    return { success: true, updated: insertData.length, logs };
   } catch (error) {
-    console.error('Update market prices failed:', error);
-    return { success: false, error };
+    errorLog('Update market prices failed:', error);
+    return { success: false, error, logs };
   }
 }

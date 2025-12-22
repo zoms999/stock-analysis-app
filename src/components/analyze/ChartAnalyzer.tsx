@@ -305,8 +305,8 @@ layout: {
         });
 
         const areaSeries = chart.addSeries(AreaSeries, {
-            topColor: "rgba(41, 98, 255, 0.4)",
-            bottomColor: "rgba(41, 98, 255, 0.0)",
+            topColor: "rgba(0, 0, 0, 0)",
+            bottomColor: "rgba(0, 0, 0, 0)",
             lineColor: "#2962FF",
             lineWidth: 2,
             visible: chartStyle === "line",

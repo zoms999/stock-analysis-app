@@ -6,6 +6,8 @@ import { fetchPosts, Post, PostSortOption } from "@/lib/api/posts";
 import { getCurrentPrice, getBatchPrices } from "@/lib/api/prices";
 import { calculateAccuracy } from "@/lib/utils/accuracy";
 import { SyncPriceButton } from "@/components/admin/SyncPriceButton";
+import { Input } from "@/components/ui/input";
+import { Search } from "lucide-react";
 
 type SortOption =
   | "all"
@@ -34,6 +36,7 @@ export function ChartBoardList() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>("latest");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     async function loadPosts() {
@@ -133,9 +136,21 @@ export function ChartBoardList() {
     <section className="space-y-6">
       {/* Header with Sort Dropdown */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold">차트 게시판</h2>
+
+        <div className="flex items-center gap-4 flex-1">
+          <h2 className="text-2xl font-bold whitespace-nowrap">차트 게시판</h2>
           <SyncPriceButton />
+          
+          <div className="relative w-full max-w-xs hidden sm:block">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="종목 검색..."
+              className="w-full bg-secondary pl-9 h-9"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
         <select
           value={sortBy}

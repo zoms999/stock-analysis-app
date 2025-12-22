@@ -88,6 +88,9 @@ export function Header() {
             <Link href="/notices" className="transition-colors hover:text-foreground/80 text-foreground/60">
               공지사항
             </Link>
+            <Link href="/subscription" className="transition-colors hover:text-foreground/80 text-foreground/60">
+              구독하기
+            </Link>
             {/* <Link href="/" className="transition-colors hover:text-foreground/80 text-foreground/60">
               커뮤니티
             </Link> */}
@@ -99,29 +102,19 @@ export function Header() {
           <Menu className="h-6 w-6" />
           <span className="sr-only">Toggle Menu</span>
         </Button>
+        
+        <div className="flex flex-1 md:hidden">
+             {/* Mobile specific spacing or search if needed, but keeping simple for now */}
+        </div>
 
-        {/* Search */}
-        <div className="flex flex-1 items-center space-x-2 mr-4">
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              ref={searchInputRef}
-              type="search"
-              placeholder="종목 검색... (Ctrl+K)"
-              className="w-full bg-secondary pl-9 md:w-[300px] lg:w-[400px] focus-visible:ring-primary/20"
-            />
-          </div>
-          
-          <Link href="/analyze">
+        <div className="flex items-center space-x-4 ml-auto">
+          <Link href={user ? "/analyze" : "/login"}>
             <Button variant="outline" className="hidden md:flex items-center gap-2 border-primary/20 hover:bg-primary/5 hover:text-primary transition-colors">
-              <LogOut className="h-4 w-4 rotate-90" /> {/* Using LogOut rotated as a placeholder for 'Enter' or 'Analysis' icon if specialized icon not available, or just generic */}
+              <LogOut className="h-4 w-4 rotate-90" />
               <span className="text-primary font-bold">차트 분석하기</span>
             </Button>
           </Link>
-        </div>
 
-        {/* Right Actions */}
-        <div className="flex items-center space-x-4">
           <Clock />
 
           <Button 

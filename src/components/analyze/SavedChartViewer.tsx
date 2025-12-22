@@ -269,13 +269,13 @@ export function SavedChartViewer({
             visible: viewStyle === "candle",
         });
 
-        const area = chart.addSeries(AreaSeries, {
-            topColor: "rgba(41, 98, 255, 0.35)",
-            bottomColor: "rgba(41, 98, 255, 0.0)",
-            lineColor: "#2962FF",
-            lineWidth: 2,
-            visible: viewStyle === "line",
-        });
+const area = chart.addSeries(AreaSeries, {
+  topColor: "rgba(0,0,0,0)",
+  bottomColor: "rgba(0,0,0,0)",
+  lineColor: "#2962FF",
+  lineWidth: 2,
+  visible: viewStyle === "line",
+});
 
         const vol = chart.addSeries(HistogramSeries, {
             color: "#26a69a",

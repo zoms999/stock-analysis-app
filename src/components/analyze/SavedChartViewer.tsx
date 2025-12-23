@@ -287,7 +287,7 @@ const area = chart.addSeries(AreaSeries, {
         const pred = chart.addSeries(LineSeries, {
             color: "#f59e0b",
             lineWidth: 2,
-            lineStyle: 2,
+            lineStyle: 0,
             crosshairMarkerVisible: true,
             crosshairMarkerRadius: 4,
             priceLineVisible: false,

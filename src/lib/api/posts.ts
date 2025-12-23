@@ -321,6 +321,16 @@ export async function checkCanViewPost(postId: string): Promise<{ canView: boole
   // Let's replicate strict logic:
   const totalLimit = usage.viewLimit + usage.additionalViewCount;
   if (usage.viewCount >= totalLimit) {
+    // Check if user has already viewed this post (Lifetime Access)
+    const { data: hasViewed } = await supabase.rpc('has_viewed_post', { 
+      p_user_id: user.id, 
+      p_post_id: postId 
+    });
+
+    if (hasViewed) {
+      return { canView: true };
+    }
+
     return { canView: false, reason: "일일 열람 한도를 초과했습니다." };
   }
 

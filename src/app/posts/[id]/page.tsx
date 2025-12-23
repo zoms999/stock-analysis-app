@@ -6,6 +6,7 @@ import { ArrowLeft, MessageSquare, Heart, Share2, ThumbsUp } from "lucide-react"
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { LimitPopup } from "@/components/subscription/LimitPopup";
+import { toast } from "sonner";
 import { SavedChartViewer } from "@/components/analyze/SavedChartViewer";
 import { PredictionInfo } from "@/components/analyze/PredictionInfo";
 import { fetchPostById, Post } from "@/lib/api/posts";
@@ -38,10 +39,11 @@ export default function PostDetailPage() {
         }
       } catch (e: any) {
         if (e?.code === "LIMIT_REACHED" || e?.message?.includes("한도를 초과")) {
+          console.log("Limit reached error caught, showing popup");
           setShowLimitPopup(true);
         } else {
-          console.error(e);
-          // Optional: handle other errors
+          console.error("Unknown error in loadPost:", e);
+          toast.error(e.message || "게시글을 불러오는데 실패했습니다.");
         }
       } finally {
         setLoading(false);

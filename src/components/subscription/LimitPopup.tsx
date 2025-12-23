@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { getUserPoints } from "@/lib/api/points";
+import { getUserProfile } from "@/lib/api/subscription";
 import { purchaseAdditionalView, purchaseAdditionalWrite } from "@/lib/api/subscription";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -43,8 +43,8 @@ export function LimitPopup({ isOpen, onClose, type, onSuccess }: LimitPopupProps
         const { data: { user } } = await supabase.auth.getUser();
         
         if (user) {
-            const balance = await getUserPoints(user.id);
-            setPoints(balance);
+            const profile = await getUserProfile(user.id);
+            setPoints(profile.point_balance);
         }
     } catch (e) {
       console.error("Failed to load points", e);

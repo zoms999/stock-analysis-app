@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PredictionStatus } from "@/lib/api/posts";
 import { checkCanViewPost } from "@/lib/api/posts";
 import { toast } from "sonner";
+import { useState } from "react";
+import { LimitPopup } from "@/components/subscription/LimitPopup";
 
 // Use SavedChartViewer for displaying saved charts with configuration
 const SavedChartViewer = dynamic(() => import("@/components/analyze/SavedChartViewer").then(mod => mod.SavedChartViewer), {
@@ -36,6 +38,7 @@ interface ChartCardProps {
 
 export function ChartCard({ id, symbol, title, user, stats, predictionStatus, chartConfig }: ChartCardProps) {
   const router = useRouter();
+  const [showLimitPopup, setShowLimitPopup] = useState(false);
   
   const statusColors = {
     SUCCESS: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/50",
@@ -64,11 +67,15 @@ export function ChartCard({ id, symbol, title, user, stats, predictionStatus, ch
     const { canView, reason } = await checkCanViewPost(id);
     
     if (!canView) {
-      // Show toast notification
-      toast.error(reason || "게시물을 볼 수 없습니다.", {
-        description: "구독 플랜을 업그레이드하거나 포인트로 추가 열람권을 구매하세요.",
-        duration: 4000,
-      });
+      if (reason === "일일 열람 한도를 초과했습니다.") {
+        setShowLimitPopup(true);
+      } else {
+        // Show toast notification for other reasons
+        toast.error(reason || "게시물을 볼 수 없습니다.", {
+          description: "구독 정보를 확인해주세요.",
+          duration: 4000,
+        });
+      }
       return;
     }
     
@@ -132,6 +139,16 @@ export function ChartCard({ id, symbol, title, user, stats, predictionStatus, ch
             </div>
         </div>
       </div>
+
+      <LimitPopup 
+        isOpen={showLimitPopup} 
+        onClose={() => setShowLimitPopup(false)}
+        type="VIEW"
+        onSuccess={() => {
+            setShowLimitPopup(false);
+            router.push(`/posts/${id}`);
+        }}
+      />
     </div>
   );
 }

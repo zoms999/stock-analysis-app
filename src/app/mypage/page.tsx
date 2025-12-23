@@ -1,11 +1,11 @@
 "use client";
 
-import { usePoints } from "@/hooks/use-points";
+
 import { PointHistory } from "@/components/point/PointHistory";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
-import { getUserSubscription, getTodayUsage, UserSubscription, TodayUsage } from "@/lib/api/mypage";
+import { getUserSubscription, getTodayUsage, getUserProfile, UserSubscription, TodayUsage, UserProfile } from "@/lib/api/mypage";
 import { getUserActivity, ActivityItem } from "@/lib/api/activity";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -15,9 +15,9 @@ import { useRouter } from "next/navigation";
 
 export default function MyPage() {
   const router = useRouter();
-  const { points } = usePoints();
   const [user, setUser] = useState<any>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [usage, setUsage] = useState<TodayUsage | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,14 +34,16 @@ export default function MyPage() {
       setUser(user);
       
       if (user) {
-        const [subData, usageData, activityData] = await Promise.all([
+        const [subData, usageData, activityData, profileData] = await Promise.all([
           getUserSubscription(user.id),
           getTodayUsage(user.id),
           getUserActivity(user.id, 10),
+          getUserProfile(user.id),
         ]);
         setSubscription(subData);
         setUsage(usageData);
         setActivity(activityData);
+        setProfile(profileData);
       }
     } catch (error) {
       console.error('Failed to load user data:', error);
@@ -76,7 +78,7 @@ export default function MyPage() {
 
         <div className="text-center p-4 bg-muted/30 rounded-xl min-w-[200px]">
             <p className="text-sm text-muted-foreground mb-1">보유 포인트</p>
-            <p className="text-3xl font-bold text-primary">{points.toLocaleString()} P</p>
+            <p className="text-3xl font-bold text-primary">{profile?.point_balance.toLocaleString() || 0} P</p>
         </div>
       </section>
 

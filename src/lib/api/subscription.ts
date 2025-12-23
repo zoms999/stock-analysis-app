@@ -26,6 +26,52 @@ export interface TodayUsage {
   writeLimit: number;
 }
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  nickname: string;
+  avatar_url: string;
+  user_level: number;
+  point_balance: number;
+}
+
+/**
+ * 사용자 프로필 조회 (포인트 포함)
+ */
+export async function getUserProfile(userId: string): Promise<UserProfile> {
+  const supabase = createClient();
+  
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+        // 프로필이 없는 경우 (기본값)
+        return {
+            id: userId,
+            email: '',
+            nickname: 'Unknown',
+            avatar_url: '',
+            user_level: 1,
+            point_balance: 0
+        };
+    }
+    throw error;
+  }
+
+  return {
+    id: data.id,
+    email: data.email,
+    nickname: data.nickname,
+    avatar_url: data.avatar_url,
+    user_level: data.user_level || 1,
+    point_balance: data.point_balance || 0
+  };
+}
+
 /**
  * 현재 사용자의 구독 정보 조회 (RPC/View 대체)
  * Free Tier 처리를 포함하여 항상 유효한 값을 반환하도록 보장
@@ -57,11 +103,11 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
   // 사용자 레벨 조회 (Profiles)
   const { data: profile } = await supabase
       .from('profiles')
-      .select('level')
+      .select('user_level')
       .eq('id', userId)
       .single();
   
-  const userLevel = profile?.level || 1; // Default to level 1
+  const userLevel = profile?.user_level || 1; // Default to level 1
 
   if (!data) {
     // 구독이 없으면 Free 플랜 반환
@@ -201,7 +247,8 @@ export async function purchaseAdditionalView(userId: string) {
     });
 
     if (error || status !== 'OK') {
-        throw new Error("포인트 구매 처리에 실패했습니다. 잔액을 확인해주세요.");
+        console.error("Purchase View Failed:", error);
+        throw new Error(error?.message || "포인트 구매 처리에 실패했습니다. 잔액을 확인해주세요.");
     }
     return true;
 }
@@ -219,7 +266,8 @@ export async function purchaseAdditionalWrite(userId: string) {
     });
 
     if (error || status !== 'OK') {
-        throw new Error("포인트 구매 처리에 실패했습니다. 잔액을 확인해주세요.");
+        console.error("Purchase Write Failed:", error);
+        throw new Error(error?.message || "포인트 구매 처리에 실패했습니다. 잔액을 확인해주세요.");
     }
     return true;
 }

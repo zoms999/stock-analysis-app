@@ -273,6 +273,75 @@ export function ChartAnalyzer({
         return arr;
     };
 
+    // ✅ Catmull-Rom Spline 알고리즘으로 부드러운 곱선 데이터 생성
+    const getInterpolatedData = (points: PredictionPoint[], granularity: number = 20): PredictionPoint[] => {
+        if (points.length < 2) return points;
+
+        // Map으로 중복 제거 (time을 키로 사용)
+        const dataMap = new Map<string | number, number>();
+        
+        // 점들을 시간순 정렬
+        const sorted = [...points].sort((a, b) => 
+            (typeof a.time === 'string' ? new Date(a.time).getTime() : a.time as number) - 
+            (typeof b.time === 'string' ? new Date(b.time).getTime() : b.time as number)
+        );
+
+        // spline 로직
+        for (let i = 0; i < sorted.length - 1; i++) {
+            const p0 = sorted[Math.max(0, i - 1)];
+            const p1 = sorted[i];
+            const p2 = sorted[i + 1];
+            const p3 = sorted[Math.min(sorted.length - 1, i + 2)];
+
+            const t1 = typeof p1.time === 'string' ? new Date(p1.time).getTime() / 1000 : p1.time as number;
+            const t2 = typeof p2.time === 'string' ? new Date(p2.time).getTime() / 1000 : p2.time as number;
+            const step = (t2 - t1) / granularity;
+
+            for (let t = 0; t < granularity; t++) {
+                const timeOffset = step * t;
+                const x = t / granularity; // 0~1 사이 비율
+                
+                // Catmull-Rom interpolation
+                const value = 0.5 * (
+                    (2 * p1.value) +
+                    (-p0.value + p2.value) * x +
+                    (2 * p0.value - 5 * p1.value + 4 * p2.value - p3.value) * x * x +
+                    (-p0.value + 3 * p1.value - 3 * p2.value + p3.value) * x * x * x
+                );
+
+                // 시간 복원 (Daily인 경우 문자열, Intraday인 경우 timestamp)
+                let newTime: Time;
+                if (typeof p1.time === 'string') {
+                    const d = new Date((t1 + timeOffset) * 1000);
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    newTime = `${year}-${month}-${day}` as Time;
+                } else {
+                    newTime = (t1 + timeOffset) as Time;
+                }
+
+                // Map에 저장 (중복 자동 제거)
+                dataMap.set(newTime as string | number, value);
+            }
+        }
+        
+        // 마지막 점 추가
+        const lastPoint = sorted[sorted.length - 1];
+        dataMap.set(lastPoint.time as string | number, lastPoint.value);
+
+        // Map을 배열로 변환하고 시간순 정렬
+        const result = Array.from(dataMap.entries())
+            .sort((a, b) => {
+                const timeA = typeof a[0] === 'string' ? new Date(a[0]).getTime() : a[0];
+                const timeB = typeof b[0] === 'string' ? new Date(b[0]).getTime() : b[0];
+                return timeA - timeB;
+            })
+            .map(([time, value]) => ({ time: time as Time, value }));
+
+        return result;
+    };
+
 
     // Capture chart as image
     const captureChart = useCallback(async () => {
@@ -345,6 +414,12 @@ layout: {
                     style: 3,
                     labelBackgroundColor: isDark ? "#374151" : "#E5E7EB",
                 },
+            },
+            handleScroll: {
+                mouseWheel: true,
+                pressedMouseMove: true,
+                horzTouchDrag: true,
+                vertTouchDrag: false,
             },
         });
 
@@ -432,7 +507,10 @@ layout: {
 
             // range 재적용
             if (count > 0) {
-                const total = desiredBars + futureBars;
+                // ✅ 화면에 들어갈 수 있는 개수(autoBars)를 우선 사용
+                const historyBars = Math.max(getHistoryBars(itv) || 0, desiredBars);
+
+                const total = historyBars + futureBars;
                 const to = (count - 1) + futureBars;
                 const from = to - total; // ✅ 음수 허용 (촘촘함 극대화)
                 chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
@@ -725,7 +803,8 @@ layout: {
                     // ✅ 2) 화면 폭에 맞춰 desiredBars 자동 계산 (일봉은 futureMode 기반)
                     const width = chartContainerRef.current.clientWidth;
                     const autoBars = calcDesiredBars(interval, width);
-                    const historyBars = getHistoryBars(interval) ?? autoBars;
+                    // ✅ 둘 중 더 큰 값을 사용하여 화면을 꽉 채움
+                    const historyBars = Math.max(getHistoryBars(interval) || 0, autoBars);
 
                     // ✅ 3) 미래 영역 포함해서 visible range 고정 (음수 허용으로 촘촘함 극대화)
                     const total = historyBars + futureBars;
@@ -780,7 +859,8 @@ layout: {
         if (chartContainerRef.current) {
             const width = chartContainerRef.current.clientWidth;
             const autoBars = calcDesiredBars(itv, width);
-            const historyBars = getHistoryBars(itv) ?? autoBars;
+            // ✅ 여기서도 max 값을 사용하여 화면 밀도 유지
+            const historyBars = Math.max(getHistoryBars(itv) || 0, autoBars);
 
             const count = baseC.length;
             const to = (count - 1) + futureBars;
@@ -834,7 +914,9 @@ layout: {
             .map(([t, v]) => ({ time: t, value: v }));
 
         if (sorted.length > 0) {
-            series.setData(sorted);
+            // ✅ 곱선 변환 적용 (점들 사이가 멀어도 자연스럽게)
+            const curvedData = getInterpolatedData(sorted, 10); // 10등분으로 쌓게서 부드럽게
+            series.setData(curvedData);
             // Native markers removed
         } else {
             series.setData([]);

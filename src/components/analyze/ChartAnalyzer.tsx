@@ -146,6 +146,7 @@ export function ChartAnalyzer({
     const dataCountRef = useRef(dataCount);
     const lastCandleRef = useRef(lastCandle);
     const chartStyleRef = useRef(chartStyle);
+    const futureBarsRef = useRef(0);
 
     useEffect(() => {
         intervalRef.current = interval;
@@ -186,6 +187,58 @@ export function ChartAnalyzer({
 
     const snapTime = (t: number, step: number) => Math.round(t / step) * step;
     const clampFutureTime = (t: number, maxT: number) => Math.min(t, maxT);
+
+    // ✅ Time 타입 안전 비교 유틸 (string/number 모두 처리)
+    const timeToTs = (t: Time) => (typeof t === "string" ? new Date(t).getTime() : (t as number) * 1000);
+    const compareTime = (a: Time, b: Time) => timeToTs(a) - timeToTs(b);
+
+    // ✅ interval별 목표 픽셀 간격 (작을수록 촘촘)
+    const getTargetBarSpacingPx = (itv: string) => {
+        switch (itv) {
+            case "1":  return 2;   // 1분봉: 매우 촘촘하게 (3 -> 2)
+            case "60": return 3;   // 60분봉 (4 -> 3)
+            case "D":  return 4;   // 일봉 (6 -> 4)
+            case "W":  return 6;   // 주봉 (10 -> 6)
+            case "M":  return 10;  // 월봉 (14 -> 10)
+            case "Y":  return 14;  // 연봉 (18 -> 14)
+            default:   return 4;
+        }
+    };
+
+    // ✅ 컨테이너 폭 기반으로 desiredBars 자동 계산
+    const calcDesiredBars = (itv: string, containerWidth: number) => {
+        const targetPx = getTargetBarSpacingPx(itv);
+
+        // 좌측 가격박스/여백/우측 스케일 등 보정 (120 -> 100으로 축소)
+        const usable = Math.max(200, containerWidth - 100);
+
+        // 한 화면에 보여줄 봉 개수
+        const bars = Math.floor(usable / targetPx);
+
+        // interval별 최소/최대 가드 (Max 값 대폭 상향)
+        const minMax: Record<string, [number, number]> = {
+            "1":  [120, 1000], // 1분봉 최대 1000개
+            "60": [80, 600],   // 60분봉 최대 600개
+            "D":  [60, 365],   // ✅ 일봉: 90 -> 365 (1년치 한눈에)
+            "W":  [40, 200],   // 주봉
+            "M":  [24, 120],   // 월봉
+            "Y":  [24, 100],   // 연봉
+        };
+
+        const [min, max] = minMax[itv] ?? [40, 300];
+        return Math.max(min, Math.min(max, bars));
+    };
+
+    // ✅ futureMode에 맞춰 히스토리 바 수 계산 (일봉 전용)
+    const getHistoryBars = (itv: string) => {
+        if (itv !== "D") return null; // 일봉이 아니면 자동 계산 사용
+
+        if (futureMode === "1m") return 60;  // 1개월: 과거 60일
+        if (futureMode === "3m") return 120; // 3개월: 과거 120일
+
+        // custom: customDays * 2 (상한 180)
+        return Math.max(30, Math.min(180, customDays * 2));
+    };
 
     // Dummy range points for rangeSeries (time range extension)
     const buildFutureRange = (lastTime: Time, lastValue: number, itv: string, bars: number) => {
@@ -271,6 +324,8 @@ layout: {
                 secondsVisible: false,
                 rightOffset: 30,
                 borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
+                barSpacing: 4,      // ✅ 6 -> 4로 변경
+                minBarSpacing: 0.5, // ✅ 2 -> 0.5로 축소 (더 촘촘하게)
             },
             rightPriceScale: {
                 borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
@@ -301,6 +356,7 @@ layout: {
             wickDownColor: "#3b82f6",
             borderUpColor: "#ef4444",
             borderDownColor: "#3b82f6",
+            wickVisible: interval === "1" || interval === "60" ? false : true, // ✅ 분봉은 심지 숨기기
             visible: chartStyle === "candle",
         });
 
@@ -352,12 +408,35 @@ layout: {
         chartRef.current = chart;
 
         const handleResize = () => {
-             if (chartContainerRef.current) {
-                 chart.applyOptions({ 
-                    width: chartContainerRef.current.clientWidth,
-                    height: chartContainerRef.current.clientHeight
-                });
-             }
+             if (!chartContainerRef.current || !chartRef.current) return;
+
+             chart.applyOptions({ 
+                width: chartContainerRef.current.clientWidth,
+                height: chartContainerRef.current.clientHeight
+            });
+
+            // ✅ 폭 바뀌었으면 desiredBars 다시 계산해서 range 재적용
+            const width = chartContainerRef.current.clientWidth;
+            const itv = intervalRef.current;
+            const desiredBars = calcDesiredBars(itv, width);
+
+            const count = dataCountRef.current;
+            const futureBars = futureBarsRef.current;
+
+            // barSpacing 재강제
+            const spacing = getTargetBarSpacingPx(itv);
+            chartRef.current.timeScale().applyOptions({
+                barSpacing: spacing,
+                minBarSpacing: 0.5, // ✅ 리사이즈 후에도 촘촘한 줄아웃 유지
+            });
+
+            // range 재적용
+            if (count > 0) {
+                const total = desiredBars + futureBars;
+                const to = (count - 1) + futureBars;
+                const from = to - total; // ✅ 음수 허용 (촘촘함 극대화)
+                chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
+            }
         };
         window.addEventListener("resize", handleResize);
 
@@ -441,13 +520,15 @@ layout: {
                 const newPoint = { time: time as Time, value: price };
 
                 setPoints((prev) => {
-                    const existsIndex = prev.findIndex((p) => (p.time as number) === (newPoint.time as number));
+                    // ✅ 안전한 time 비교 (string/number 모두 처리)
+                    const existsIndex = prev.findIndex((p) => compareTime(p.time, newPoint.time) === 0);
                     const next = [...prev];
 
                     if (existsIndex >= 0) next[existsIndex] = newPoint;
                     else next.push(newPoint);
 
-                    next.sort((a, b) => (a.time as number) - (b.time as number));
+                    // ✅ 안전한 정렬
+                    next.sort((a, b) => compareTime(a.time, b.time));
                     return next;
                 });
             }
@@ -596,16 +677,23 @@ layout: {
                 const rangeData = buildFutureRange(lastRealTime, lastRealClose, interval, futureBars);
                 rangeSeriesRef.current?.setData(rangeData as any);
 
+                // ✅ futureBars를 ref에 저장 (resize에서 사용)
+                futureBarsRef.current = futureBars;
+
                 // Apply timeScale options (rightOffset matches chosen future range)
-                if (chartRef.current) {
+                if (chartRef.current && chartContainerRef.current) {
                     const isIntraday = ["60", "1"].includes(interval);
 
+                    // ✅ 1) barSpacing도 interval별로 강제
+                    const spacing = getTargetBarSpacingPx(interval);
                     chartRef.current.applyOptions({
                         timeScale: {
                             timeVisible: isIntraday,
                             secondsVisible: false,
                             borderColor: "#D1D5DB",
                             rightOffset: futureBars,
+                            barSpacing: spacing,
+                            minBarSpacing: Math.max(2, Math.floor(spacing * 0.5)),
                             tickMarkFormatter: (t: number | string, tickMarkType: TickMarkType) => {
                                 // Handle both string dates (YYYY-MM-DD) and numeric timestamps
                                 const date = typeof t === 'string' ? new Date(t) : new Date((t as number) * 1000);
@@ -634,7 +722,17 @@ layout: {
                         },
                     });
 
-                    chartRef.current.timeScale().fitContent();
+                    // ✅ 2) 화면 폭에 맞춰 desiredBars 자동 계산 (일봉은 futureMode 기반)
+                    const width = chartContainerRef.current.clientWidth;
+                    const autoBars = calcDesiredBars(interval, width);
+                    const historyBars = getHistoryBars(interval) ?? autoBars;
+
+                    // ✅ 3) 미래 영역 포함해서 visible range 고정 (음수 허용으로 촘촘함 극대화)
+                    const total = historyBars + futureBars;
+                    const to = (data.length - 1) + futureBars;
+                    const from = to - total; // ✅ Math.max(0) 제거 → 음수 허용
+
+                    chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
                 }
 
                 setTimeout(() => {
@@ -671,9 +769,26 @@ layout: {
         const rangeData = buildFutureRange(lastTime, lastClose, itv, futureBars);
         rangeSeriesRef.current.setData(rangeData as any);
 
+        // ✅ futureBarsRef 갱신
+        futureBarsRef.current = futureBars;
+
         chartRef.current.applyOptions({
             timeScale: { rightOffset: futureBars },
         });
+
+        // ✅ visibleLogicalRange 재적용 (futureMode 변경 시에도 간격 유지)
+        if (chartContainerRef.current) {
+            const width = chartContainerRef.current.clientWidth;
+            const autoBars = calcDesiredBars(itv, width);
+            const historyBars = getHistoryBars(itv) ?? autoBars;
+
+            const count = baseC.length;
+            const to = (count - 1) + futureBars;
+            const total = historyBars + futureBars;
+            const from = to - total; // ✅ 음수 허용
+
+            chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
+        }
     }, [futureMode, customDays]);
 
     // 3) Update Prediction Line + Markers

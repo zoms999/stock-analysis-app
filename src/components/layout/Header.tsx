@@ -14,6 +14,7 @@ import { useTheme } from "next-themes";
 export function Header() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<any>(null);
+  const [userLevel, setUserLevel] = useState<number>(1);
   const router = useRouter();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
@@ -46,6 +47,7 @@ export function Header() {
       setUser(session?.user ?? null);
       if (_event === 'SIGNED_OUT') {
         setUser(null);
+        setUserLevel(1);
         router.refresh();
       } else if (_event === 'SIGNED_IN') {
         router.refresh();
@@ -58,10 +60,41 @@ export function Header() {
     };
   }, [router, pathname]);
 
+  // ✅ [Safe Implementation] Separate effect for fetching user level
+  // Runs only after `user` is set, with a small delay to prioritize main content loading
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchLevel = async () => {
+        const supabase = createClient();
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('user_level')
+                .eq('id', user.id)
+                .single();
+
+            if (data && !error) {
+                setUserLevel(data.user_level ?? 1);
+            }
+        } catch (e) {
+            console.error("Failed to fetch user level", e);
+        }
+    };
+
+    // Delay fetch to avoid competing with critical page resources (Chart)
+    const timer = setTimeout(() => {
+        fetchLevel();
+    }, 1000); 
+
+    return () => clearTimeout(timer);
+  }, [user]);
+
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
     setUser(null);
+    setUserLevel(1);
     router.refresh();
   };
 
@@ -91,6 +124,11 @@ export function Header() {
             <Link href="/subscription" className="transition-colors hover:text-foreground/80 text-foreground/60">
               구독하기
             </Link>
+            {userLevel === 10 && (
+               <Link href="/admin" className="transition-colors text-red-500 hover:text-red-700 font-bold">
+                관리자
+              </Link>
+            )}
             {/* <Link href="/" className="transition-colors hover:text-foreground/80 text-foreground/60">
               커뮤니티
             </Link> */}

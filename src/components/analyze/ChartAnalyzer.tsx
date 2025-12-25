@@ -330,6 +330,12 @@ export function ChartAnalyzer({
         const lastPoint = sorted[sorted.length - 1];
         dataMap.set(lastPoint.time as string | number, lastPoint.value);
 
+        // ✅ [Fix] 원본 포인트들의 값은 절대 변하지 않도록 강제 덮어쓰기
+        // (interpolation 과정에서 같은 날짜/시간에 대해 근사값이 들어가는 것을 방지)
+        sorted.forEach(p => {
+             dataMap.set(p.time as string | number, p.value);
+        });
+
         // Map을 배열로 변환하고 시간순 정렬
         const result = Array.from(dataMap.entries())
             .sort((a, b) => {
@@ -921,7 +927,16 @@ layout: {
         } else {
             series.setData([]);
         }
-    }, [points, onPointsChange, lastCandle]);
+
+        // ✅ [Fix] Recalculate overlay positions after chart auto-scale
+        // requestAnimationFrame을 두 번 중첩하면 다음 프레임(렌더링 완료 후)을 확실히 보장받을 수 있습니다.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                updateOverlayPositions();
+            });
+        });
+
+    }, [points, onPointsChange, lastCandle, updateOverlayPositions]);
 
     const handleRemovePoint = (time: Time) => {
         setPoints(prev => prev.filter(p => p.time !== time));
@@ -1037,6 +1052,9 @@ layout: {
                         handleRemovePoint(marker.time);
                     }}
                 >
+                    {/* ✅ Custom Vertical Guide Line (mimics crosshair) */}
+                    <div className="absolute top-[12px] bottom-[-100vh] w-[1px] bg-gray-400 dark:bg-gray-600 border-l border-dashed border-gray-400/80 dark:border-gray-500/80 h-[200vh] -translate-y-[100vh] pointer-events-none hidden group-hover:block z-[-1]" />
+
                     <div className="w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 shadow-sm border border-white flex items-center justify-center transition-all">
                         <span className="text-white font-bold text-xs select-none">✕</span>
                     </div>

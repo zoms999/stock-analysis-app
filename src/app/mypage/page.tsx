@@ -5,13 +5,15 @@ import { PointHistory } from "@/components/point/PointHistory";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
-import { getUserSubscription, getTodayUsage, getUserProfile, UserSubscription, TodayUsage, UserProfile } from "@/lib/api/mypage";
+import { getUserSubscription, getTodayUsage, getUserProfile, getPartnerDashboard, UserSubscription, TodayUsage, UserProfile, PartnerDashboard } from "@/lib/api/mypage";
 import { getUserActivity, ActivityItem } from "@/lib/api/activity";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Settings, CreditCard, User as UserIcon, BarChart3, Loader2 } from "lucide-react";
+import { Settings, CreditCard, User as UserIcon, BarChart3, Loader2, Users, DollarSign, ExternalLink, Link as LinkIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { Input } from "@/components/ui/input";
+import { generateReferralCode } from "@/app/mypage/actions";
 
 export default function MyPage() {
   const router = useRouter();
@@ -20,7 +22,9 @@ export default function MyPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [usage, setUsage] = useState<TodayUsage | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [partnerDashboard, setPartnerDashboard] = useState<PartnerDashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generatingCode, setGeneratingCode] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -34,16 +38,18 @@ export default function MyPage() {
       setUser(user);
       
       if (user) {
-        const [subData, usageData, activityData, profileData] = await Promise.all([
+        const [subData, usageData, activityData, profileData, partnerData] = await Promise.all([
           getUserSubscription(user.id),
           getTodayUsage(user.id),
           getUserActivity(user.id, 10),
           getUserProfile(user.id),
+          getPartnerDashboard(user.id),
         ]);
         setSubscription(subData);
         setUsage(usageData);
         setActivity(activityData);
         setProfile(profileData);
+        setPartnerDashboard(partnerData);
       }
     } catch (error) {
       console.error('Failed to load user data:', error);
@@ -51,6 +57,32 @@ export default function MyPage() {
       setLoading(false);
     }
   };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+        alert("추천인 링크가 복사되었습니다!");
+    });
+  };
+
+  const handleGenerateCode = async () => {
+    if (!user) return;
+    setGeneratingCode(true);
+    try {
+        const code = await generateReferralCode(user.id);
+        if (profile) {
+            setProfile({ ...profile, referral_code: code });
+        }
+        alert("추천인 코드가 생성되었습니다!");
+    } catch (error) {
+        alert("코드 생성에 실패했습니다.");
+    } finally {
+        setGeneratingCode(false);
+    }
+  };
+
+  const referralUrl = profile?.referral_code 
+    ? `${window.location.origin}/login?ref=${profile.referral_code}`
+    : '';
 
   return (
     <div className="container py-8 max-w-5xl mx-auto space-y-8">
@@ -73,6 +105,11 @@ export default function MyPage() {
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
                     {subscription?.planName || '무료 멤버십'}
                 </span>
+                {partnerDashboard && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/10 text-purple-600">
+                        파트너
+                    </span>
+                )}
             </div>
         </div>
 
@@ -81,6 +118,95 @@ export default function MyPage() {
             <p className="text-3xl font-bold text-primary">{profile?.point_balance.toLocaleString() || 0} P</p>
         </div>
       </section>
+
+      {/* Referral Section (For Everyone) */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+             <h2 className="text-xl font-bold flex items-center gap-2">
+                  <span className="text-blue-500">🤝</span> 친구 초대
+              </h2>
+        </div>
+       
+        {profile?.referral_code ? (
+            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-900">
+                <CardHeader>
+                    <CardTitle className="text-lg">내 추천 링크</CardTitle>
+                    <CardDescription>친구를 초대하고 혜택을 받으세요.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center gap-2">
+                        <Input 
+                            readOnly 
+                            value={referralUrl} 
+                            className="font-mono text-sm bg-background/50"
+                        />
+                        <Button variant="outline" size="icon" onClick={() => copyToClipboard(referralUrl)}>
+                            <ExternalLink className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+        ) : (
+            <Card className="border-dashed">
+                <CardContent className="py-8 flex flex-col items-center text-center">
+                    <LinkIcon className="h-10 w-10 text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-medium mb-2">추천인 코드가 없습니다</h3>
+                    <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                        추천인 코드를 생성하고 친구를 초대해보세요.
+                    </p>
+                    <Button onClick={handleGenerateCode} disabled={generatingCode}>
+                        {generatingCode ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                        추천인 코드 생성하기
+                    </Button>
+                </CardContent>
+            </Card>
+        )}
+      </section>
+
+      {/* Partner Dashboard Section (Only for Partners) */}
+      {partnerDashboard && (
+          <section className="mt-8">
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <span className="text-purple-600">✨</span> 파트너 현황
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Stats Cards */}
+                  <Card>
+                      <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">총 가입 유저</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                          <div className="flex items-center gap-2">
+                              <Users className="h-5 w-5 text-purple-500" />
+                              <span className="text-2xl font-bold">{partnerDashboard.total_referred_users}명</span>
+                          </div>
+                      </CardContent>
+                  </Card>
+                   <Card>
+                      <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">정산 완료 금액</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                          <div className="flex items-center gap-2">
+                              <DollarSign className="h-5 w-5 text-green-500" />
+                              <span className="text-2xl font-bold">{partnerDashboard.total_settled_amount.toLocaleString()}원</span>
+                          </div>
+                      </CardContent>
+                  </Card>
+                   <Card>
+                      <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">정산 대기 금액</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                          <div className="flex items-center gap-2">
+                              <DollarSign className="h-5 w-5 text-orange-500" />
+                              <span className="text-2xl font-bold">{partnerDashboard.pending_settlement_amount.toLocaleString()}원</span>
+                          </div>
+                      </CardContent>
+                  </Card>
+              </div>
+          </section>
+      )}
 
       {/* Subscription & Usage Cards */}
       {loading ? (

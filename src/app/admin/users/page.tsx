@@ -11,6 +11,7 @@ type Profile = {
   user_level: number
   created_at: string
   referral_code: string | null
+  is_partner: boolean
 }
 
 export default function AdminUsersPage() {
@@ -94,6 +95,28 @@ export default function AdminUsersPage() {
     }
   }
 
+  const handleTogglePartner = async (userId: string, currentStatus: boolean) => {
+    const action = currentStatus ? '해제' : '승격'
+    if (!confirm(`정말로 이 회원을 파트너로 ${action}하시겠습니까?`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_partner: !currentStatus })
+        .eq('id', userId)
+
+      if (error) throw error
+
+      alert(`파트너 ${action}이 완료되었습니다.`)
+      fetchUsers()
+    } catch (error) {
+      console.error('Error toggling partner:', error)
+      alert('파트너 상태 변경에 실패했습니다.')
+    }
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -161,13 +184,28 @@ export default function AdminUsersPage() {
                     }`}>
                       LV {user.user_level}
                     </span>
+                    {user.is_partner && (
+                      <span className="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                        파트너
+                      </span>
+                    )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                     <button 
                       onClick={() => handleEditClick(user)}
                       className="text-indigo-600 hover:text-indigo-900"
                     >
                       등급 수정
+                    </button>
+                    <button 
+                      onClick={() => handleTogglePartner(user.id, user.is_partner || false)}
+                      className={`${
+                        user.is_partner 
+                          ? 'text-red-600 hover:text-red-900' 
+                          : 'text-green-600 hover:text-green-900'
+                      }`}
+                    >
+                      {user.is_partner ? '파트너 해제' : '파트너 승격'}
                     </button>
                   </td>
                 </tr>

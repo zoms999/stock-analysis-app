@@ -23,7 +23,13 @@ export default function AdminLayout({
             회원 관리
           </Link>
           <Link href="/admin/partners" className="block py-2.5 px-4 rounded hover:bg-gray-800">
-            파트너 정산
+            파트너 관리
+          </Link>
+          <Link href="/admin/settlements" className="block py-2.5 px-4 rounded hover:bg-gray-800">
+            정산 관리
+          </Link>
+          <Link href="/admin/statistics" className="block py-2.5 px-4 rounded hover:bg-gray-800">
+            통계 대시보드
           </Link>
           
           <div className="pt-4 pb-2 px-4 text-xs font-semibold text-gray-500 uppercase">

@@ -4,14 +4,30 @@
 import { login, signup, signInWithGoogle, signInWithFacebook } from './actions'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 function LoginForm() {
-  const [isSignupMode, setIsSignupMode] = useState(false)
+    const [isSignupMode, setIsSignupMode] = useState(false)
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
   const message = searchParams.get('message')
+  const [referralCode, setReferralCode] = useState<string | null>(null)
+
+  useEffect(() => {
+    // 1. URL에서 ref 코드 확인
+    const ref = searchParams.get('ref')
+    if (ref) {
+      localStorage.setItem('referralCode', ref)
+      setReferralCode(ref)
+    } else {
+      // 2. 없으면 localStorage 확인 (이전에 방문했을 수 있음)
+      const cachedRef = localStorage.getItem('referralCode')
+      if (cachedRef) {
+        setReferralCode(cachedRef)
+      }
+    }
+  }, [searchParams])
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background px-4">
@@ -38,6 +54,7 @@ function LoginForm() {
         )}
 
         <form className="mt-8 space-y-6">
+            <input type="hidden" name="referral_code" value={referralCode || ''} />
             <div className="space-y-4">
                 <div>
                     <label htmlFor="email" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">이메일</label>

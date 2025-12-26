@@ -51,6 +51,7 @@ export async function signup(formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
   const nickname = formData.get('nickname') as string
+  const referralCode = formData.get('referral_code') as string
 
   // 비밀번호 유효성 검사
   if (password.length < 6) {
@@ -65,6 +66,7 @@ export async function signup(formData: FormData) {
     options: {
       data: {
         nickname: nickname || `User_${Date.now()}`,
+        referral_code: referralCode || null,
       },
       emailRedirectTo: `${siteUrl}/auth/callback`,
     }
@@ -84,14 +86,21 @@ export async function signup(formData: FormData) {
   redirect('/')
 }
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(formData: FormData) {
   const supabase = await createClient()
   const siteUrl = await getSiteUrl()
+  const referralCode = formData.get('referral_code') as string
+
+  // Build redirect URL with referral code if present
+  let redirectUrl = `${siteUrl}/auth/callback`
+  if (referralCode) {
+    redirectUrl += `?referral_code=${encodeURIComponent(referralCode)}`
+  }
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${siteUrl}/auth/callback`,
+      redirectTo: redirectUrl,
     }
   })
 
@@ -105,14 +114,21 @@ export async function signInWithGoogle() {
   }
 }
 
-export async function signInWithFacebook() {
+export async function signInWithFacebook(formData: FormData) {
   const supabase = await createClient()
   const siteUrl = await getSiteUrl()
+  const referralCode = formData.get('referral_code') as string
+
+  // Build redirect URL with referral code if present
+  let redirectUrl = `${siteUrl}/auth/callback`
+  if (referralCode) {
+    redirectUrl += `?referral_code=${encodeURIComponent(referralCode)}`
+  }
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'facebook',
     options: {
-      redirectTo: `${siteUrl}/auth/callback`,
+      redirectTo: redirectUrl,
       scopes: 'public_profile,email',
     }
   })

@@ -33,6 +33,7 @@ export interface UserProfile {
   avatar_url: string;
   user_level: number;
   point_balance: number;
+  referral_code?: string; // Optional field
 }
 
 /**
@@ -68,7 +69,8 @@ export async function getUserProfile(userId: string): Promise<UserProfile> {
     nickname: data.nickname,
     avatar_url: data.avatar_url,
     user_level: data.user_level || 1,
-    point_balance: data.point_balance || 0
+    point_balance: data.point_balance || 0,
+    referral_code: data.referral_code
   };
 }
 

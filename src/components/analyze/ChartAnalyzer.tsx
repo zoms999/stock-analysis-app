@@ -58,6 +58,7 @@ export function ChartAnalyzer({
     const chartRef = useRef<IChartApi | null>(null);
     const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const areaSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
+    const areaGlowSeriesRef = useRef<ISeriesApi<"Area"> | null>(null); // 파란색 라인 광채용 추가
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
     const predictionSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
     const predictionGlowSeriesRef = useRef<ISeriesApi<"Line"> | null>(null); // Lightsaber glow effect
@@ -438,15 +439,25 @@ export function ChartAnalyzer({
             wickDownColor: "#3b82f6",
             borderUpColor: "#ef4444",
             borderDownColor: "#3b82f6",
-            wickVisible: interval === "1" || interval === "60" ? false : true, // ✅ 분봉은 심지 숨기기
+            wickVisible: interval === "1" || interval === "60" ? false : true,
             visible: chartStyle === "candle",
         });
 
-        const areaSeries = chart.addSeries(AreaSeries, {
-            topColor: "rgba(0, 0, 0, 0)",
+        // ✅ 파란색 실측 라인 광채 (뒤에 배치)
+        const areaGlowSeries = chart.addSeries(AreaSeries, {
+            topColor: "rgba(41, 98, 255, 0)",
             bottomColor: "rgba(0, 0, 0, 0)",
-            lineColor: "#2962FF",
-            lineWidth: 2,
+            lineColor: "rgba(41, 98, 255, 0.3)", // 반투명한 파란색
+            lineWidth: 8,                      // 아주 두껍게
+            visible: chartStyle === "line",
+        });
+
+        // ✅ 파란색 실측 메인 라인
+        const areaSeries = chart.addSeries(AreaSeries, {
+            topColor: "rgba(41, 98, 255, 0.1)", // 위쪽은 아주 살짝 투명하게 채움
+            bottomColor: "rgba(0, 0, 0, 0)",
+            lineColor: "#2962FF",               // 메인 파란색
+            lineWidth: 4,                       // 2 -> 4로 두껍게 변경
             visible: chartStyle === "line",
         });
 
@@ -473,7 +484,7 @@ export function ChartAnalyzer({
         // ✅ Glow effect series (Blurry wide line behind)
         const predictionGlowSeries = chart.addSeries(LineSeries, {
             color: "rgba(245, 158, 11, 0.4)",
-            lineWidth: 10,
+            lineWidth: 10 as any,
             lineStyle: 0,
             crosshairMarkerVisible: false,
             priceLineVisible: false,
@@ -492,6 +503,7 @@ export function ChartAnalyzer({
 
         candlestickSeriesRef.current = candlestickSeries as ISeriesApi<"Candlestick">;
         areaSeriesRef.current = areaSeries as ISeriesApi<"Area">;
+        areaGlowSeriesRef.current = areaGlowSeries as ISeriesApi<"Area">;
         volumeSeriesRef.current = volumeSeries as ISeriesApi<"Histogram">;
         predictionSeriesRef.current = predictionSeries as ISeriesApi<"Line">;
         predictionGlowSeriesRef.current = predictionGlowSeries as ISeriesApi<"Line">;
@@ -635,6 +647,7 @@ export function ChartAnalyzer({
 
             candlestickSeriesRef.current = null;
             areaSeriesRef.current = null;
+            areaGlowSeriesRef.current = null;
             volumeSeriesRef.current = null;
             predictionSeriesRef.current = null;
             predictionGlowSeriesRef.current = null;
@@ -648,6 +661,7 @@ export function ChartAnalyzer({
         const chart = chartRef.current;
         const candleSeries = candlestickSeriesRef.current;
         const areaSeries = areaSeriesRef.current;
+        const areaGlowSeries = areaGlowSeriesRef.current;
 
         if (!chart || !candleSeries || !areaSeries) return;
 
@@ -686,6 +700,7 @@ export function ChartAnalyzer({
         // Update series visibility based on chartStyle
         candleSeries.applyOptions({ visible: chartStyle === "candle" });
         areaSeries.applyOptions({ visible: chartStyle === "line" });
+        areaGlowSeries?.applyOptions({ visible: chartStyle === "line" });
     }, [isDark, chartStyle]);
 
     // 2) Fetch Data
@@ -744,6 +759,7 @@ export function ChartAnalyzer({
                 // Render REAL data ONLY (no dummy attached to visible series)
                 candlestickSeriesRef.current.setData(candleData);
                 areaSeriesRef.current.setData(areaData);
+                areaGlowSeriesRef.current?.setData(areaData);
                 volumeSeriesRef.current.setData(volumeData);
 
                 // Price info
@@ -1087,8 +1103,8 @@ export function ChartAnalyzer({
                         variant="ghost"
                         size="sm"
                         className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${futureMode === "1m"
-                                ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
-                                : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
+                            ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
+                            : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
                             }`}
                         onClick={() => setFutureMode("1m")}
                     >
@@ -1098,8 +1114,8 @@ export function ChartAnalyzer({
                         variant="ghost"
                         size="sm"
                         className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${futureMode === "3m"
-                                ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
-                                : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
+                            ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
+                            : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
                             }`}
                         onClick={() => setFutureMode("3m")}
                     >
@@ -1109,8 +1125,8 @@ export function ChartAnalyzer({
                         variant="ghost"
                         size="sm"
                         className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${futureMode === "custom"
-                                ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
-                                : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
+                            ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
+                            : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
                             }`}
                         onClick={() => setFutureMode("custom")}
                     >

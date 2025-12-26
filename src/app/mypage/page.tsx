@@ -14,6 +14,7 @@ import { Settings, CreditCard, User as UserIcon, BarChart3, Loader2, Users, Doll
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { generateReferralCode } from "@/app/mypage/actions";
+import { Copy } from "lucide-react";
 
 export default function MyPage() {
   const router = useRouter();
@@ -120,48 +121,61 @@ export default function MyPage() {
       </section>
 
       {/* Referral Section (For Everyone) */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-             <h2 className="text-xl font-bold flex items-center gap-2">
-                  <span className="text-blue-500">🤝</span> 친구 초대
-              </h2>
-        </div>
-       
-        {profile?.referral_code ? (
-            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-900">
-                <CardHeader>
-                    <CardTitle className="text-lg">내 추천 링크</CardTitle>
-                    <CardDescription>친구를 초대하고 혜택을 받으세요.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex items-center gap-2">
-                        <Input 
-                            readOnly 
-                            value={referralUrl} 
-                            className="font-mono text-sm bg-background/50"
-                        />
-                        <Button variant="outline" size="icon" onClick={() => copyToClipboard(referralUrl)}>
-                            <ExternalLink className="h-4 w-4" />
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-        ) : (
-            <Card className="border-dashed">
-                <CardContent className="py-8 flex flex-col items-center text-center">
-                    <LinkIcon className="h-10 w-10 text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-medium mb-2">추천인 코드가 없습니다</h3>
-                    <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-                        추천인 코드를 생성하고 친구를 초대해보세요.
-                    </p>
-                    <Button onClick={handleGenerateCode} disabled={generatingCode}>
-                        {generatingCode ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                        추천인 코드 생성하기
-                    </Button>
-                </CardContent>
-            </Card>
-        )}
-      </section>
+<section className="space-y-4">
+  <div className="flex items-center justify-between">
+    <h2 className="text-xl font-bold flex items-center gap-2">
+      <span className="text-blue-500">🤝</span> 친구 초대
+    </h2>
+  </div>
+
+  <Card className="rounded-2xl border border-border bg-card shadow-sm">
+    {profile?.referral_code ? (
+      <>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base">내 추천 링크</CardTitle>
+          <CardDescription>친구를 초대하고 혜택을 받으세요.</CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-3">
+          {/* 입력 박스를 '카드 내부 바' 느낌으로 (주변 UI와 동일 톤) */}
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2">
+            <Input
+              readOnly
+              value={referralUrl}
+              className="h-9 border-0 bg-transparent px-0 font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => copyToClipboard(referralUrl)}
+              aria-label="추천 링크 복사"
+              title="복사"
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            링크를 복사해서 친구에게 공유하세요.
+          </p>
+        </CardContent>
+      </>
+    ) : (
+      <CardContent className="py-10 flex flex-col items-center text-center">
+        <LinkIcon className="h-10 w-10 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-medium mb-2">추천인 코드가 없습니다</h3>
+        <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+          추천인 코드를 생성하고 친구를 초대해보세요.
+        </p>
+        <Button onClick={handleGenerateCode} disabled={generatingCode}>
+          {generatingCode ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+          추천인 코드 생성하기
+        </Button>
+      </CardContent>
+    )}
+  </Card>
+</section>
 
       {/* Partner Dashboard Section (Only for Partners) */}
       {partnerDashboard && (

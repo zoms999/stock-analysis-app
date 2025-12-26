@@ -45,103 +45,29 @@ export function SavedChartViewer({
     const currentTheme = theme === "system" ? systemTheme : theme;
     const isDark = currentTheme === "dark";
 
-    // ✅ Catmull-Rom Spline Interpolation
-    const getInterpolatedData = (points: { time: Time; value: number }[], granularity: number = 20, referenceTime?: Time) => {
-        if (points.length < 2) return points;
+    // ✅ Helper to get consistent timestamp in ms
+    const getTs = (t: Time) => (typeof t === 'string' ? new Date(t).getTime() : (t as number) * 1000);
 
-        // Determine target type (String or Number)
-        // If referenceTime is provided, use its type. Otherwise use first point's type. Default to Number.
-        const useStringTime = referenceTime !== undefined 
-            ? typeof referenceTime === 'string'
-            : typeof points[0]?.time === 'string';
+    // ✅ startColor -> endColor 로 "구간별" 색을 만들어줌 (step-gradient)
+    const lerpColor = (c1: string, c2: string, t: number) => {
+        const a = c1.replace("#", "");
+        const b = c2.replace("#", "");
+        const r1 = parseInt(a.slice(0, 2), 16), g1 = parseInt(a.slice(2, 4), 16), b1 = parseInt(a.slice(4, 6), 16);
+        const r2 = parseInt(b.slice(0, 2), 16), g2 = parseInt(b.slice(2, 4), 16), b2 = parseInt(b.slice(4, 6), 16);
 
-        const dataMap = new Map<string | number, number>();
+        const r = Math.round(r1 + (r2 - r1) * t);
+        const g = Math.round(g1 + (g2 - g1) * t);
+        const bb = Math.round(b1 + (b2 - b1) * t);
 
-        // Helper to get consistent timestamp in ms
-        const getTs = (t: Time) => (typeof t === 'string' ? new Date(t).getTime() : (t as number) * 1000);
+        return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${bb.toString(16).padStart(2, "0")}`;
+    };
 
-        // Sort by time
-        const sorted = [...points].sort((a, b) => getTs(a.time) - getTs(b.time));
-
-        for (let i = 0; i < sorted.length - 1; i++) {
-            const p0 = sorted[Math.max(0, i - 1)];
-            const p1 = sorted[i];
-            const p2 = sorted[i + 1];
-            const p3 = sorted[Math.min(sorted.length - 1, i + 2)];
-
-            // Time calculation in seconds for step
-            const t1 = getTs(p1.time) / 1000;
-            const t2 = getTs(p2.time) / 1000;
-            const step = (t2 - t1) / granularity;
-
-            for (let t = 0; t < granularity; t++) {
-                const timeOffset = step * t;
-                const x = t / granularity;
-
-                const value = 0.5 * (
-                    (2 * p1.value) +
-                    (-p0.value + p2.value) * x +
-                    (2 * p0.value - 5 * p1.value + 4 * p2.value - p3.value) * x * x +
-                    (-p0.value + 3 * p1.value - 3 * p2.value + p3.value) * x * x * x
-                );
-
-                let newTime: Time;
-                const targetTs = (t1 + timeOffset) * 1000;
-
-                if (useStringTime) {
-                    const d = new Date(targetTs);
-                    const year = d.getFullYear();
-                    const month = String(d.getMonth() + 1).padStart(2, '0');
-                    const day = String(d.getDate()).padStart(2, '0');
-                    newTime = `${year}-${month}-${day}` as Time;
-                } else {
-                    // ✅ Ensure integer seconds for UTCTimestamp
-                    newTime = Math.floor(targetTs / 1000) as Time;
-                }
-
-                dataMap.set(newTime as string | number, value);
-            }
-        }
-
-        // Add last point with correct type
-        const lastPoint = sorted[sorted.length - 1];
-        let lastTime: Time = lastPoint.time;
-        
-        // Force last point to match target type if needed
-        if (useStringTime && typeof lastTime !== 'string') {
-             const d = new Date((lastTime as number) * 1000);
-             const year = d.getFullYear();
-             const month = String(d.getMonth() + 1).padStart(2, '0');
-             const day = String(d.getDate()).padStart(2, '0');
-             lastTime = `${year}-${month}-${day}` as Time;
-        } else if (!useStringTime && typeof lastTime === 'string') {
-             lastTime = Math.floor(new Date(lastTime).getTime() / 1000) as Time;
-        }
-
-        dataMap.set(lastTime as string | number, lastPoint.value);
-
-        // Force original points (normalized)
-        sorted.forEach(p => {
-            let t = p.time;
-             if (useStringTime && typeof t !== 'string') {
-                 const d = new Date((t as number) * 1000);
-                 const year = d.getFullYear();
-                 const month = String(d.getMonth() + 1).padStart(2, '0');
-                 const day = String(d.getDate()).padStart(2, '0');
-                 t = `${year}-${month}-${day}` as Time;
-            } else if (!useStringTime && typeof t === 'string') {
-                 t = Math.floor(new Date(t).getTime() / 1000) as Time;
-            }
-            dataMap.set(t as string | number, p.value);
-        });
-
-        return Array.from(dataMap.entries())
-            .sort((a, b) => {
-                const ta = typeof a[0] === 'string' ? new Date(a[0]).getTime() : (a[0] as number) * 1000;
-                const tb = typeof b[0] === 'string' ? new Date(b[0]).getTime() : (b[0] as number) * 1000;
-                return ta - tb;
-            })
-            .map(([time, value]) => ({ time: time as Time, value }));
+    const hexToRgba = (hex: string, a: number) => {
+        const h = hex.replace("#", "");
+        const r = parseInt(h.slice(0, 2), 16);
+        const g = parseInt(h.slice(2, 4), 16);
+        const b = parseInt(h.slice(4, 6), 16);
+        return `rgba(${r},${g},${b},${a})`;
     };
 
     const [viewStyle, setViewStyle] = useState<ViewStyle>(defaultStyle || chartStyle);
@@ -157,6 +83,9 @@ export function SavedChartViewer({
 
     const predSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
     const predGlowSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    // ✅ Segmented prediction lines (each segment = its own LineSeries)
+    const predSegmentSeriesRef = useRef<ISeriesApi<"Line">[]>([]);
+    const predGlowSegmentSeriesRef = useRef<ISeriesApi<"Line">[]>([]);
 
     // ✅ invisible range extender (no visual impact)
     const rangeSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -196,6 +125,44 @@ export function SavedChartViewer({
                 return date.toLocaleDateString();
         }
     };
+
+    const clearPredictionSegments = useCallback(() => {
+        const chart = chartRef.current;
+        if (!chart) return;
+
+        predSegmentSeriesRef.current.forEach((s) => chart.removeSeries(s));
+        predGlowSegmentSeriesRef.current.forEach((s) => chart.removeSeries(s));
+        predSegmentSeriesRef.current = [];
+        predGlowSegmentSeriesRef.current = [];
+    }, []);
+
+    const addPredictionSegmentSeries = useCallback((color: string) => {
+        const chart = chartRef.current;
+        if (!chart) return { seg: null as any, glow: null as any };
+
+        // glow 먼저 (뒤에 깔림)
+        const glow = chart.addSeries(LineSeries, {
+            color: hexToRgba(color, 0.35),
+            lineWidth: 10 as any,
+            crosshairMarkerVisible: false,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        }) as ISeriesApi<"Line">;
+
+        const seg = chart.addSeries(LineSeries, {
+            color,
+            lineWidth: 3,
+            lineStyle: 0,
+            crosshairMarkerVisible: false,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        }) as ISeriesApi<"Line">;
+
+        predGlowSegmentSeriesRef.current.push(glow);
+        predSegmentSeriesRef.current.push(seg);
+
+        return { seg, glow };
+    }, []);
 
     // 미래 여백: 예측점이 미래면 그만큼 rightOffset 확보
     const computeFutureBarsFromPrediction = useCallback(() => {
@@ -322,6 +289,8 @@ export function SavedChartViewer({
         volumeSeriesRef.current = null;
         predSeriesRef.current = null;
         predGlowSeriesRef.current = null;
+        predSegmentSeriesRef.current = [];
+        predGlowSegmentSeriesRef.current = [];
         rangeSeriesRef.current = null;
 
         const chart = createChart(chartContainerRef.current, {
@@ -466,10 +435,11 @@ export function SavedChartViewer({
 
         return () => {
             window.removeEventListener("resize", handleResize);
+            clearPredictionSegments();
             chart.remove();
             chartRef.current = null;
         };
-    }, [isDark, viewStyle, interval, applyBaseDataToSeries]);
+    }, [isDark, viewStyle, interval, applyBaseDataToSeries, clearPredictionSegments]);
 
     // 2) Fetch data (only when symbol/interval changes)
     useEffect(() => {
@@ -542,43 +512,96 @@ export function SavedChartViewer({
         run();
     }, [symbol, interval, applyBaseDataToSeries]);
 
-    // 3) Prediction line inject
+    // 3) Prediction line inject (Segmented Gradient)
     const updatePredictionSeries = useCallback(() => {
-        const s = predSeriesRef.current;
-        const g = predGlowSeriesRef.current;
-        if (!s || !g) return;
+        const chart = chartRef.current;
+        if (!chart) return;
+
+        // Old clear
+        predSeriesRef.current?.setData([]);
+        predGlowSeriesRef.current?.setData([]);
+
+        // New clear
+        clearPredictionSegments();
 
         if (predictionPoints && predictionPoints.length > 0) {
             let dataToShow = [...predictionPoints];
             
             // Connect to last real point if available
+            let lastRealPoint = null;
             if (lastRealRef.current) {
-                const firstPred = dataToShow[0];
                 const lastReal = { time: lastRealRef.current.time, value: lastRealRef.current.close };
-                
-                // Diff check
-                const isDifferentTime = firstPred.time !== lastReal.time;
-                if (isDifferentTime) {
+                lastRealPoint = lastReal;
+
+                // Diff check (using getTs)
+                const firstPred = dataToShow[0];
+                const t1 = getTs(firstPred.time);
+                const t2 = getTs(lastReal.time);
+                if (t1 !== t2) {
                    dataToShow = [lastReal, ...dataToShow];
                 }
             }
 
-            // Interpolate
-            const referenceTime = lastRealRef.current?.time;
-            const curvedData = getInterpolatedData(dataToShow, 10, referenceTime);
-            
-            s.setData(curvedData);
-            g.setData(curvedData);
+            // Sort first
+            const sortedRaw = dataToShow.sort((a, b) => getTs(a.time) - getTs(b.time));
 
-        } else {
-            s.setData([]);
-            g.setData([]);
+            // ✅ Normalize types! (Must be all string OR all number)
+            // Use lastReal type as reference if exists, else first point
+            const refTime = lastRealPoint ? lastRealPoint.time : sortedRaw[0]?.time;
+            const useString = typeof refTime === 'string';
+
+            const normalized = sortedRaw
+                .map(p => {
+                    const ms = getTs(p.time);
+                    if (isNaN(ms)) return null; // Filter invalid
+
+                    let newTime: Time;
+                    
+                    if (useString) {
+                        // Convert to YYYY-MM-DD
+                        const d = new Date(ms);
+                        const y = d.getFullYear();
+                        const m = String(d.getMonth() + 1).padStart(2, '0');
+                        const day = String(d.getDate()).padStart(2, '0');
+                        newTime = `${y}-${m}-${day}` as Time;
+                    } else {
+                        // Convert to UTCTimestamp (seconds)
+                        newTime = Math.floor(ms / 1000) as Time;
+                    }
+                    return { time: newTime, value: p.value };
+                })
+                .filter((p): p is { time: Time; value: number } => p !== null);
+
+            // ✅ Deduplicate! (Keep last occurrence for same time)
+            const uniqueMap = new Map<string | number, number>();
+            normalized.forEach(p => uniqueMap.set(p.time as string | number, p.value));
+
+            const sorted = Array.from(uniqueMap.entries())
+                .map(([t, v]) => ({ time: t as Time, value: v }))
+                .sort((a, b) => getTs(a.time) - getTs(b.time));
+            
+            if (sorted.length >= 2) {
+                 // ✅ 구간별 컬러: 왼쪽(초록) -> 오른쪽(주황) step-gradient
+                const startColor = "#22c55e"; // green
+                const endColor = "#f97316";   // orange
+                const segCount = sorted.length - 1;
+
+                for (let i = 0; i < segCount; i++) {
+                    const t = segCount === 1 ? 1 : i / (segCount - 1);
+                    const color = lerpColor(startColor, endColor, t);
+
+                    const { seg, glow } = addPredictionSegmentSeries(color);
+                    seg?.setData([sorted[i], sorted[i + 1]]);
+                    glow?.setData([sorted[i], sorted[i + 1]]);
+                }
+            }
+
         }
         
         // Update range for future
         applyBaseDataToSeries();
 
-    }, [predictionPoints, applyBaseDataToSeries]);
+    }, [predictionPoints, applyBaseDataToSeries, clearPredictionSegments, addPredictionSegmentSeries]);
 
     useEffect(() => {
         updatePredictionSeries();

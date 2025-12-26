@@ -13,7 +13,7 @@ export default function PostsPage() {
     const loadPosts = async () => {
       setLoading(true);
       try {
-        const data = await fetchPosts(20, 0);
+        const data = await fetchPosts(12, 0);
         setPosts(data);
       } catch (error) {
         console.error("Failed to load posts:", error);

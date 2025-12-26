@@ -53,7 +53,7 @@ export function ChartBoardList() {
       if (sortBy === 'accuracy_10day') apiSort = 'accuracy_10day';
       
       // Fetch posts with server-side sorting
-      const fetchedPosts = await fetchPosts(50, 0, apiSort);
+      const fetchedPosts = await fetchPosts(12, 0, apiSort);
       
       // Client-side Price Fetching (Hybrid)
       // Even if we have accuracy_score from DB, we might want *Live* price for the card display.

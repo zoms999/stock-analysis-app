@@ -62,6 +62,9 @@ export function ChartAnalyzer({
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
     const predictionSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
     const predictionGlowSeriesRef = useRef<ISeriesApi<"Line"> | null>(null); // Lightsaber glow effect
+    // ✅ Segmented prediction lines (each segment = its own LineSeries)
+    const predictionSegmentSeriesRef = useRef<ISeriesApi<"Line">[]>([]);
+    const predictionGlowSegmentSeriesRef = useRef<ISeriesApi<"Line">[]>([]);
 
     // ✅ Invisible series that ONLY extends logical range (no visual impact)
     const rangeSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -88,8 +91,15 @@ export function ChartAnalyzer({
 
     const updateOverlayPositions = useCallback(() => {
         const chart = chartRef.current;
-        const series = predictionSeriesRef.current;
-        if (!chart || !series || points.length === 0) {
+
+        // ✅ 세그먼트가 있으면 그 중 하나로 좌표계 사용
+        const ySeries =
+            predictionSegmentSeriesRef.current[0] ||
+            predictionSeriesRef.current ||
+            areaSeriesRef.current ||
+            candlestickSeriesRef.current;
+
+        if (!chart || !ySeries || points.length === 0) {
             setOverlayMarkers([]);
             return;
         }
@@ -98,7 +108,7 @@ export function ChartAnalyzer({
             const timeScale = chart.timeScale();
             // timeToCoordinate gives X (allows undefined if off-screen, but we handle that)
             const x = timeScale.timeToCoordinate(p.time);
-            const y = series.priceToCoordinate(p.value);
+            const y = ySeries.priceToCoordinate(p.value);
 
             return {
                 id: `${p.time}-${p.value}`,
@@ -370,6 +380,68 @@ export function ChartAnalyzer({
             return null;
         }
     }, [onChartCapture]);
+
+
+    const clearPredictionSegments = useCallback(() => {
+        const chart = chartRef.current;
+        if (!chart) return;
+
+        predictionSegmentSeriesRef.current.forEach((s) => chart.removeSeries(s));
+        predictionGlowSegmentSeriesRef.current.forEach((s) => chart.removeSeries(s));
+        predictionSegmentSeriesRef.current = [];
+        predictionGlowSegmentSeriesRef.current = [];
+    }, []);
+
+    const hexToRgba = (hex: string, a: number) => {
+        const h = hex.replace("#", "");
+        const r = parseInt(h.slice(0, 2), 16);
+        const g = parseInt(h.slice(2, 4), 16);
+        const b = parseInt(h.slice(4, 6), 16);
+        return `rgba(${r},${g},${b},${a})`;
+    };
+
+    // ✅ startColor -> endColor 로 "구간별" 색을 만들어줌 (step-gradient)
+    const lerpColor = (c1: string, c2: string, t: number) => {
+        const a = c1.replace("#", "");
+        const b = c2.replace("#", "");
+        const r1 = parseInt(a.slice(0, 2), 16), g1 = parseInt(a.slice(2, 4), 16), b1 = parseInt(a.slice(4, 6), 16);
+        const r2 = parseInt(b.slice(0, 2), 16), g2 = parseInt(b.slice(2, 4), 16), b2 = parseInt(b.slice(4, 6), 16);
+
+        const r = Math.round(r1 + (r2 - r1) * t);
+        const g = Math.round(g1 + (g2 - g1) * t);
+        const bb = Math.round(b1 + (b2 - b1) * t);
+
+        return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${bb.toString(16).padStart(2, "0")}`;
+    };
+
+    const addPredictionSegmentSeries = useCallback((color: string) => {
+        const chart = chartRef.current;
+        if (!chart) return { seg: null as any, glow: null as any };
+
+        // glow 먼저 (뒤에 깔림)
+        const glow = chart.addSeries(LineSeries, {
+            color: hexToRgba(color, 0.35),
+            lineWidth: 10 as any,
+            crosshairMarkerVisible: false,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        }) as ISeriesApi<"Line">;
+
+        const seg = chart.addSeries(LineSeries, {
+            color,
+            lineWidth: 3,
+            lineStyle: 0, // Solid line
+            crosshairMarkerVisible: false,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        }) as ISeriesApi<"Line">;
+
+        predictionGlowSegmentSeriesRef.current.push(glow);
+        predictionSegmentSeriesRef.current.push(seg);
+
+        return { seg, glow };
+    }, []);
+
 
     // 1) Initialize Chart
     useEffect(() => {
@@ -643,6 +715,7 @@ export function ChartAnalyzer({
 
         return () => {
             window.removeEventListener("resize", handleResize);
+            clearPredictionSegments(); // ✅ 추가
             chart.remove();
 
             candlestickSeriesRef.current = null;
@@ -654,7 +727,7 @@ export function ChartAnalyzer({
             rangeSeriesRef.current = null;
             chartRef.current = null;
         };
-    }, [mounted]);
+    }, [mounted, clearPredictionSegments]);
 
     // Update chart theme/style without recreating
     useEffect(() => {
@@ -906,70 +979,63 @@ export function ChartAnalyzer({
     }, [futureMode, customDays]);
 
     // 3) Update Prediction Line + Markers
-    // 3) Update Prediction Line (Keep line, remove native markers)
     useEffect(() => {
         onPointsChange?.(points);
 
-        const series = predictionSeriesRef.current;
-        const glowSeries = predictionGlowSeriesRef.current;
-        if (!series || !glowSeries) return;
+        const chart = chartRef.current;
+        if (!chart) return;
+
+        // 단색 시리즈는 여기서는 안 쓰게 만들거라서 비움
+        predictionSeriesRef.current?.setData([]);
+        predictionGlowSeriesRef.current?.setData([]);
+
+        // ✅ 세그먼트 시리즈 정리
+        clearPredictionSegments();
 
         let dataToShow = [...points];
 
-        // Connect from last candle
+        // lastCandle 연결
         if (lastCandle && points.length > 0) {
-            if (points[0].time !== lastCandle.time) {
+            if (compareTime(points[0].time, lastCandle.time) !== 0) {
                 dataToShow = [lastCandle, ...points];
             }
         }
 
-        // Ensure unique timestamps and proper sorting
-        // Handle both string dates (YYYY-MM-DD) and numeric timestamps
+        // 유니크 + 정렬
         const unique = new Map<Time, number>();
         dataToShow.forEach((d) => unique.set(d.time, d.value));
-
         const sorted = Array.from(unique.entries())
-            .sort((a, b) => {
-                const timeA = a[0];
-                const timeB = b[0];
+            .map(([t, v]) => ({ time: t, value: v }))
+            .sort((a, b) => compareTime(a.time, b.time));
 
-                // Both are strings (dates)
-                if (typeof timeA === 'string' && typeof timeB === 'string') {
-                    return timeA.localeCompare(timeB);
-                }
-                // Both are numbers (timestamps)
-                if (typeof timeA === 'number' && typeof timeB === 'number') {
-                    return timeA - timeB;
-                }
-                // Mixed types - convert string to timestamp for comparison
-                const tsA: number = typeof timeA === 'string' ? new Date(timeA).getTime() / 1000 : (timeA as number);
-                const tsB: number = typeof timeB === 'string' ? new Date(timeB).getTime() / 1000 : (timeB as number);
-                return tsA - tsB;
-            })
-            .map(([t, v]) => ({ time: t, value: v }));
-
-        if (sorted.length > 0) {
-            // ✅ 곱선 변환 적용 (점들 사이가 멀어도 자연스럽게)
-            const curvedData = getInterpolatedData(sorted, 10); // 10등분으로 쌓게서 부드럽게
-            series.setData(curvedData);
-            glowSeries.setData(curvedData);
-        } else {
-            series.setData([]);
-            glowSeries.setData([]);
+        if (sorted.length < 2) {
+            requestAnimationFrame(() => requestAnimationFrame(updateOverlayPositions));
+            return;
         }
 
-        // ✅ [Fix] Recalculate overlay positions after chart auto-scale
-        // requestAnimationFrame을 두 번 중첩하면 다음 프레임(렌더링 완료 후)을 확실히 보장받을 수 있습니다.
+        // ✅ 구간별 컬러: 왼쪽(초록) -> 오른쪽(주황) step-gradient
+        const startColor = "#22c55e"; // green
+        const endColor = "#f97316";   // orange
+        const segCount = sorted.length - 1;
+
+        for (let i = 0; i < segCount; i++) {
+            const t = segCount === 1 ? 1 : i / (segCount - 1);
+            const color = lerpColor(startColor, endColor, t);
+
+            const { seg, glow } = addPredictionSegmentSeries(color);
+            seg?.setData([sorted[i], sorted[i + 1]]);
+            glow?.setData([sorted[i], sorted[i + 1]]);
+        }
+
+        // ✅ 오버레이 위치 갱신 (오토스케일 이후)
         requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                updateOverlayPositions();
-            });
+            updateOverlayPositions();
         });
 
-    }, [points, onPointsChange, lastCandle, updateOverlayPositions]);
+    }, [points, lastCandle, onPointsChange, clearPredictionSegments, addPredictionSegmentSeries, updateOverlayPositions]);
 
     const handleRemovePoint = (time: Time) => {
-        setPoints(prev => prev.filter(p => p.time !== time));
+        setPoints(prev => prev.filter(p => compareTime(p.time, time) !== 0));
     };
 
     const handleClearPoints = () => setPoints([]);

@@ -45,6 +45,105 @@ export function SavedChartViewer({
     const currentTheme = theme === "system" ? systemTheme : theme;
     const isDark = currentTheme === "dark";
 
+    // ✅ Catmull-Rom Spline Interpolation
+    const getInterpolatedData = (points: { time: Time; value: number }[], granularity: number = 20, referenceTime?: Time) => {
+        if (points.length < 2) return points;
+
+        // Determine target type (String or Number)
+        // If referenceTime is provided, use its type. Otherwise use first point's type. Default to Number.
+        const useStringTime = referenceTime !== undefined 
+            ? typeof referenceTime === 'string'
+            : typeof points[0]?.time === 'string';
+
+        const dataMap = new Map<string | number, number>();
+
+        // Helper to get consistent timestamp in ms
+        const getTs = (t: Time) => (typeof t === 'string' ? new Date(t).getTime() : (t as number) * 1000);
+
+        // Sort by time
+        const sorted = [...points].sort((a, b) => getTs(a.time) - getTs(b.time));
+
+        for (let i = 0; i < sorted.length - 1; i++) {
+            const p0 = sorted[Math.max(0, i - 1)];
+            const p1 = sorted[i];
+            const p2 = sorted[i + 1];
+            const p3 = sorted[Math.min(sorted.length - 1, i + 2)];
+
+            // Time calculation in seconds for step
+            const t1 = getTs(p1.time) / 1000;
+            const t2 = getTs(p2.time) / 1000;
+            const step = (t2 - t1) / granularity;
+
+            for (let t = 0; t < granularity; t++) {
+                const timeOffset = step * t;
+                const x = t / granularity;
+
+                const value = 0.5 * (
+                    (2 * p1.value) +
+                    (-p0.value + p2.value) * x +
+                    (2 * p0.value - 5 * p1.value + 4 * p2.value - p3.value) * x * x +
+                    (-p0.value + 3 * p1.value - 3 * p2.value + p3.value) * x * x * x
+                );
+
+                let newTime: Time;
+                const targetTs = (t1 + timeOffset) * 1000;
+
+                if (useStringTime) {
+                    const d = new Date(targetTs);
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    newTime = `${year}-${month}-${day}` as Time;
+                } else {
+                    // ✅ Ensure integer seconds for UTCTimestamp
+                    newTime = Math.floor(targetTs / 1000) as Time;
+                }
+
+                dataMap.set(newTime as string | number, value);
+            }
+        }
+
+        // Add last point with correct type
+        const lastPoint = sorted[sorted.length - 1];
+        let lastTime: Time = lastPoint.time;
+        
+        // Force last point to match target type if needed
+        if (useStringTime && typeof lastTime !== 'string') {
+             const d = new Date((lastTime as number) * 1000);
+             const year = d.getFullYear();
+             const month = String(d.getMonth() + 1).padStart(2, '0');
+             const day = String(d.getDate()).padStart(2, '0');
+             lastTime = `${year}-${month}-${day}` as Time;
+        } else if (!useStringTime && typeof lastTime === 'string') {
+             lastTime = Math.floor(new Date(lastTime).getTime() / 1000) as Time;
+        }
+
+        dataMap.set(lastTime as string | number, lastPoint.value);
+
+        // Force original points (normalized)
+        sorted.forEach(p => {
+            let t = p.time;
+             if (useStringTime && typeof t !== 'string') {
+                 const d = new Date((t as number) * 1000);
+                 const year = d.getFullYear();
+                 const month = String(d.getMonth() + 1).padStart(2, '0');
+                 const day = String(d.getDate()).padStart(2, '0');
+                 t = `${year}-${month}-${day}` as Time;
+            } else if (!useStringTime && typeof t === 'string') {
+                 t = Math.floor(new Date(t).getTime() / 1000) as Time;
+            }
+            dataMap.set(t as string | number, p.value);
+        });
+
+        return Array.from(dataMap.entries())
+            .sort((a, b) => {
+                const ta = typeof a[0] === 'string' ? new Date(a[0]).getTime() : (a[0] as number) * 1000;
+                const tb = typeof b[0] === 'string' ? new Date(b[0]).getTime() : (b[0] as number) * 1000;
+                return ta - tb;
+            })
+            .map(([time, value]) => ({ time: time as Time, value }));
+    };
+
     const [viewStyle, setViewStyle] = useState<ViewStyle>(defaultStyle || chartStyle);
 
     // chart refs
@@ -53,9 +152,11 @@ export function SavedChartViewer({
 
     const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const areaSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
+    const areaGlowSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
     const predSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const predGlowSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
     // ✅ invisible range extender (no visual impact)
     const rangeSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -174,10 +275,11 @@ export function SavedChartViewer({
     const applyBaseDataToSeries = useCallback(() => {
         const candle = candleSeriesRef.current;
         const area = areaSeriesRef.current;
+        const areaGlow = areaGlowSeriesRef.current;
         const vol = volumeSeriesRef.current;
         const chart = chartRef.current;
 
-        if (!candle || !area || !vol || !chart) return;
+        if (!candle || !area || !areaGlow || !vol || !chart) return;
 
         const baseC = baseCandleRef.current;
         const baseA = baseAreaRef.current;
@@ -187,11 +289,13 @@ export function SavedChartViewer({
 
         candle.setData(baseC);
         area.setData(baseA);
+        areaGlow.setData(baseA);
         vol.setData(baseV);
 
         // visible switch
         candle.applyOptions({ visible: viewStyle === "candle" });
         area.applyOptions({ visible: viewStyle === "line" });
+        areaGlow.applyOptions({ visible: viewStyle === "line" });
 
         // rightOffset + rangeSeries
         if (lastRealRef.current && rangeSeriesRef.current) {
@@ -214,8 +318,10 @@ export function SavedChartViewer({
         }
         candleSeriesRef.current = null;
         areaSeriesRef.current = null;
+        areaGlowSeriesRef.current = null;
         volumeSeriesRef.current = null;
         predSeriesRef.current = null;
+        predGlowSeriesRef.current = null;
         rangeSeriesRef.current = null;
 
         const chart = createChart(chartContainerRef.current, {
@@ -269,13 +375,23 @@ export function SavedChartViewer({
             visible: viewStyle === "candle",
         });
 
-const area = chart.addSeries(AreaSeries, {
-  topColor: "rgba(0,0,0,0)",
-  bottomColor: "rgba(0,0,0,0)",
-  lineColor: "#2962FF",
-  lineWidth: 2,
-  visible: viewStyle === "line",
-});
+        // ✅ 파란색 실측 라인 광채 (뒤에 배치)
+        const areaGlow = chart.addSeries(AreaSeries, {
+            topColor: "rgba(41, 98, 255, 0)",
+            bottomColor: "rgba(0, 0, 0, 0)",
+            lineColor: "rgba(41, 98, 255, 0.3)", // 반투명한 파란색
+            lineWidth: 8 as any,                      // 아주 두껍게
+            visible: viewStyle === "line",
+        });
+
+        // ✅ 파란색 실측 메인 라인
+        const area = chart.addSeries(AreaSeries, {
+            topColor: "rgba(41, 98, 255, 0.1)", // 위쪽은 아주 살짝 투명하게 채움
+            bottomColor: "rgba(0, 0, 0, 0)",
+            lineColor: "#2962FF",               // 메인 파란색
+            lineWidth: 4 as any,                       // 2 -> 4로 두껍게 변경
+            visible: viewStyle === "line",
+        });
 
         const vol = chart.addSeries(HistogramSeries, {
             color: "#26a69a",
@@ -286,12 +402,22 @@ const area = chart.addSeries(AreaSeries, {
 
         const pred = chart.addSeries(LineSeries, {
             color: "#f59e0b",
-            lineWidth: 2,
+            lineWidth: 3,
             lineStyle: 0,
-            crosshairMarkerVisible: true,
-            crosshairMarkerRadius: 4,
+            crosshairMarkerVisible: false,
             priceLineVisible: false,
             lastValueVisible: false,
+            visible: true,
+        });
+
+        const predGlow = chart.addSeries(LineSeries, {
+            color: "rgba(245, 158, 11, 0.4)",
+            lineWidth: 10 as any,
+            lineStyle: 0,
+            crosshairMarkerVisible: false,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            visible: true,
         });
 
         const range = chart.addSeries(LineSeries, {
@@ -304,9 +430,11 @@ const area = chart.addSeries(AreaSeries, {
         });
 
         candleSeriesRef.current = candle;
+        areaGlowSeriesRef.current = areaGlow;
         areaSeriesRef.current = area;
         volumeSeriesRef.current = vol;
         predSeriesRef.current = pred;
+        predGlowSeriesRef.current = predGlow;
         rangeSeriesRef.current = range;
         chartRef.current = chart;
 
@@ -346,7 +474,7 @@ const area = chart.addSeries(AreaSeries, {
     // 2) Fetch data (only when symbol/interval changes)
     useEffect(() => {
         const run = async () => {
-            if (!chartRef.current || !candleSeriesRef.current || !areaSeriesRef.current || !volumeSeriesRef.current) return;
+            if (!chartRef.current || !candleSeriesRef.current || !areaSeriesRef.current || !areaGlowSeriesRef.current || !volumeSeriesRef.current) return;
 
             setLoading(true);
             setError(null);
@@ -414,54 +542,54 @@ const area = chart.addSeries(AreaSeries, {
         run();
     }, [symbol, interval, applyBaseDataToSeries]);
 
-    // 3) Prediction line inject (must re-run on viewStyle because chart recreated)
-    useEffect(() => {
+    // 3) Prediction line inject
+    const updatePredictionSeries = useCallback(() => {
         const s = predSeriesRef.current;
-        if (!s) return;
+        const g = predGlowSeriesRef.current;
+        if (!s || !g) return;
 
         if (predictionPoints && predictionPoints.length > 0) {
-            // ✅ Sort by time to ensure lightweight-charts doesn't crash
-            // (assertion failed: data must be asc ordered by time)
-            const sortedPoints = [...predictionPoints].sort((a, b) => {
-                const getVal = (t: Time) => {
-                    if (typeof t === 'string') return new Date(t).getTime();
-                    if (typeof t === 'number') return t;
-                    // Handle BusinessDay object if expected, though usually string/number here
-                    if (typeof t === 'object' && 'year' in t) {
-                         const m = String(t.month).padStart(2, '0');
-                         const d = String(t.day).padStart(2, '0');
-                         return new Date(`${t.year}-${m}-${d}`).getTime();
-                    }
-                    return 0;
-                };
-                return getVal(a.time) - getVal(b.time);
-            });
+            let dataToShow = [...predictionPoints];
+            
+            // Connect to last real point if available
+            if (lastRealRef.current) {
+                const firstPred = dataToShow[0];
+                const lastReal = { time: lastRealRef.current.time, value: lastRealRef.current.close };
+                
+                // Diff check
+                const isDifferentTime = firstPred.time !== lastReal.time;
+                if (isDifferentTime) {
+                   dataToShow = [lastReal, ...dataToShow];
+                }
+            }
 
-            s.setData(sortedPoints);
+            // Interpolate
+            const referenceTime = lastRealRef.current?.time;
+            const curvedData = getInterpolatedData(dataToShow, 10, referenceTime);
+            
+            s.setData(curvedData);
+            g.setData(curvedData);
 
-            const markers = sortedPoints.map((p, idx) => ({
-                time: p.time,
-                position: "inBar" as const,
-                color: "#f59e0b",
-                shape: "circle" as const,
-                size: 4,
-                text:
-                    idx === sortedPoints.length - 1
-                        ? `${p.value.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}`
-                        : undefined,
-            }));
-
-            const anySeries = s as unknown as { setMarkers?: (m: unknown[]) => void };
-            if (typeof anySeries.setMarkers === "function") anySeries.setMarkers(markers);
         } else {
             s.setData([]);
-            const anySeries = s as unknown as { setMarkers?: (m: unknown[]) => void };
-            if (typeof anySeries.setMarkers === "function") anySeries.setMarkers([]);
+            g.setData([]);
         }
-
-        // ✅ 예측이 미래면 여백/범위도 재조정
+        
+        // Update range for future
         applyBaseDataToSeries();
-    }, [predictionPoints, viewStyle, symbol, interval, applyBaseDataToSeries]);
+
+    }, [predictionPoints, applyBaseDataToSeries]);
+
+    useEffect(() => {
+        updatePredictionSeries();
+    }, [updatePredictionSeries]);
+
+    // Update prediction when base data loaded (to connect line)
+    useEffect(() => {
+        if (!loading && lastRealRef.current) {
+            updatePredictionSeries();
+        }
+    }, [loading, updatePredictionSeries]);
 
     const containerBg = useMemo(() => (isDark ? "bg-[#0a0a0a]" : "bg-white"), [isDark]);
 

@@ -60,6 +60,7 @@ export function ChartAnalyzer({
     const areaSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
     const predictionSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const predictionGlowSeriesRef = useRef<ISeriesApi<"Line"> | null>(null); // Lightsaber glow effect
 
     // ✅ Invisible series that ONLY extends logical range (no visual impact)
     const rangeSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -95,7 +96,7 @@ export function ChartAnalyzer({
         const newMarkers = points.map((p) => {
             const timeScale = chart.timeScale();
             // timeToCoordinate gives X (allows undefined if off-screen, but we handle that)
-            const x = timeScale.timeToCoordinate(p.time); 
+            const x = timeScale.timeToCoordinate(p.time);
             const y = series.priceToCoordinate(p.value);
 
             return {
@@ -113,12 +114,12 @@ export function ChartAnalyzer({
     // Update overlay when points change or chart moves
     useEffect(() => {
         updateOverlayPositions();
-        
+
         const chart = chartRef.current;
         if (!chart) return;
 
         const handleChartUpdate = () => {
-             // Use RAF to debounce/sync with render cycle
+            // Use RAF to debounce/sync with render cycle
             requestAnimationFrame(updateOverlayPositions);
         };
 
@@ -195,13 +196,13 @@ export function ChartAnalyzer({
     // ✅ interval별 목표 픽셀 간격 (작을수록 촘촘)
     const getTargetBarSpacingPx = (itv: string) => {
         switch (itv) {
-            case "1":  return 2;   // 1분봉: 매우 촘촘하게 (3 -> 2)
+            case "1": return 2;   // 1분봉: 매우 촘촘하게 (3 -> 2)
             case "60": return 3;   // 60분봉 (4 -> 3)
-            case "D":  return 4;   // 일봉 (6 -> 4)
-            case "W":  return 6;   // 주봉 (10 -> 6)
-            case "M":  return 10;  // 월봉 (14 -> 10)
-            case "Y":  return 14;  // 연봉 (18 -> 14)
-            default:   return 4;
+            case "D": return 4;   // 일봉 (6 -> 4)
+            case "W": return 6;   // 주봉 (10 -> 6)
+            case "M": return 10;  // 월봉 (14 -> 10)
+            case "Y": return 14;  // 연봉 (18 -> 14)
+            default: return 4;
         }
     };
 
@@ -217,12 +218,12 @@ export function ChartAnalyzer({
 
         // interval별 최소/최대 가드 (Max 값 대폭 상향)
         const minMax: Record<string, [number, number]> = {
-            "1":  [120, 1000], // 1분봉 최대 1000개
+            "1": [120, 1000], // 1분봉 최대 1000개
             "60": [80, 600],   // 60분봉 최대 600개
-            "D":  [60, 365],   // ✅ 일봉: 90 -> 365 (1년치 한눈에)
-            "W":  [40, 200],   // 주봉
-            "M":  [24, 120],   // 월봉
-            "Y":  [24, 100],   // 연봉
+            "D": [60, 365],   // ✅ 일봉: 90 -> 365 (1년치 한눈에)
+            "W": [40, 200],   // 주봉
+            "M": [24, 120],   // 월봉
+            "Y": [24, 100],   // 연봉
         };
 
         const [min, max] = minMax[itv] ?? [40, 300];
@@ -244,7 +245,7 @@ export function ChartAnalyzer({
     const buildFutureRange = (lastTime: Time, lastValue: number, itv: string, bars: number) => {
         const step = getIntervalSeconds(itv);
         const arr: { time: Time; value: number }[] = [{ time: lastTime, value: lastValue }];
-        
+
         // Helper to add days to YYYY-MM-DD string
         const addDays = (dateStr: string, days: number) => {
             const d = new Date(dateStr);
@@ -254,7 +255,7 @@ export function ChartAnalyzer({
             const day = String(d.getDate()).padStart(2, '0');
             return `${year}-${month}-${day}`;
         };
-        
+
         for (let i = 1; i <= bars; i++) {
             if (typeof lastTime === 'string') {
                 // For daily/weekly/monthly intervals, use date string arithmetic
@@ -262,7 +263,7 @@ export function ChartAnalyzer({
                 if (itv === 'W' || itv === '1wk') daysToAdd = i * 7;
                 if (itv === 'M' || itv === '1mo') daysToAdd = i * 30;
                 if (itv === 'D' || itv === '1d') daysToAdd = i;
-                
+
                 const nextDate = addDays(lastTime, daysToAdd);
                 arr.push({ time: nextDate as Time, value: lastValue });
             } else {
@@ -279,10 +280,10 @@ export function ChartAnalyzer({
 
         // Map으로 중복 제거 (time을 키로 사용)
         const dataMap = new Map<string | number, number>();
-        
+
         // 점들을 시간순 정렬
-        const sorted = [...points].sort((a, b) => 
-            (typeof a.time === 'string' ? new Date(a.time).getTime() : a.time as number) - 
+        const sorted = [...points].sort((a, b) =>
+            (typeof a.time === 'string' ? new Date(a.time).getTime() : a.time as number) -
             (typeof b.time === 'string' ? new Date(b.time).getTime() : b.time as number)
         );
 
@@ -300,7 +301,7 @@ export function ChartAnalyzer({
             for (let t = 0; t < granularity; t++) {
                 const timeOffset = step * t;
                 const x = t / granularity; // 0~1 사이 비율
-                
+
                 // Catmull-Rom interpolation
                 const value = 0.5 * (
                     (2 * p1.value) +
@@ -325,7 +326,7 @@ export function ChartAnalyzer({
                 dataMap.set(newTime as string | number, value);
             }
         }
-        
+
         // 마지막 점 추가
         const lastPoint = sorted[sorted.length - 1];
         dataMap.set(lastPoint.time as string | number, lastPoint.value);
@@ -333,7 +334,7 @@ export function ChartAnalyzer({
         // ✅ [Fix] 원본 포인트들의 값은 절대 변하지 않도록 강제 덮어쓰기
         // (interpolation 과정에서 같은 날짜/시간에 대해 근사값이 들어가는 것을 방지)
         sorted.forEach(p => {
-             dataMap.set(p.time as string | number, p.value);
+            dataMap.set(p.time as string | number, p.value);
         });
 
         // Map을 배열로 변환하고 시간순 정렬
@@ -374,12 +375,12 @@ export function ChartAnalyzer({
         if (!chartContainerRef.current || !mounted) return;
 
         const chart = createChart(chartContainerRef.current, {
-layout: {
-  background: { type: ColorType.Solid, color: isDark ? "#0a0a0a" : "#ffffff" },
-  textColor: isDark ? "#9CA3AF" : "#4B5563",
-  fontSize: 12,
-  fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Segoe UI Symbol"',
-},
+            layout: {
+                background: { type: ColorType.Solid, color: isDark ? "#0a0a0a" : "#ffffff" },
+                textColor: isDark ? "#9CA3AF" : "#4B5563",
+                fontSize: 12,
+                fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Segoe UI Symbol"',
+            },
             width: chartContainerRef.current.clientWidth,
             height: chartContainerRef.current.clientHeight,
             grid: {
@@ -459,13 +460,22 @@ layout: {
             scaleMargins: { top: 0.8, bottom: 0 },
         });
 
-        // ✅ Prediction series (orange dashed)
+        // ✅ Prediction series (Main Line)
         const predictionSeries = chart.addSeries(LineSeries, {
             color: "#f59e0b",
-            lineWidth: 2,
+            lineWidth: 3,
             lineStyle: 0,
-            crosshairMarkerVisible: true,
-            crosshairMarkerRadius: 4,
+            crosshairMarkerVisible: false,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        });
+
+        // ✅ Glow effect series (Blurry wide line behind)
+        const predictionGlowSeries = chart.addSeries(LineSeries, {
+            color: "rgba(245, 158, 11, 0.4)",
+            lineWidth: 10,
+            lineStyle: 0,
+            crosshairMarkerVisible: false,
             priceLineVisible: false,
             lastValueVisible: false,
         });
@@ -484,14 +494,15 @@ layout: {
         areaSeriesRef.current = areaSeries as ISeriesApi<"Area">;
         volumeSeriesRef.current = volumeSeries as ISeriesApi<"Histogram">;
         predictionSeriesRef.current = predictionSeries as ISeriesApi<"Line">;
+        predictionGlowSeriesRef.current = predictionGlowSeries as ISeriesApi<"Line">;
         rangeSeriesRef.current = rangeSeries as ISeriesApi<"Line">;
 
         chartRef.current = chart;
 
         const handleResize = () => {
-             if (!chartContainerRef.current || !chartRef.current) return;
+            if (!chartContainerRef.current || !chartRef.current) return;
 
-             chart.applyOptions({ 
+            chart.applyOptions({
                 width: chartContainerRef.current.clientWidth,
                 height: chartContainerRef.current.clientHeight
             });
@@ -626,6 +637,7 @@ layout: {
             areaSeriesRef.current = null;
             volumeSeriesRef.current = null;
             predictionSeriesRef.current = null;
+            predictionGlowSeriesRef.current = null;
             rangeSeriesRef.current = null;
             chartRef.current = null;
         };
@@ -636,21 +648,21 @@ layout: {
         const chart = chartRef.current;
         const candleSeries = candlestickSeriesRef.current;
         const areaSeries = areaSeriesRef.current;
-        
+
         if (!chart || !candleSeries || !areaSeries) return;
 
         // Update layout colors
         chart.applyOptions({
             layout: {
-                background: { type: ColorType.Solid, color: isDark ? "#0a0a0a" : "#ffffff" },
-                textColor: isDark ? "#9CA3AF" : "#4B5563",
+                background: { type: ColorType.Solid, color: isDark ? "#06080f" : "#ffffff" },
+                textColor: isDark ? "#6366f1" : "#4B5563",
             },
             grid: {
                 vertLines: {
-                    color: isDark ? "rgba(105, 105, 105, 0.2)" : "rgba(209, 213, 219, 0.3)",
+                    color: isDark ? "rgba(99, 102, 241, 0.05)" : "rgba(209, 213, 219, 0.3)",
                 },
                 horzLines: {
-                    color: isDark ? "rgba(105, 105, 105, 0.2)" : "rgba(209, 213, 219, 0.3)",
+                    visible: false,
                 },
             },
             timeScale: {
@@ -883,7 +895,8 @@ layout: {
         onPointsChange?.(points);
 
         const series = predictionSeriesRef.current;
-        if (!series) return;
+        const glowSeries = predictionGlowSeriesRef.current;
+        if (!series || !glowSeries) return;
 
         let dataToShow = [...points];
 
@@ -903,7 +916,7 @@ layout: {
             .sort((a, b) => {
                 const timeA = a[0];
                 const timeB = b[0];
-                
+
                 // Both are strings (dates)
                 if (typeof timeA === 'string' && typeof timeB === 'string') {
                     return timeA.localeCompare(timeB);
@@ -923,9 +936,10 @@ layout: {
             // ✅ 곱선 변환 적용 (점들 사이가 멀어도 자연스럽게)
             const curvedData = getInterpolatedData(sorted, 10); // 10등분으로 쌓게서 부드럽게
             series.setData(curvedData);
-            // Native markers removed
+            glowSeries.setData(curvedData);
         } else {
             series.setData([]);
+            glowSeries.setData([]);
         }
 
         // ✅ [Fix] Recalculate overlay positions after chart auto-scale
@@ -1044,24 +1058,25 @@ layout: {
                     style={{
                         left: marker.x,
                         top: marker.y,
-                        // Hide if outside visible bounds
                         display: (marker.x < 0 || marker.y < 0) ? 'none' : 'flex'
                     }}
                     onClick={(e) => {
-                        e.stopPropagation(); // Prevent chart click
+                        e.stopPropagation();
                         handleRemovePoint(marker.time);
                     }}
                 >
-                    {/* ✅ Custom Vertical Guide Line (mimics crosshair) */}
-                    <div className="absolute top-[12px] bottom-[-100vh] w-[1px] bg-gray-400 dark:bg-gray-600 border-l border-dashed border-gray-400/80 dark:border-gray-500/80 h-[200vh] -translate-y-[100vh] pointer-events-none hidden group-hover:block z-[-1]" />
+                    {/* ✅ 이미지 스타일의 네온 포인트 마커 */}
+                    <div className="relative flex items-center justify-center">
+                        {/* 외곽 광채 */}
+                        <div className="absolute w-6 h-6 bg-orange-500/40 rounded-full animate-pulse blur-sm" />
+                        {/* 메인 포인트 */}
+                        <div className="relative w-3 h-3 rounded-full bg-gradient-to-br from-yellow-300 to-orange-600 border border-white/50 shadow-[0_0_10px_rgba(251,146,60,0.8)] transition-transform group-hover:scale-125 flex items-center justify-center">
+                            <span className="text-[8px] text-white opacity-0 group-hover:opacity-100 font-bold">✕</span>
+                        </div>
+                    </div>
 
-                    <div className="w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 shadow-sm border border-white flex items-center justify-center transition-all">
-                        <span className="text-white font-bold text-xs select-none">✕</span>
-                    </div>
-                     {/* Tooltip on hover */}
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                        삭제
-                    </div>
+                    {/* 가이드 라인 스타일 개선 */}
+                    <div className="absolute top-[10px] h-[1000px] w-[1px] bg-gradient-to-b from-orange-400/50 to-transparent border-l border-dashed border-orange-400/30 pointer-events-none hidden group-hover:block z-[-1]" />
                 </div>
             ))}
 
@@ -1071,11 +1086,10 @@ layout: {
                     <Button
                         variant="ghost"
                         size="sm"
-                        className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${
-                            futureMode === "1m"
+                        className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${futureMode === "1m"
                                 ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
                                 : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
-                        }`}
+                            }`}
                         onClick={() => setFutureMode("1m")}
                     >
                         1개월
@@ -1083,11 +1097,10 @@ layout: {
                     <Button
                         variant="ghost"
                         size="sm"
-                        className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${
-                            futureMode === "3m"
+                        className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${futureMode === "3m"
                                 ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
                                 : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
-                        }`}
+                            }`}
                         onClick={() => setFutureMode("3m")}
                     >
                         3개월
@@ -1095,11 +1108,10 @@ layout: {
                     <Button
                         variant="ghost"
                         size="sm"
-                        className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${
-                            futureMode === "custom"
+                        className={`h-7 px-2 rounded-md text-xs font-medium transition-colors ${futureMode === "custom"
                                 ? "bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
                                 : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-200 dark:hover:text-white dark:hover:bg-white/10"
-                        }`}
+                            }`}
                         onClick={() => setFutureMode("custom")}
                     >
                         직접

@@ -59,7 +59,10 @@ export default function AdminNoticesPage() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">공지사항 관리</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">공지사항 관리</h1>
+          <p className="text-sm text-gray-500 mt-1">공지사항을 작성하고 관리합니다.</p>
+        </div>
         <Link 
           href="/admin/notices/create"
           className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"

@@ -102,8 +102,8 @@ export default function AdminStatisticsPage() {
                         <span className="text-sm font-bold">{index + 1}</span>
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900">{partner.nickname}</p>
-                        <p className="text-sm text-gray-500">{partner.email}</p>
+                        <p className="font-semibold text-gray-900">{partner.nickname}</p>
+                        <p className="text-xs text-gray-500">{partner.email}</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -145,8 +145,8 @@ export default function AdminStatisticsPage() {
                           <span className="text-sm font-bold">{index + 1}</span>
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{partner.nickname}</p>
-                          <p className="text-sm text-gray-500">{partner.email}</p>
+                          <p className="font-semibold text-gray-900">{partner.nickname}</p>
+                          <p className="text-xs text-gray-500">{partner.email}</p>
                         </div>
                       </div>
                       <div className="text-right">

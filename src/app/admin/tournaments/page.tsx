@@ -2,10 +2,6 @@ import { createClient } from '@/lib/supabase/server';
 import CreateTournamentForm from '@/components/admin/CreateTournamentForm';
 import AdminTournamentList from '@/components/admin/AdminTournamentList'; 
 
-// We'll create a client component "AdminTournamentList" to handle the client-side interactions 
-// like opening modals, calling client-side state actions, etc. 
-// Server components like this page are good for initial data fetching.
-
 export const dynamic = 'force-dynamic';
 
 export default async function AdminTournamentsPage() {
@@ -17,15 +13,18 @@ export default async function AdminTournamentsPage() {
     .order('created_at', { ascending: false });
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <h1 className="text-3xl font-bold mb-8 text-white">Tournament Management</h1>
+    <div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">토너먼트 관리</h1>
+        <p className="text-sm text-gray-500 mt-1">토너먼트를 생성하고 관리합니다.</p>
+      </div>
       
       <CreateTournamentForm />
 
-      <h2 className="text-xl font-bold text-gray-400 mb-4">Active & Past Tournaments</h2>
-      
-      {/* We pass data to a client component to handle interactions */}
-      <AdminTournamentList initialTournaments={tournaments || []} />
+      <div className="mt-8">
+        <h2 className="text-xl font-bold text-gray-900 mb-4">진행 중 & 종료된 토너먼트</h2>
+        <AdminTournamentList initialTournaments={tournaments || []} />
+      </div>
     </div>
   );
 }

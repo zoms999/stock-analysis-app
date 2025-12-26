@@ -448,7 +448,7 @@ export function ChartAnalyzer({
             topColor: "rgba(41, 98, 255, 0)",
             bottomColor: "rgba(0, 0, 0, 0)",
             lineColor: "rgba(41, 98, 255, 0.3)", // 반투명한 파란색
-            lineWidth: 8,                      // 아주 두껍게
+            lineWidth: 8 as any,                      // 아주 두껍게
             visible: chartStyle === "line",
         });
 
@@ -457,7 +457,7 @@ export function ChartAnalyzer({
             topColor: "rgba(41, 98, 255, 0.1)", // 위쪽은 아주 살짝 투명하게 채움
             bottomColor: "rgba(0, 0, 0, 0)",
             lineColor: "#2962FF",               // 메인 파란색
-            lineWidth: 4,                       // 2 -> 4로 두껍게 변경
+            lineWidth: 4 as any,                       // 2 -> 4로 두껍게 변경
             visible: chartStyle === "line",
         });
 

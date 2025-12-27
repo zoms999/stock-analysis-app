@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
 
 type NoticeFormProps = {
   initialData?: {
@@ -72,68 +76,72 @@ export default function NoticeForm({ initialData }: NoticeFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 space-y-6">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="w-full border rounded-md p-2 text-sm"
-          required
-        />
-      </div>
+    <form onSubmit={handleSubmit}>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            {initialData ? "공지사항 수정" : "새 공지사항 작성"}
+          </CardTitle>
+        </CardHeader>
 
-      <div className="flex gap-6">
-        <label className="flex items-center space-x-2 text-sm text-gray-700">
-          <input
-            type="checkbox"
-            checked={isImportant}
-            onChange={(e) => setIsImportant(e.target.checked)}
-            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-          />
-          <span>상단 고정 (Important)</span>
-        </label>
+        <CardContent className="space-y-6">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">제목</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              placeholder="공지 제목을 입력하세요"
+            />
+          </div>
 
-        <label className="flex items-center space-x-2 text-sm text-gray-700">
-          <input
-            type="checkbox"
-            checked={isPopup}
-            onChange={(e) => setIsPopup(e.target.checked)}
-            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-          />
-          <span>팝업 노출 (Popup)</span>
-        </label>
-      </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={isImportant}
+                onChange={(e) => setIsImportant(e.target.checked)}
+                className="h-4 w-4 rounded border-border accent-primary"
+              />
+              <span>상단 고정 (Important)</span>
+            </label>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">내용</label>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          rows={15}
-          className="w-full border rounded-md p-2 text-sm font-mono"
-          required
-        />
-        <p className="text-xs text-gray-400 mt-1">Markdown 형식을 지원할 수 있습니다.</p>
-      </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={isPopup}
+                onChange={(e) => setIsPopup(e.target.checked)}
+                className="h-4 w-4 rounded border-border accent-primary"
+              />
+              <span>팝업 노출 (Popup)</span>
+            </label>
+          </div>
 
-      <div className="flex justify-end gap-3">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-        >
-          취소
-        </button>
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-4 py-2 text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {loading ? '저장 중...' : (initialData ? '수정하기' : '등록하기')}
-        </button>
-      </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">내용</label>
+            <Textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={15}
+              className="font-mono"
+              required
+              placeholder="내용을 입력하세요"
+            />
+            <p className="text-xs text-muted-foreground">
+              Markdown 형식을 지원할 수 있습니다.
+            </p>
+          </div>
+        </CardContent>
+
+        <CardFooter className="justify-end gap-3">
+          <Button type="button" variant="outline" onClick={() => router.back()}>
+            취소
+          </Button>
+          <Button type="submit" disabled={loading}>
+            {loading ? "저장 중..." : initialData ? "수정하기" : "등록하기"}
+          </Button>
+        </CardFooter>
+      </Card>
     </form>
   )
 }

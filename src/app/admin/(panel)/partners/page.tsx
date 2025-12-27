@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { getAllPartners, togglePartnerStatus, Partner } from '@/lib/api/admin-partners'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { getAllPartners, togglePartnerStatus, Partner } from '@/lib/api/admin-partners'
+import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
+import { AdminTableCard } from '@/components/admin/AdminTable'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Users, DollarSign, TrendingUp } from 'lucide-react'
+import { DollarSign, TrendingUp, Users } from 'lucide-react'
 
 export default function AdminPartnersPage() {
   const router = useRouter()
@@ -54,12 +56,8 @@ export default function AdminPartnersPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">파트너 관리</h1>
-        <p className="text-sm text-gray-500 mt-1">파트너 현황 및 실적을 관리합니다.</p>
-      </div>
+      <AdminPageHeader title="파트너 관리" description="파트너 현황 및 실적을 관리합니다." />
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <Card>
           <CardHeader className="pb-2">
@@ -98,78 +96,77 @@ export default function AdminPartnersPage() {
         </Card>
       </div>
 
-      {/* Partners Table */}
-      <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">파트너 정보</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">추천 코드</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">유치 회원</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">총 수익</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">관리</th>
+      <AdminTableCard>
+        <table className="min-w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr className="border-b border-border">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">파트너 정보</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">추천 코드</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">유치 회원</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">총 수익</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">상태</th>
+              <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">관리</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
-                  로딩 중...
-                </td>
+                <td colSpan={6} className="px-6 py-10 text-center text-muted-foreground">로딩 중...</td>
               </tr>
             ) : partners.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
-                  등록된 파트너가 없습니다.
-                </td>
+                <td colSpan={6} className="px-6 py-10 text-center text-muted-foreground">등록된 파트너가 없습니다.</td>
               </tr>
             ) : (
               partners.map((partner) => (
-                <tr key={partner.id} className="hover:bg-gray-50">
+                <tr key={partner.id} className="border-b border-border last:border-b-0 hover:bg-muted/40">
                   <td className="px-6 py-4">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{partner.nickname || 'Unknown'}</div>
-                      <div className="text-sm text-gray-500">{partner.email}</div>
+                      <div className="text-sm font-medium">{partner.nickname || 'Unknown'}</div>
+                      <div className="text-sm text-muted-foreground">{partner.email}</div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <code className="text-sm bg-gray-100 px-2 py-1 rounded">{partner.referral_code || '-'}</code>
+                    <code className="text-sm bg-muted px-2 py-1 rounded">{partner.referral_code || '-'}</code>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {partner.total_referred_users || 0}명
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {(partner.total_earnings || 0).toLocaleString()}원
-                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">{partner.total_referred_users || 0}명</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{(partner.total_earnings || 0).toLocaleString()}원</td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      partner.is_partner ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      partner.is_partner ? 'bg-emerald-500/10 text-emerald-700' : 'bg-destructive/10 text-destructive'
                     }`}>
                       {partner.is_partner ? '활성' : '비활성'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                    <button
-                      onClick={() => router.push(`/admin/partners/${partner.id}`)}
-                      className="text-indigo-600 hover:text-indigo-900"
-                    >
-                      상세보기
-                    </button>
-                    <button
-                      onClick={() => handleTogglePartner(partner.id, partner.is_partner)}
-                      disabled={toggling === partner.id}
-                      className="text-orange-600 hover:text-orange-900 disabled:opacity-50"
-                    >
-                      {toggling === partner.id ? '처리중...' : (partner.is_partner ? '비활성화' : '활성화')}
-                    </button>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <div className="inline-flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="link"
+                        className="h-auto p-0"
+                        onClick={() => router.push(`/admin/partners/${partner.id}`)}
+                      >
+                        상세보기
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="link"
+                        className="h-auto p-0 text-orange-700"
+                        onClick={() => handleTogglePartner(partner.id, partner.is_partner)}
+                        disabled={toggling === partner.id}
+                      >
+                        {toggling === partner.id ? '처리중...' : (partner.is_partner ? '비활성화' : '활성화')}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
-      </div>
+      </AdminTableCard>
     </div>
   )
 }
+
+

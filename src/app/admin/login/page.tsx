@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('')
@@ -52,48 +55,46 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100">
-      <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold mb-6 text-center text-gray-900">관리자 로그인</h1>
-        
-        {error && (
-          <div className="bg-red-50 text-red-500 p-3 rounded mb-4 text-sm">
-            {error}
-          </div>
-        )}
+    <div className="min-h-dvh flex items-center justify-center bg-muted/40 px-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle className="text-center">관리자 로그인</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {error && (
+            <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </div>
+          )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">이메일</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 border p-2 text-gray-900"
-              required
-            />
-          </div>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">이메일</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="admin@example.com"
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700">비밀번호</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 border p-2 text-gray-900"
-              required
-            />
-          </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">비밀번호</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-          >
-            {loading ? '로그인 중...' : '로그인'}
-          </button>
-        </form>
-      </div>
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? '로그인 중...' : '로그인'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }

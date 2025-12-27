@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { getPartnerStatistics, PartnerStats } from '@/lib/api/admin-partners'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
 import { Trophy, TrendingUp, Users } from 'lucide-react'
 
 export default function AdminStatisticsPage() {
@@ -31,12 +32,8 @@ export default function AdminStatisticsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">파트너 통계</h1>
-        <p className="text-sm text-gray-500 mt-1">파트너 실적 및 랭킹을 확인합니다.</p>
-      </div>
+      <AdminPageHeader title="파트너 통계" description="파트너 실적 및 랭킹을 확인합니다." />
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <Card>
           <CardHeader className="pb-2">
@@ -75,9 +72,7 @@ export default function AdminStatisticsPage() {
         </Card>
       </div>
 
-      {/* Rankings */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Ranking */}
         <Card>
           <CardHeader>
             <CardTitle>수익 랭킹</CardTitle>
@@ -86,29 +81,24 @@ export default function AdminStatisticsPage() {
           <CardContent>
             <div className="space-y-4">
               {loading ? (
-                <p className="text-center text-gray-500 py-8">로딩 중...</p>
+                <p className="text-center text-muted-foreground py-8">로딩 중...</p>
               ) : stats.length === 0 ? (
-                <p className="text-center text-gray-500 py-8">데이터가 없습니다.</p>
+                <p className="text-center text-muted-foreground py-8">데이터가 없습니다.</p>
               ) : (
                 stats.slice(0, 10).map((partner, index) => (
-                  <div key={partner.partner_id} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50">
+                  <div key={partner.partner_id} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/40">
                     <div className="flex items-center gap-3">
-                      <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
-                        index === 0 ? 'bg-yellow-100 text-yellow-700' :
-                        index === 1 ? 'bg-gray-100 text-gray-700' :
-                        index === 2 ? 'bg-orange-100 text-orange-700' :
-                        'bg-blue-50 text-blue-700'
-                      }`}>
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-foreground">
                         <span className="text-sm font-bold">{index + 1}</span>
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900">{partner.nickname}</p>
-                        <p className="text-xs text-gray-500">{partner.email}</p>
+                        <p className="font-semibold">{partner.nickname}</p>
+                        <p className="text-xs text-muted-foreground">{partner.email}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-gray-900">{partner.total_earnings.toLocaleString()}원</p>
-                      <p className="text-sm text-gray-500">{partner.invited_user_count}명 유치</p>
+                      <p className="font-bold">{partner.total_earnings.toLocaleString()}원</p>
+                      <p className="text-sm text-muted-foreground">{partner.invited_user_count}명 유치</p>
                     </div>
                   </div>
                 ))
@@ -117,7 +107,6 @@ export default function AdminStatisticsPage() {
           </CardContent>
         </Card>
 
-        {/* User Acquisition Ranking */}
         <Card>
           <CardHeader>
             <CardTitle>유치 회원 랭킹</CardTitle>
@@ -126,32 +115,27 @@ export default function AdminStatisticsPage() {
           <CardContent>
             <div className="space-y-4">
               {loading ? (
-                <p className="text-center text-gray-500 py-8">로딩 중...</p>
+                <p className="text-center text-muted-foreground py-8">로딩 중...</p>
               ) : stats.length === 0 ? (
-                <p className="text-center text-gray-500 py-8">데이터가 없습니다.</p>
+                <p className="text-center text-muted-foreground py-8">데이터가 없습니다.</p>
               ) : (
                 [...stats]
                   .sort((a, b) => b.invited_user_count - a.invited_user_count)
                   .slice(0, 10)
                   .map((partner, index) => (
-                    <div key={partner.partner_id} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50">
+                    <div key={partner.partner_id} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/40">
                       <div className="flex items-center gap-3">
-                        <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
-                          index === 0 ? 'bg-yellow-100 text-yellow-700' :
-                          index === 1 ? 'bg-gray-100 text-gray-700' :
-                          index === 2 ? 'bg-orange-100 text-orange-700' :
-                          'bg-blue-50 text-blue-700'
-                        }`}>
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-foreground">
                           <span className="text-sm font-bold">{index + 1}</span>
                         </div>
                         <div>
-                          <p className="font-semibold text-gray-900">{partner.nickname}</p>
-                          <p className="text-xs text-gray-500">{partner.email}</p>
+                          <p className="font-semibold">{partner.nickname}</p>
+                          <p className="text-xs text-muted-foreground">{partner.email}</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-gray-900">{partner.invited_user_count}명</p>
-                        <p className="text-sm text-gray-500">{partner.total_earnings.toLocaleString()}원</p>
+                        <p className="font-bold">{partner.invited_user_count}명</p>
+                        <p className="text-sm text-muted-foreground">{partner.total_earnings.toLocaleString()}원</p>
                       </div>
                     </div>
                   ))
@@ -163,3 +147,5 @@ export default function AdminStatisticsPage() {
     </div>
   )
 }
+
+

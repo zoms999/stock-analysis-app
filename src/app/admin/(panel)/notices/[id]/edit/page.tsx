@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import NoticeForm from '@/components/admin/NoticeForm'
+import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
 
 export default function AdminNoticeEditPage({ params }: { params: { id: string } }) {
   const [notice, setNotice] = useState<any>(null)
@@ -11,12 +12,12 @@ export default function AdminNoticeEditPage({ params }: { params: { id: string }
 
   useEffect(() => {
     const fetchNotice = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('notices')
         .select('*')
         .eq('id', params.id)
         .single()
-      
+
       if (data) {
         setNotice(data)
       } else {
@@ -28,13 +29,15 @@ export default function AdminNoticeEditPage({ params }: { params: { id: string }
     fetchNotice()
   }, [params.id])
 
-  if (loading) return <div>로딩 중...</div>
-  if (!notice) return <div>데이터 없음</div>
+  if (loading) return <div className="text-sm text-muted-foreground">로딩 중...</div>
+  if (!notice) return <div className="text-sm text-muted-foreground">데이터 없음</div>
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">공지사항 수정</h1>
+      <AdminPageHeader title="공지사항 수정" />
       <NoticeForm initialData={notice} />
     </div>
   )
 }
+
+

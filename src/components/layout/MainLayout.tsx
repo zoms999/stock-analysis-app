@@ -1,3 +1,6 @@
+"use client";
+
+import { usePathname } from "next/navigation";
 import { Header } from "./Header";
 
 interface MainLayoutProps {
@@ -5,6 +8,13 @@ interface MainLayoutProps {
 }
 
 export function MainLayout({ children }: MainLayoutProps) {
+  const pathname = usePathname();
+  const isAdmin = pathname?.startsWith("/admin");
+
+  if (isAdmin) {
+    return <>{children}</>;
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Header />

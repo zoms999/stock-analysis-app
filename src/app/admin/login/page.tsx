@@ -29,10 +29,10 @@ export default function AdminLogin() {
 
       if (authError) throw authError
 
-      // 2. Check Admin Level
+      // 2. Check Admin Authorization (is_admin OR level >= 99)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('user_level')
+        .select('user_level,is_admin')
         .eq('id', authData.user.id)
         .single()
 
@@ -40,7 +40,10 @@ export default function AdminLogin() {
         throw new Error('프로필 정보를 불러올 수 없습니다.')
       }
 
-      if (profile.user_level !== 10) {
+      const isAdmin =
+        (profile as any).is_admin === true || (profile as any).user_level >= 99
+
+      if (!isAdmin) {
         await supabase.auth.signOut()
         throw new Error('관리자 권한이 없습니다.')
       }

@@ -185,7 +185,7 @@ export default function AdminUsersPage() {
                     <span
                       className={[
                         'px-2 inline-flex text-xs leading-5 font-semibold rounded-full',
-                        user.user_level === 10
+                        user.user_level >= 99
                           ? 'bg-primary/10 text-primary'
                           : 'bg-emerald-500/10 text-emerald-700',
                       ].join(' ')}

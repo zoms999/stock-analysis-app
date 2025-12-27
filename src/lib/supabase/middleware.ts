@@ -47,7 +47,7 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
-    // 2. Check admin authorization (user_level = 10)
+    // 2. Check admin authorization (is_admin = true AND/OR user_level >= 99)
     // Avoid checking for the login page itself to prevent infinite loops if we were to protect it (but /admin/login is public usually)
     // However, the check above redirects TO /admin/login if not logged in.
     // If logged in, we verify level.
@@ -61,11 +61,15 @@ export async function updateSession(request: NextRequest) {
     if (request.nextUrl.pathname !== '/admin/login') {
        const { data: profile } = await supabase
         .from('profiles')
-        .select('user_level')
+        .select('user_level,is_admin')
         .eq('id', user.id)
         .single()
 
-      if (!profile || profile.user_level !== 10) {
+      const isAdmin =
+        !!profile &&
+        ((profile as any).is_admin === true || (profile as any).user_level >= 99)
+
+      if (!isAdmin) {
         // Not an admin, redirect to home
         const url = request.nextUrl.clone()
         url.pathname = '/'

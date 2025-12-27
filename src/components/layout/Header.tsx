@@ -16,6 +16,7 @@ export function Header() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<any>(null);
   const [userLevel, setUserLevel] = useState<number>(1);
+  const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
@@ -50,6 +51,7 @@ export function Header() {
       if (_event === 'SIGNED_OUT') {
         setUser(null);
         setUserLevel(1);
+        setIsAdmin(false);
         router.refresh();
       } else if (_event === 'SIGNED_IN') {
         router.refresh();
@@ -72,12 +74,13 @@ export function Header() {
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('user_level')
+                .select('user_level,is_admin')
                 .eq('id', user.id)
                 .single();
 
             if (data && !error) {
                 setUserLevel(data.user_level ?? 1);
+                setIsAdmin((data as any).is_admin === true || (data.user_level ?? 1) >= 99);
             }
         } catch (e) {
             console.error("Failed to fetch user level", e);
@@ -126,7 +129,7 @@ export function Header() {
             <Link href="/subscription" className="transition-colors hover:text-foreground/80 text-foreground/60">
               구독하기
             </Link>
-            {userLevel === 10 && (
+            {isAdmin && (
                <Link href="/admin" className="transition-colors text-red-500 hover:text-red-700 font-bold">
                 관리자
               </Link>
@@ -183,7 +186,7 @@ export function Header() {
               >
                 구독하기
               </Link>
-              {userLevel === 10 && (
+              {isAdmin && (
                 <Link
                   href="/admin"
                   onClick={() => setMobileMenuOpen(false)}

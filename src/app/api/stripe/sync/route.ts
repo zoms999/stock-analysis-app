@@ -119,6 +119,39 @@ export async function POST(req: Request) {
       }
     }
 
+    // ===== Partner settlement accrual (자동 적립) =====
+    // NOTE: DB에 `public.create_referral_settlement` 함수/컬럼이 아직 없다면 실패할 수 있으므로,
+    // 구독 동기화는 성공시키고 로그만 남깁니다.
+    const ZERO_DECIMAL = new Set([
+      "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf",
+      "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
+    ])
+    const currency = (session.currency || "").toLowerCase()
+    const divisor = ZERO_DECIMAL.has(currency) ? 1 : 100
+
+    const amountSmallest =
+      typeof session.amount_total === "number"
+        ? session.amount_total
+        : (subscription?.items?.data?.[0]?.price?.unit_amount ?? null)
+
+    const paymentAmount =
+      typeof amountSmallest === "number" && Number.isFinite(amountSmallest)
+        ? amountSmallest / divisor
+        : null
+
+    if (paymentAmount && paymentAmount > 0) {
+      const { error: settleError } = await supabaseAdmin.rpc("create_referral_settlement", {
+        payer_id: user.id,
+        payment_amount: paymentAmount,
+        stripe_subscription_id: subscriptionId,
+        stripe_checkout_session_id: session.id,
+      })
+
+      if (settleError) {
+        console.error("[STRIPE_SYNC] create_referral_settlement failed:", settleError)
+      }
+    }
+
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     console.error("[STRIPE_SYNC]", e)

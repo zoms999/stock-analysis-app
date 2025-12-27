@@ -86,6 +86,28 @@ export function ChartAnalyzer({
     const [dataCount, setDataCount] = useState<number>(0);
     const [error, setError] = useState<string | null>(null);
 
+    // ✅ 모바일/좁은 화면 여부 (tick/spacing 등 UX 분기용)
+    // 단순 640px 기준만 쓰면 태블릿/모바일 가로 등에서 누락될 수 있어, 900px까지를 "좁은 화면"으로 봅니다.
+    const isMobileRef = useRef(false);
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const mq = window.matchMedia("(max-width: 900px)");
+        const update = () => {
+            isMobileRef.current = mq.matches;
+        };
+        update();
+        // addEventListener 지원 브라우저 우선
+        if ("addEventListener" in mq) {
+            mq.addEventListener("change", update);
+            return () => mq.removeEventListener("change", update);
+        }
+        // 구형 Safari 대응
+        // @ts-ignore
+        mq.addListener?.(update);
+        // @ts-ignore
+        return () => mq.removeListener?.(update);
+    }, []);
+
     // --- [HTML Overlay Logic] ---
     const [overlayMarkers, setOverlayMarkers] = useState<{ id: string; x: number; y: number; time: Time; value: number }[]>([]);
 
@@ -209,7 +231,8 @@ export function ChartAnalyzer({
         switch (itv) {
             case "1": return 2;   // 1분봉: 매우 촘촘하게 (3 -> 2)
             case "60": return 3;   // 60분봉 (4 -> 3)
-            case "D": return 4;   // 일봉 (6 -> 4)
+            // ✅ 모바일(좁은 화면)에서 일봉은 spacing을 키워서 tick이 월 단위로 뭉치지 않게 유도
+            case "D": return isMobileRef.current ? 12 : 4;   // 일봉 (모바일: 더 넓게)
             case "W": return 6;   // 주봉 (10 -> 6)
             case "M": return 10;  // 월봉 (14 -> 10)
             case "Y": return 14;  // 연봉 (18 -> 14)
@@ -237,7 +260,11 @@ export function ChartAnalyzer({
             "Y": [24, 100],   // 연봉
         };
 
-        const [min, max] = minMax[itv] ?? [40, 300];
+        // ✅ 모바일(좁은 화면) + 일봉은 한 화면에 너무 많은 봉을 넣지 않게 제한(일 단위 tick을 유도)
+        const [min, max] =
+            (isMobileRef.current && itv === "D")
+                ? ([30, 60] as [number, number])
+                : (minMax[itv] ?? [40, 300]);
         return Math.max(min, Math.min(max, bars));
     };
 
@@ -885,6 +912,12 @@ export function ChartAnalyzer({
                                 const year = date.getFullYear();
                                 const month = (date.getMonth() + 1).toString().padStart(2, "0");
                                 const day = date.getDate().toString().padStart(2, "0");
+
+                                // ✅ 모바일 + 일봉(D)에서는 월/년으로 뭉치지 말고 항상 "일" 단위로 표기
+                                // (tickMarkType이 Month/Year로 들어와도 강제로 일 표기)
+                                if (isMobileRef.current && intervalRef.current === "D") {
+                                    return `${month}.${day}`;
+                                }
 
                                 switch (tickMarkType) {
                                     case TickMarkType.Year:

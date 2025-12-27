@@ -104,7 +104,8 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
           horzLines: { color: "rgba(105, 105, 105, 0.2)", visible: false },
         },
         timeScale: {
-          timeVisible: true,
+          // ✅ 일/주/월(비-인트라데이)에서는 날짜 단위로 보이도록
+          timeVisible: ["1m", "2m", "5m", "15m", "30m", "60m", "1h", "90m"].includes(interval),
           secondsVisible: false,
         },
       });

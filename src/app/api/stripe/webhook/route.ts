@@ -74,19 +74,79 @@ export async function POST(req: Request) {
             current_period_end: unixToIsoOrNull(subscription.current_period_end),
         };
         
-        console.log('[WEBHOOK] Inserting subscription:', subscriptionData);
-        
-        const { data, error } = await supabase
+        console.log('[WEBHOOK] Upserting subscription:', subscriptionData);
+
+        // idempotent upsert without relying on unique constraints
+        const { data: existingSub, error: existingError } = await supabase
+          .from('subscriptions')
+          .select('id')
+          .eq('stripe_subscription_id', subscriptionId)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingError) {
+          console.error('[WEBHOOK] Database error (select existing):', existingError);
+          return new NextResponse('Database Error', { status: 500 });
+        }
+
+        if (existingSub?.id) {
+          const { error: updateError } = await supabase
             .from('subscriptions')
-            .insert(subscriptionData)
-            .select();
-            
-         if (error) {
-             console.error('[WEBHOOK] Database error:', error);
-             return new NextResponse('Database Error', { status: 500 });
-         }
-         
-         console.log('[WEBHOOK] Subscription created:', data);
+            .update(subscriptionData)
+            .eq('id', existingSub.id);
+
+          if (updateError) {
+            console.error('[WEBHOOK] Database error (update):', updateError);
+            return new NextResponse('Database Error', { status: 500 });
+          }
+        } else {
+          const { error: insertError } = await supabase
+            .from('subscriptions')
+            .insert(subscriptionData);
+
+          if (insertError) {
+            console.error('[WEBHOOK] Database error (insert):', insertError);
+            return new NextResponse('Database Error', { status: 500 });
+          }
+        }
+
+        // ===== Partner settlement accrual (자동 적립) =====
+        // NOTE: DB에 `public.create_referral_settlement` 함수가 적용되어 있어야 합니다.
+        // 실패하더라도 구독 생성은 성공해야 하므로 "로그만 남기고" 진행합니다.
+        const ZERO_DECIMAL = new Set([
+          "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf",
+          "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
+        ]);
+
+        const currency = (session.currency || "").toLowerCase();
+        const divisor = ZERO_DECIMAL.has(currency) ? 1 : 100;
+
+        const amountSmallest =
+          typeof session.amount_total === "number"
+            ? session.amount_total
+            : (subscription?.items?.data?.[0]?.price?.unit_amount ?? null);
+
+        const paymentAmount =
+          typeof amountSmallest === "number" && Number.isFinite(amountSmallest)
+            ? amountSmallest / divisor
+            : null;
+
+        if (paymentAmount && paymentAmount > 0) {
+          const { error: settleError } = await supabase.rpc('create_referral_settlement', {
+            payer_id: userId,
+            payment_amount: paymentAmount,
+            stripe_subscription_id: subscriptionId,
+            stripe_checkout_session_id: session.id,
+          });
+
+          if (settleError) {
+            console.error('[WEBHOOK] create_referral_settlement failed:', settleError);
+          } else {
+            console.log('[WEBHOOK] Partner settlement accrued');
+          }
+        } else {
+          console.log('[WEBHOOK] Skip settlement (no payment amount)');
+        }
     } else {
       console.error('[WEBHOOK] Missing userId or planId');
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,6 +31,13 @@ export default function AnalyzePage() {
     const [chartImageUrl, setChartImageUrl] = useState<string>("");
 
     const [showLimitPopup, setShowLimitPopup] = useState(false);
+
+    // ✅ 모바일에서는 기본을 "일(일봉)"로 고정
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const isMobile = window.matchMedia("(max-width: 640px)").matches;
+        if (isMobile) setInterval("D");
+    }, []);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();

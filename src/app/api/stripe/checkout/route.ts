@@ -26,7 +26,7 @@ export async function POST(req: Request) {
         userId: user.id,
         planId: planId,
       },
-      success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/subscription?success=true`,
+      success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/subscription?canceled=true`,
     });
 

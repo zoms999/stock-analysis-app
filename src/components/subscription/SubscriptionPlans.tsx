@@ -3,8 +3,10 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Check, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { getUserSubscription, type UserSubscription } from "@/lib/api/subscription";
 
 // TODO: Replace these placeholders with real IDs from your Database (plans table) and Stripe Dashboard (Price IDs).
 const PLANS = [
@@ -13,13 +15,13 @@ const PLANS = [
         price: "무료",
         desc: "기본 회원",
         priceId: null, // Free
-        planId: null, // Free plan UUID
+        planId: "1", // DB plans.id (Free)
         features: [
             "하루 열람 3회",
             "하루 글쓰기 5회",
             "콘텐츠 레벨 5등급까지"
         ],
-        buttonText: "현재 이용 중",
+        buttonText: "무료 플랜",
         highlight: false
     },
     {
@@ -91,6 +93,32 @@ const PLANS = [
 export function SubscriptionPlans() {
   const router = useRouter();
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [subLoading, setSubLoading] = useState(true);
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    const load = async () => {
+      setSubLoading(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setSubscription(null);
+          return;
+        }
+        const sub = await getUserSubscription(user.id);
+        setSubscription(sub);
+      } catch (e) {
+        console.error("Failed to load subscription:", e);
+        setSubscription(null);
+      } finally {
+        setSubLoading(false);
+      }
+    };
+
+    load();
+  }, []);
 
   const handleSubscribe = async (plan: typeof PLANS[0]) => {
     if (!plan.priceId) return; // Free plan or invalid
@@ -127,6 +155,27 @@ export function SubscriptionPlans() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
       {PLANS.map((plan) => (
+        (() => {
+          const currentPlanId = subscription?.planId ?? null;
+          const planIdInt = plan.planId ? Number.parseInt(String(plan.planId), 10) : null;
+          const isCurrent =
+            !subLoading &&
+            (
+              (plan.priceId === null && (subscription?.planName === "Free" || currentPlanId === null || currentPlanId === 1)) ||
+              (plan.priceId !== null && planIdInt !== null && currentPlanId === planIdInt)
+            );
+
+          const buttonLabel = subLoading
+            ? "확인 중..."
+            : isCurrent
+              ? "현재 이용 중"
+              : plan.priceId
+                ? "시작하기"
+                : "무료 플랜";
+
+          const disabled = subLoading || !plan.priceId || isCurrent || loadingId === plan.name;
+
+          return (
         <Card key={plan.name} className={`flex flex-col ${plan.highlight ? 'border-primary shadow-lg scale-105' : ''}`}>
           <CardHeader>
             <CardTitle>{plan.name}</CardTitle>
@@ -147,13 +196,15 @@ export function SubscriptionPlans() {
             <Button 
                 className="w-full" 
                 variant={plan.highlight ? "default" : "outline"}
-                disabled={!plan.priceId || loadingId === plan.name}
+                disabled={disabled}
                 onClick={() => handleSubscribe(plan)}
             >
-              {loadingId === plan.name ? <Loader2 className="h-4 w-4 animate-spin" /> : plan.buttonText}
+              {loadingId === plan.name ? <Loader2 className="h-4 w-4 animate-spin" /> : buttonLabel}
             </Button>
           </CardFooter>
         </Card>
+          );
+        })()
       ))}
     </div>
   );

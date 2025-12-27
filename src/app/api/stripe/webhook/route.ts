@@ -49,13 +49,29 @@ export async function POST(req: Request) {
     console.log('[WEBHOOK] User ID:', userId, 'Plan ID:', planId);
 
     if (userId && planId) {
+        const unixToIsoOrNull = (value: unknown) => {
+          if (typeof value === "number" && Number.isFinite(value)) {
+            const ms = value > 1_000_000_000_000 ? value : value * 1000
+            const d = new Date(ms)
+            return Number.isNaN(d.getTime()) ? null : d.toISOString()
+          }
+          if (typeof value === "string" && value.trim().length > 0) {
+            const n = Number(value)
+            if (!Number.isFinite(n)) return null
+            const ms = n > 1_000_000_000_000 ? n : n * 1000
+            const d = new Date(ms)
+            return Number.isNaN(d.getTime()) ? null : d.toISOString()
+          }
+          return null
+        }
+
         const subscriptionData = {
             user_id: userId,
             plan_id: parseInt(planId), // Convert to integer
             stripe_subscription_id: subscriptionId,
             status: subscription.status,
-            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            current_period_start: unixToIsoOrNull(subscription.current_period_start),
+            current_period_end: unixToIsoOrNull(subscription.current_period_end),
         };
         
         console.log('[WEBHOOK] Inserting subscription:', subscriptionData);

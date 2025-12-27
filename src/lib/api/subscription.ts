@@ -6,6 +6,7 @@ export interface Plan { /* ... tied to DB now ... */ }
 
 export interface UserSubscription {
   id: string;
+  planId: number | null;
   planName: string;
   planPrice: number;
   status: string;
@@ -89,7 +90,7 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
       current_period_start,
       current_period_end,
       plan_id,
-      plans!inner (
+      plans (
         name,
         price,
         daily_view_limit,
@@ -98,6 +99,8 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
       )
     `)
     .eq('user_id', userId)
+    .in('status', ['active', 'trialing'])
+    .order('current_period_end', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -115,6 +118,7 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
     // 구독이 없으면 Free 플랜 반환
     return {
       id: '',
+      planId: null,
       planName: 'Free',
       planPrice: 0,
       status: 'active',
@@ -127,18 +131,19 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
     };
   }
 
-  const plan = data.plans as any;
+  const plan = (data as any).plans as any;
   
   return {
     id: data.id,
-    planName: plan.name,
-    planPrice: plan.price,
+    planId: (data as any).plan_id ?? null,
+    planName: plan?.name || (data.plan_id ? `Plan #${data.plan_id}` : 'Unknown'),
+    planPrice: plan?.price ?? 0,
     status: data.status,
     currentPeriodStart: data.current_period_start,
     currentPeriodEnd: data.current_period_end,
-    dailyViewLimit: plan.daily_view_limit,
-    dailyWriteLimit: plan.daily_write_limit,
-    accessMaxLevel: plan.access_max_level,
+    dailyViewLimit: plan?.daily_view_limit ?? 3,
+    dailyWriteLimit: plan?.daily_write_limit ?? 5,
+    accessMaxLevel: plan?.access_max_level ?? 5,
     userLevel,
   };
 }

@@ -1,4 +1,6 @@
 import { SubscriptionPlans } from "@/components/subscription/SubscriptionPlans";
+import { SubscriptionSync } from "@/components/subscription/SubscriptionSync";
+import { Suspense } from "react";
 
 export default function SubscriptionPage() {
   return (
@@ -9,6 +11,10 @@ export default function SubscriptionPage() {
           더 많은 분석 정보와 혜택을 누려보세요.
         </p>
       </div>
+
+      <Suspense fallback={null}>
+        <SubscriptionSync />
+      </Suspense>
       
       <SubscriptionPlans />
     </div>

@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export function Header() {
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -19,6 +20,7 @@ export function Header() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -136,10 +138,72 @@ export function Header() {
         </div>
 
         {/* Mobile Menu */}
-        <Button variant="ghost" className="mr-2 px-0 text-base hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 md:hidden">
+        <Button
+          variant="ghost"
+          className="mr-2 px-0 text-base hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 md:hidden"
+          onClick={() => setMobileMenuOpen(true)}
+          aria-label="메뉴 열기"
+        >
           <Menu className="h-6 w-6" />
           <span className="sr-only">Toggle Menu</span>
         </Button>
+
+        <Dialog open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>메뉴</DialogTitle>
+            </DialogHeader>
+
+            <nav className="grid gap-2">
+              <Link
+                href="/tournaments"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+              >
+                토너먼트
+              </Link>
+              <Link
+                href="/posts"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+              >
+                차트 게시판
+              </Link>
+              <Link
+                href="/notices"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+              >
+                공지사항
+              </Link>
+              <Link
+                href="/subscription"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+              >
+                구독하기
+              </Link>
+              {userLevel === 10 && (
+                <Link
+                  href="/admin"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-md px-3 py-2 text-sm font-bold text-destructive hover:bg-destructive/10"
+                >
+                  관리자
+                </Link>
+              )}
+
+              <div className="pt-2 border-t border-border mt-2" />
+
+              <Link href={user ? "/analyze" : "/login"} onClick={() => setMobileMenuOpen(false)}>
+                <Button className="w-full justify-between" variant="outline">
+                  <span>차트 분석하기</span>
+                  <LogOut className="h-4 w-4 rotate-90" />
+                </Button>
+              </Link>
+            </nav>
+          </DialogContent>
+        </Dialog>
         
         <div className="flex flex-1 md:hidden">
              {/* Mobile specific spacing or search if needed, but keeping simple for now */}

@@ -3,6 +3,7 @@ import { stripe } from "@/lib/stripe/client"
 import { createClient as createSupabaseServerClient } from "@/lib/supabase/server"
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js"
 import Stripe from "stripe"
+import { accrueReferralSettlement } from "@/lib/stripe/referral-settlement"
 
 /**
  * 결제 성공 후(redirect) 웹훅이 누락되더라도 구독 정보를 DB에 동기화합니다.
@@ -119,9 +120,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // ===== Partner settlement accrual (자동 적립) =====
-    // NOTE: DB에 `public.create_referral_settlement` 함수/컬럼이 아직 없다면 실패할 수 있으므로,
-    // 구독 동기화는 성공시키고 로그만 남깁니다.
     const ZERO_DECIMAL = new Set([
       "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf",
       "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
@@ -139,16 +137,20 @@ export async function POST(req: Request) {
         ? amountSmallest / divisor
         : null
 
+    // ===== Partner settlement accrual (자동 적립) =====
+    // RPC가 없거나 실패해도 서버에서 직접 insert 하는 fallback을 수행합니다.
     if (paymentAmount && paymentAmount > 0) {
-      const { error: settleError } = await supabaseAdmin.rpc("create_referral_settlement", {
-        payer_id: user.id,
-        payment_amount: paymentAmount,
-        stripe_subscription_id: subscriptionId,
-        stripe_checkout_session_id: session.id,
+      const result = await accrueReferralSettlement({
+        supabaseAdmin,
+        payerId: user.id,
+        paymentAmount,
+        stripeSubscriptionId: subscriptionId,
+        stripeCheckoutSessionId: session.id,
+        commissionRate: 10,
       })
 
-      if (settleError) {
-        console.error("[STRIPE_SYNC] create_referral_settlement failed:", settleError)
+      if (!result.ok) {
+        console.error("[STRIPE_SYNC] Partner settlement accrual failed:", result)
       }
     }
 

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe/client";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
+import { accrueReferralSettlement } from "@/lib/stripe/referral-settlement";
 
 export async function POST(req: Request) {
   console.log('[WEBHOOK] Received request');
@@ -110,9 +111,6 @@ export async function POST(req: Request) {
           }
         }
 
-        // ===== Partner settlement accrual (자동 적립) =====
-        // NOTE: DB에 `public.create_referral_settlement` 함수가 적용되어 있어야 합니다.
-        // 실패하더라도 구독 생성은 성공해야 하므로 "로그만 남기고" 진행합니다.
         const ZERO_DECIMAL = new Set([
           "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf",
           "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
@@ -131,21 +129,23 @@ export async function POST(req: Request) {
             ? amountSmallest / divisor
             : null;
 
+        // ===== Partner settlement accrual (자동 적립) =====
+        // RPC가 없거나 실패해도 서버에서 직접 insert 하는 fallback을 수행합니다.
         if (paymentAmount && paymentAmount > 0) {
-          const { error: settleError } = await supabase.rpc('create_referral_settlement', {
-            payer_id: userId,
-            payment_amount: paymentAmount,
-            stripe_subscription_id: subscriptionId,
-            stripe_checkout_session_id: session.id,
+          const result = await accrueReferralSettlement({
+            supabaseAdmin: supabase as any,
+            payerId: userId,
+            paymentAmount,
+            stripeSubscriptionId: subscriptionId,
+            stripeCheckoutSessionId: session.id,
+            commissionRate: 10,
           });
 
-          if (settleError) {
-            console.error('[WEBHOOK] create_referral_settlement failed:', settleError);
+          if (!result.ok) {
+            console.error("[WEBHOOK] Partner settlement accrual failed:", result);
           } else {
-            console.log('[WEBHOOK] Partner settlement accrued');
+            console.log("[WEBHOOK] Partner settlement accrued:", result);
           }
-        } else {
-          console.log('[WEBHOOK] Skip settlement (no payment amount)');
         }
     } else {
       console.error('[WEBHOOK] Missing userId or planId');

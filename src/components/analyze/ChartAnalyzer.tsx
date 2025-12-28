@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useTheme } from "next-themes";
 import {
     createChart,
@@ -85,6 +85,7 @@ export function ChartAnalyzer({
     const [lastCandle, setLastCandle] = useState<{ time: Time; value: number } | null>(null);
     const [dataCount, setDataCount] = useState<number>(0);
     const [error, setError] = useState<string | null>(null);
+    const [showPointsPanel, setShowPointsPanel] = useState(false);
 
     // ✅ 모바일/좁은 화면 여부 (tick/spacing 등 UX 분기용)
     // 단순 640px 기준만 쓰면 태블릿/모바일 가로 등에서 누락될 수 있어, 900px까지를 "좁은 화면"으로 봅니다.
@@ -104,9 +105,9 @@ export function ChartAnalyzer({
             return () => mq.removeEventListener("change", update);
         }
         // 구형 Safari 대응
-        // @ts-ignore
+        // @ts-expect-error - Safari 구버전 matchMedia는 addListener/removeListener만 지원
         mq.addListener?.(update);
-        // @ts-ignore
+        // @ts-expect-error - Safari 구버전 matchMedia는 addListener/removeListener만 지원
         return () => mq.removeListener?.(update);
     }, []);
 
@@ -243,8 +244,53 @@ export function ChartAnalyzer({
     const clampFutureTime = (t: number, maxT: number) => Math.min(t, maxT);
 
     // ✅ Time 타입 안전 비교 유틸 (string/number 모두 처리)
-    const timeToTs = (t: Time) => (typeof t === "string" ? new Date(t).getTime() : (t as number) * 1000);
-    const compareTime = (a: Time, b: Time) => timeToTs(a) - timeToTs(b);
+    const timeToTs = useCallback(
+        (t: Time) => (typeof t === "string" ? new Date(t).getTime() : (t as number) * 1000),
+        []
+    );
+    const compareTime = useCallback((a: Time, b: Time) => timeToTs(a) - timeToTs(b), [timeToTs]);
+
+    const formatPointTime = useCallback((t: Time) => {
+        // YYYY-MM-DD(string) or unix seconds(number)
+        if (typeof t === "string") {
+            // 문자열 날짜는 그대로 가독성 높게 사용
+            const d = new Date(t);
+            if (!Number.isFinite(d.getTime())) return t;
+            return d.toLocaleDateString("ko-KR", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+            });
+        }
+
+        const d = new Date((t as number) * 1000);
+        const isIntraday = ["1", "60"].includes(intervalRef.current);
+        if (isIntraday) {
+            return d.toLocaleString("ko-KR", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+            });
+        }
+        return d.toLocaleDateString("ko-KR", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        });
+    }, []);
+
+    const formattedPoints = useMemo(() => {
+        // UI 패널용: 항상 time 정렬 + 중복 제거
+        const unique = new Map<string, PredictionPoint>();
+        points.forEach((p) => {
+            const key = typeof p.time === "string" ? p.time : String(p.time);
+            unique.set(key, p);
+        });
+        return Array.from(unique.values()).sort((a, b) => compareTime(a.time, b.time));
+    }, [points, compareTime]);
 
     // ✅ interval별 목표 픽셀 간격 (작을수록 촘촘)
     const getTargetBarSpacingPx = (itv: string) => {
@@ -471,12 +517,12 @@ export function ChartAnalyzer({
 
     const addPredictionSegmentSeries = useCallback((color: string) => {
         const chart = chartRef.current;
-        if (!chart) return { seg: null as any, glow: null as any };
+        if (!chart) return { seg: null as ISeriesApi<"Line"> | null, glow: null as ISeriesApi<"Line"> | null };
 
         // glow 먼저 (뒤에 깔림)
         const glow = chart.addSeries(LineSeries, {
             color: hexToRgba(color, 0.35),
-            lineWidth: 10 as any,
+            lineWidth: 4,
             crosshairMarkerVisible: false,
             priceLineVisible: false,
             lastValueVisible: false,
@@ -575,7 +621,7 @@ export function ChartAnalyzer({
             topColor: "rgba(41, 98, 255, 0)",
             bottomColor: "rgba(0, 0, 0, 0)",
             lineColor: "rgba(41, 98, 255, 0.3)", // 반투명한 파란색
-            lineWidth: 8 as any,                      // 아주 두껍게
+            lineWidth: 4,                      // (타입 허용 범위) 최대 두께
             visible: chartStyle === "line",
         });
 
@@ -584,7 +630,7 @@ export function ChartAnalyzer({
             topColor: "rgba(41, 98, 255, 0.1)", // 위쪽은 아주 살짝 투명하게 채움
             bottomColor: "rgba(0, 0, 0, 0)",
             lineColor: "#2962FF",               // 메인 파란색
-            lineWidth: 4 as any,                       // 2 -> 4로 두껍게 변경
+            lineWidth: 4,                       // 2 -> 4로 두껍게 변경
             visible: chartStyle === "line",
         });
 
@@ -611,7 +657,7 @@ export function ChartAnalyzer({
         // ✅ Glow effect series (Blurry wide line behind)
         const predictionGlowSeries = chart.addSeries(LineSeries, {
             color: "rgba(245, 158, 11, 0.4)",
-            lineWidth: 10 as any,
+            lineWidth: 4,
             lineStyle: 0,
             crosshairMarkerVisible: false,
             priceLineVisible: false,
@@ -915,7 +961,7 @@ export function ChartAnalyzer({
                 const lastRealClose = lastReal.close;
 
                 const rangeData = buildFutureRange(lastRealTime, lastRealClose, interval, futureBars);
-                rangeSeriesRef.current?.setData(rangeData as any);
+                rangeSeriesRef.current?.setData(rangeData);
 
                 // ✅ futureBars를 ref에 저장 (resize에서 사용)
                 futureBarsRef.current = futureBars;
@@ -1014,7 +1060,7 @@ export function ChartAnalyzer({
         const lastClose = lastReal.close;
 
         const rangeData = buildFutureRange(lastTime, lastClose, itv, futureBars);
-        rangeSeriesRef.current.setData(rangeData as any);
+        rangeSeriesRef.current.setData(rangeData);
 
         // ✅ futureBarsRef 갱신
         futureBarsRef.current = futureBars;
@@ -1203,6 +1249,7 @@ export function ChartAnalyzer({
                         top: marker.y,
                         display: (marker.x < 0 || marker.y < 0) ? 'none' : 'flex'
                     }}
+                    title={`${formatPointTime(marker.time)} / ${marker.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}`}
                     onClick={(e) => {
                         e.stopPropagation();
                         handleRemovePoint(marker.time);
@@ -1210,6 +1257,16 @@ export function ChartAnalyzer({
                 >
                     {/* ✅ 이미지 스타일의 네온 포인트 마커 */}
                     <div className="relative flex items-center justify-center">
+                        {/* ✅ 날짜/값 툴팁 (PC: hover, 모바일: title/패널로 보완) */}
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 hidden group-hover:block pointer-events-none">
+                            <div className="rounded-md bg-black/80 text-white text-[11px] px-2 py-1 whitespace-nowrap shadow-lg border border-white/10">
+                                <div className="font-semibold">{formatPointTime(marker.time)}</div>
+                                <div className="opacity-90">
+                                    {marker.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+                                </div>
+                            </div>
+                        </div>
+
                         {/* 외곽 광채 */}
                         <div className="absolute w-6 h-6 bg-orange-500/40 rounded-full animate-pulse blur-sm" />
                         {/* 메인 포인트 */}
@@ -1282,14 +1339,69 @@ export function ChartAnalyzer({
             {/* Clear prediction points */}
             {points.length > 0 && (
                 <div className="absolute top-4 right-4 z-20">
-                    <Button
-                        onClick={handleClearPoints}
-                        variant="outline"
-                        size="sm"
-                        className="shadow-md bg-white hover:bg-gray-50 text-gray-900 border-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-white dark:border-gray-600"
-                    >
-                        예측 초기화 ({points.length})
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            onClick={() => setShowPointsPanel((v) => !v)}
+                            variant="outline"
+                            size="sm"
+                            className="shadow-md bg-white hover:bg-gray-50 text-gray-900 border-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-white dark:border-gray-600"
+                        >
+                            포인트 ({points.length})
+                        </Button>
+                        <Button
+                            onClick={handleClearPoints}
+                            variant="outline"
+                            size="sm"
+                            className="shadow-md bg-white hover:bg-gray-50 text-gray-900 border-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-white dark:border-gray-600"
+                        >
+                            예측 초기화 ({points.length})
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {/* ✅ Prediction Points Panel (가독성 개선) */}
+            {showPointsPanel && points.length > 0 && (
+                <div className="absolute top-16 right-4 z-30 w-[280px] max-h-[55vh] overflow-auto rounded-xl border border-gray-200 bg-white/95 backdrop-blur-sm shadow-xl dark:border-white/10 dark:bg-gray-950/80">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-white/10">
+                        <div className="text-sm font-semibold text-gray-900 dark:text-white">예측 포인트</div>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => setShowPointsPanel(false)}
+                            >
+                                닫기
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="p-2 space-y-2">
+                        {formattedPoints.map((p) => (
+                            <div
+                                key={`${p.time}-${p.value}`}
+                                className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 hover:bg-gray-100 dark:hover:bg-white/10"
+                            >
+                                <div className="min-w-0">
+                                    <div className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                                        {formatPointTime(p.time)}
+                                    </div>
+                                    <div className="text-xs text-gray-600 dark:text-gray-300">
+                                        {p.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+                                    </div>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-500/10"
+                                    onClick={() => handleRemovePoint(p.time)}
+                                >
+                                    삭제
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>

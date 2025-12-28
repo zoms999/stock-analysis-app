@@ -773,8 +773,8 @@ export function SavedChartViewer({
 
             <div ref={chartContainerRef} className="w-full h-full" />
 
-            {/* ✅ Prediction Points Overlay Markers (항상 라벨 표시) */}
-            {overlayMarkers.map((m) => (
+            {/* ✅ Prediction Points Overlay Markers (항상 라벨 표시 / 지그재그 배치) */}
+            {overlayMarkers.map((m, idx) => (
                 <div
                     key={m.id}
                     className="absolute z-30 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
@@ -787,7 +787,9 @@ export function SavedChartViewer({
                 >
                     <div className="relative flex items-center justify-center">
                         {/* 라벨 */}
-                        <div className="absolute -top-10 left-1/2 -translate-x-1/2">
+                        <div
+                            className={`absolute left-1/2 -translate-x-1/2 ${idx % 2 === 0 ? "-top-10" : "top-6"}`}
+                        >
                             <div className="rounded-md bg-black/70 text-white text-[11px] px-2 py-1 whitespace-nowrap shadow-lg border border-white/10 opacity-85">
                                 <div className="font-semibold">{formatPointTimeLabel(m.time)}</div>
                                 <div className="opacity-95">

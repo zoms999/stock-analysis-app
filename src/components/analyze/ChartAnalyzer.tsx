@@ -89,11 +89,13 @@ export function ChartAnalyzer({
     // ✅ 모바일/좁은 화면 여부 (tick/spacing 등 UX 분기용)
     // 단순 640px 기준만 쓰면 태블릿/모바일 가로 등에서 누락될 수 있어, 900px까지를 "좁은 화면"으로 봅니다.
     const isMobileRef = useRef(false);
+    const [isNarrowScreen, setIsNarrowScreen] = useState(false);
     useEffect(() => {
         if (typeof window === "undefined") return;
         const mq = window.matchMedia("(max-width: 900px)");
         const update = () => {
             isMobileRef.current = mq.matches;
+            setIsNarrowScreen(mq.matches);
         };
         update();
         // addEventListener 지원 브라우저 우선
@@ -169,6 +171,24 @@ export function ChartAnalyzer({
     // --- [Future Range UI] ---
     const [futureMode, setFutureMode] = useState<"1m" | "3m" | "custom">("1m");
     const [customDays, setCustomDays] = useState<number>(30);
+
+    // ✅ 모바일 최적화: 기본 표시 구간을 짧게 잡아 tick이 "월"이 아니라 "일"로 내려오게 함
+    // - 사용자 조작을 방해하지 않도록 최초 1회만 적용
+    const mobileInitRef = useRef(false);
+    useEffect(() => {
+        if (!mounted) return;
+        if (!isNarrowScreen) return;
+        if (mobileInitRef.current) return;
+
+        // 일봉에서 "일별"로 보이게 하려면 과거 구간을 너무 길게 잡으면 월 tick으로 뭉칩니다.
+        // 기본값: 최근 14일 + 미래는 기존 UI 그대로 사용(오프셋/예측 공간)
+        if (interval === "D") {
+            setFutureMode("custom");
+            setCustomDays(14);
+        }
+
+        mobileInitRef.current = true;
+    }, [mounted, isNarrowScreen, interval]);
 
     // Keep base (real) data for re-apply when future range changes (no refetch)
     const baseCandleDataRef = useRef<CandlestickData[]>([]);
@@ -263,7 +283,7 @@ export function ChartAnalyzer({
         // ✅ 모바일(좁은 화면) + 일봉은 한 화면에 너무 많은 봉을 넣지 않게 제한(일 단위 tick을 유도)
         const [min, max] =
             (isMobileRef.current && itv === "D")
-                ? ([30, 60] as [number, number])
+                ? ([14, 40] as [number, number])
                 : (minMax[itv] ?? [40, 300]);
         return Math.max(min, Math.min(max, bars));
     };
@@ -271,6 +291,14 @@ export function ChartAnalyzer({
     // ✅ futureMode에 맞춰 히스토리 바 수 계산 (일봉 전용)
     const getHistoryBars = (itv: string) => {
         if (itv !== "D") return null; // 일봉이 아니면 자동 계산 사용
+
+        // ✅ 모바일에서는 "일별" 가독성을 위해 기본 과거 범위를 줄임
+        if (isMobileRef.current) {
+            if (futureMode === "1m") return 30;   // 모바일 1개월: 과거 30일
+            if (futureMode === "3m") return 60;   // 모바일 3개월: 과거 60일 (너무 길면 월로 뭉침)
+            // custom: customDays * 2 (상한 90)
+            return Math.max(14, Math.min(90, customDays * 2));
+        }
 
         if (futureMode === "1m") return 60;  // 1개월: 과거 60일
         if (futureMode === "3m") return 120; // 3개월: 과거 120일
@@ -1242,6 +1270,9 @@ export function ChartAnalyzer({
                             max={365}
                             value={customDays}
                             onChange={(e) => setCustomDays(parseInt(e.target.value || "30", 10))}
+                            aria-label="직접 기간(일) 입력"
+                            title="직접 기간(일) 입력"
+                            placeholder="일"
                             className="w-16 bg-transparent text-sm outline-none text-gray-900 dark:text-white"
                         />
                     </div>

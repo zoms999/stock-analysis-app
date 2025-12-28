@@ -93,6 +93,12 @@ export function SavedChartViewer({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // --- [HTML Overlay Markers: prediction points] ---
+    const [overlayMarkers, setOverlayMarkers] = useState<
+        { id: string; x: number; y: number; time: Time; value: number }[]
+    >([]);
+    const markerPointsRef = useRef<Array<{ time: Time; value: number }>>([]);
+
     // base(real) data cache
     const baseCandleRef = useRef<CandlestickData[]>([]);
     const baseAreaRef = useRef<{ time: Time; value: number }[]>([]);
@@ -125,6 +131,69 @@ export function SavedChartViewer({
                 return date.toLocaleDateString();
         }
     };
+
+    const formatPointTimeLabel = useCallback((t: Time) => {
+        const isIntraday = ["1", "60"].includes(interval);
+
+        if (typeof t === "string") {
+            const d = new Date(t);
+            if (!Number.isFinite(d.getTime())) return t;
+            const mm = String(d.getMonth() + 1).padStart(2, "0");
+            const dd = String(d.getDate()).padStart(2, "0");
+            return `${mm}.${dd}`;
+        }
+
+        const d = new Date((t as number) * 1000);
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        if (isIntraday) {
+            const hh = String(d.getHours()).padStart(2, "0");
+            const mi = String(d.getMinutes()).padStart(2, "0");
+            return `${mm}.${dd} ${hh}:${mi}`;
+        }
+        return `${mm}.${dd}`;
+    }, [interval]);
+
+    const updateOverlayPositions = useCallback(() => {
+        const chart = chartRef.current;
+        if (!chart) {
+            setOverlayMarkers([]);
+            return;
+        }
+
+        const points = markerPointsRef.current;
+        if (!points.length) {
+            setOverlayMarkers([]);
+            return;
+        }
+
+        // 좌표계에 사용할 series (prediction segment 우선)
+        const ySeries =
+            predSegmentSeriesRef.current[0] ||
+            predSeriesRef.current ||
+            areaSeriesRef.current ||
+            candleSeriesRef.current;
+
+        if (!ySeries) {
+            setOverlayMarkers([]);
+            return;
+        }
+
+        const timeScale = chart.timeScale();
+        const newMarkers = points.map((p) => {
+            const x = timeScale.timeToCoordinate(p.time);
+            const y = ySeries.priceToCoordinate(p.value);
+            return {
+                id: `${String(p.time)}-${p.value}`,
+                x: x ?? -1000,
+                y: y ?? -1000,
+                time: p.time,
+                value: p.value,
+            };
+        });
+
+        setOverlayMarkers(newMarkers);
+    }, []);
 
     const clearPredictionSegments = useCallback(() => {
         const chart = chartRef.current;
@@ -579,6 +648,41 @@ export function SavedChartViewer({
             const sorted = Array.from(uniqueMap.entries())
                 .map(([t, v]) => ({ time: t as Time, value: v }))
                 .sort((a, b) => getTs(a.time) - getTs(b.time));
+
+            // ✅ Overlay marker points: predictionPoints만 (lastReal 연결점 제외)
+            // normalized에는 lastReal이 섞일 수 있으니, predictionPoints만 따로 normalize/dedupe하여 사용
+            const predOnlySorted = (() => {
+                const predOnlyRaw = [...predictionPoints].sort((a, b) => getTs(a.time) - getTs(b.time));
+                const refT = lastRealRef.current ? lastRealRef.current.time : predOnlyRaw[0]?.time;
+                const useStr = typeof refT === "string";
+                const predOnlyNorm = predOnlyRaw
+                    .map((p) => {
+                        const ms = getTs(p.time);
+                        if (isNaN(ms)) return null;
+                        let newTime: Time;
+                        if (useStr) {
+                            const d = new Date(ms);
+                            const y = d.getFullYear();
+                            const m = String(d.getMonth() + 1).padStart(2, "0");
+                            const day = String(d.getDate()).padStart(2, "0");
+                            newTime = `${y}-${m}-${day}` as Time;
+                        } else {
+                            newTime = Math.floor(ms / 1000) as Time;
+                        }
+                        return { time: newTime, value: p.value };
+                    })
+                    .filter((p): p is { time: Time; value: number } => p !== null);
+
+                const map = new Map<string | number, number>();
+                predOnlyNorm.forEach((p) => map.set(p.time as any, p.value));
+                return Array.from(map.entries())
+                    .map(([t, v]) => ({ time: t as Time, value: v }))
+                    .sort((a, b) => getTs(a.time) - getTs(b.time));
+            })();
+
+            markerPointsRef.current = predOnlySorted;
+            // 좌표 업데이트는 다음 프레임에 (시리즈 setData 후 좌표계 안정화)
+            requestAnimationFrame(updateOverlayPositions);
             
             if (sorted.length >= 2) {
                  // ✅ 구간별 컬러: 왼쪽(초록) -> 오른쪽(주황) step-gradient
@@ -606,6 +710,22 @@ export function SavedChartViewer({
     useEffect(() => {
         updatePredictionSeries();
     }, [updatePredictionSeries]);
+
+    // overlay sync with chart interactions
+    useEffect(() => {
+        const chart = chartRef.current;
+        if (!chart) return;
+
+        updateOverlayPositions();
+        const handle = () => requestAnimationFrame(updateOverlayPositions);
+        chart.timeScale().subscribeVisibleLogicalRangeChange(handle);
+        chart.timeScale().subscribeSizeChange(handle);
+
+        return () => {
+            chart.timeScale().unsubscribeVisibleLogicalRangeChange(handle);
+            chart.timeScale().unsubscribeSizeChange(handle);
+        };
+    }, [updateOverlayPositions]);
 
     // Update prediction when base data loaded (to connect line)
     useEffect(() => {
@@ -652,6 +772,36 @@ export function SavedChartViewer({
             )}
 
             <div ref={chartContainerRef} className="w-full h-full" />
+
+            {/* ✅ Prediction Points Overlay Markers (항상 라벨 표시) */}
+            {overlayMarkers.map((m) => (
+                <div
+                    key={m.id}
+                    className="absolute z-30 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{
+                        left: m.x,
+                        top: m.y,
+                        display: m.x < 0 || m.y < 0 ? "none" : "flex",
+                    }}
+                    title={`${formatPointTimeLabel(m.time)} / ${m.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}`}
+                >
+                    <div className="relative flex items-center justify-center">
+                        {/* 라벨 */}
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2">
+                            <div className="rounded-md bg-black/70 text-white text-[11px] px-2 py-1 whitespace-nowrap shadow-lg border border-white/10 opacity-85">
+                                <div className="font-semibold">{formatPointTimeLabel(m.time)}</div>
+                                <div className="opacity-95">
+                                    {m.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 점 */}
+                        <div className="absolute w-6 h-6 bg-orange-500/30 rounded-full blur-sm" />
+                        <div className="relative w-3 h-3 rounded-full bg-gradient-to-br from-yellow-300 to-orange-600 border border-white/50 shadow-[0_0_10px_rgba(251,146,60,0.8)]" />
+                    </div>
+                </div>
+            ))}
         </div>
     );
 }

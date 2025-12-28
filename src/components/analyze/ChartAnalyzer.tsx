@@ -282,6 +282,32 @@ export function ChartAnalyzer({
         });
     }, []);
 
+    // 라벨용(항상 표시): 너무 길지 않게 축약
+    const formatPointTimeLabel = useCallback((t: Time) => {
+        const isIntraday = ["1", "60"].includes(intervalRef.current);
+
+        if (typeof t === "string") {
+            // YYYY-MM-DD
+            const d = new Date(t);
+            if (!Number.isFinite(d.getTime())) return t;
+            const mm = String(d.getMonth() + 1).padStart(2, "0");
+            const dd = String(d.getDate()).padStart(2, "0");
+            return `${mm}.${dd}`;
+        }
+
+        const d = new Date((t as number) * 1000);
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+
+        if (isIntraday) {
+            const hh = String(d.getHours()).padStart(2, "0");
+            const mi = String(d.getMinutes()).padStart(2, "0");
+            return `${mm}.${dd} ${hh}:${mi}`;
+        }
+
+        return `${mm}.${dd}`;
+    }, []);
+
     const formattedPoints = useMemo(() => {
         // UI 패널용: 항상 time 정렬 + 중복 제거
         const unique = new Map<string, PredictionPoint>();
@@ -1240,7 +1266,7 @@ export function ChartAnalyzer({
             <div ref={chartContainerRef} className="w-full h-full relative" />
 
             {/* HTML Overlay Markers */}
-            {overlayMarkers.map((marker) => (
+            {overlayMarkers.map((marker, idx) => (
                 <div
                     key={marker.id}
                     className="absolute z-30 transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer"
@@ -1257,11 +1283,14 @@ export function ChartAnalyzer({
                 >
                     {/* ✅ 이미지 스타일의 네온 포인트 마커 */}
                     <div className="relative flex items-center justify-center">
-                        {/* ✅ 날짜/값 툴팁 (PC: hover, 모바일: title/패널로 보완) */}
-                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 hidden group-hover:block pointer-events-none">
-                            <div className="rounded-md bg-black/80 text-white text-[11px] px-2 py-1 whitespace-nowrap shadow-lg border border-white/10">
-                                <div className="font-semibold">{formatPointTime(marker.time)}</div>
-                                <div className="opacity-90">
+                        {/* ✅ 날짜/값 라벨 (항상 표시) */}
+                        <div
+                            className={`absolute left-1/2 -translate-x-1/2 pointer-events-none ${idx % 2 === 0 ? "-top-10" : "top-6"
+                                }`}
+                        >
+                            <div className="rounded-md bg-black/70 text-white text-[11px] px-2 py-1 whitespace-nowrap shadow-lg border border-white/10 opacity-80 transition-opacity group-hover:opacity-100">
+                                <div className="font-semibold">{formatPointTimeLabel(marker.time)}</div>
+                                <div className="opacity-95">
                                     {marker.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
                                 </div>
                             </div>

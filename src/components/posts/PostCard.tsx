@@ -31,9 +31,10 @@ export function PostCard({ post }: PostCardProps) {
 
   return (
     <Link href={`/posts/${post.id}`}>
-      <Card className="group overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer border-border/50 hover:border-primary/30">
+      {/* ✅ 테두리 없는(플랫) 카드 */}
+      <Card className="group overflow-hidden transition-all duration-300 cursor-pointer border-0 shadow-none bg-transparent">
         {/* Thumbnail / Chart Area */}
-        <div className="relative aspect-video bg-gradient-to-br from-primary/10 to-secondary/10 overflow-hidden">
+        <div className="relative aspect-video bg-background/30 overflow-hidden rounded-xl">
            {/* Render Live Chart if config exists, else Image, else Icon */}
            {chartConfig ? (
               <div className="w-full h-full pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity">

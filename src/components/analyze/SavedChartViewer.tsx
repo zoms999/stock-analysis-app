@@ -277,8 +277,8 @@ export function SavedChartViewer({
 
         // glow 먼저 (뒤에 깔림)
         const glow = chart.addSeries(LineSeries, {
-            color: hexToRgba(color, 0.35),
-            lineWidth: 10 as any,
+            color: hexToRgba(color, mode === "card" ? 0.18 : 0.35),
+            lineWidth: (mode === "card" ? 4 : 10) as any,
             crosshairMarkerVisible: false,
             priceLineVisible: false,
             lastValueVisible: false,
@@ -297,7 +297,7 @@ export function SavedChartViewer({
         predSegmentSeriesRef.current.push(seg);
 
         return { seg, glow };
-    }, []);
+    }, [mode]);
 
     // 미래 여백: 예측점이 미래면 그만큼 rightOffset 확보
     const computeFutureBarsFromPrediction = useCallback(() => {
@@ -406,7 +406,8 @@ export function SavedChartViewer({
         // visible switch
         candle.applyOptions({ visible: viewStyle === "candle" });
         area.applyOptions({ visible: viewStyle === "line" });
-        areaGlow.applyOptions({ visible: viewStyle === "line" });
+        // ✅ 카드에서는 글로우 OFF (번짐 방지)
+        areaGlow.applyOptions({ visible: viewStyle === "line" && mode !== "card" });
 
         if (lastRealRef.current && rangeSeriesRef.current) {
             // ✅ card 모드: 예측 라인은 보여주되, 미래 여백은 제한
@@ -498,9 +499,10 @@ export function SavedChartViewer({
         const areaGlow = chart.addSeries(AreaSeries, {
             topColor: "rgba(41, 98, 255, 0)",
             bottomColor: "rgba(0, 0, 0, 0)",
-            lineColor: "rgba(41, 98, 255, 0.3)", // 반투명한 파란색
-            lineWidth: 8 as any,                      // 아주 두껍게
-            visible: viewStyle === "line",
+            lineColor: "rgba(41, 98, 255, 0.25)", // 반투명한 파란색
+            lineWidth: 8 as any,                  // 상세에서만 글로우
+            // ✅ 카드(리스트)에서는 글로우가 번져 보이므로 비활성화
+            visible: viewStyle === "line" && mode !== "card",
         });
 
         // ✅ 파란색 실측 메인 라인
@@ -531,7 +533,7 @@ export function SavedChartViewer({
 
         const predGlow = chart.addSeries(LineSeries, {
             color: "rgba(245, 158, 11, 0.4)",
-            lineWidth: 10 as any,
+            lineWidth: (mode === "card" ? 4 : 10) as any,
             lineStyle: 0,
             crosshairMarkerVisible: false,
             priceLineVisible: false,

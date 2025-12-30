@@ -54,15 +54,15 @@ export default function PostDetailPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto max-w-4xl py-10 text-center">
-        <div className="animate-pulse">로딩 중...</div>
+      <div className="container mx-auto max-w-3xl py-20 text-center">
+        <div className="animate-pulse text-muted-foreground">로딩 중...</div>
       </div>
     );
   }
 
   if (!post) {
     return (
-      <div className="container mx-auto max-w-4xl py-10 text-center">
+      <div className="container mx-auto max-w-3xl py-20 text-center">
         <h1 className="text-2xl font-bold mb-4">게시글을 찾을 수 없습니다.</h1>
         <Link href="/">
           <Button>홈으로 돌아가기</Button>
@@ -93,32 +93,76 @@ export default function PostDetailPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-4xl py-6 pb-20 space-y-6">
+    <div className="container mx-auto max-w-3xl py-8 md:py-12 space-y-10">
       {/* Back Button */}
-      <Link href="/" className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors mb-2">
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        목록으로 돌아가기
-      </Link>
+      <div>
+        <Link href="/" className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          목록으로 돌아가기
+        </Link>
+      </div>
 
-      {/* Prediction Info (if exists) */}
-      {post.prediction_type && post.entry_price && post.target_price && post.stop_loss_price && post.target_date && (
-        <PredictionInfo
-          predictionType={post.prediction_type}
-          entryPrice={post.entry_price}
-          targetPrice={post.target_price}
-          stopLossPrice={post.stop_loss_price}
-          targetDate={post.target_date}
-          currentPrice={currentPrice || undefined}
-          profitPercentage={accuracyResult?.profitPercentage}
-          status={accuracyResult?.status || post.prediction_status}
-        />
-      )}
+      {/* Post Content Wrapper */}
+      <article className="space-y-8">
+        {/* Header Section */}
+        <header className="space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-bold tracking-tight">
+                {post.ticker_symbol}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                {new Date(post.created_at).toLocaleDateString('ko-KR', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </span>
+            </div>
+            
+            <h1 className="text-3xl md:text-4xl font-extrabold text-foreground leading-tight tracking-tight">
+              {post.title}
+            </h1>
+          </div>
 
-      {/* Chart Section */}
-      <section className="rounded-xl border border-border bg-card p-4 md:p-6 shadow-sm">
-        <div className="mb-4">
-          <h2 className="text-sm font-medium text-muted-foreground mb-1">차트 분석</h2>
-          <div className="h-[400px] w-full rounded-lg overflow-hidden border border-border">
+          <div className="flex items-center justify-between py-4 border-y border-border/50">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-sm font-bold border border-border/50">
+                {(post.profiles?.nickname || 'U')[0]}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-foreground">{post.profiles?.nickname || '익명'}</span>
+                <span className="text-xs text-muted-foreground">조회 {post.view_count || 0}</span>
+              </div>
+            </div>
+            
+            <Button variant="ghost" size="sm" className="h-9 gap-2 text-muted-foreground hover:text-foreground">
+              <Share2 className="h-4 w-4" />
+              <span className="hidden sm:inline">공유하기</span>
+            </Button>
+          </div>
+        </header>
+
+        {/* Prediction Info (if exists) */}
+        {post.prediction_type && post.entry_price && post.target_price && post.stop_loss_price && post.target_date && (
+          <div className="py-2">
+            <PredictionInfo
+              predictionType={post.prediction_type}
+              entryPrice={post.entry_price}
+              targetPrice={post.target_price}
+              stopLossPrice={post.stop_loss_price}
+              targetDate={post.target_date}
+              currentPrice={currentPrice || undefined}
+              profitPercentage={accuracyResult?.profitPercentage}
+              status={accuracyResult?.status || post.prediction_status}
+            />
+          </div>
+        )}
+
+        {/* Chart Section - Borderless container, but chart itself usually needs a subtle boundary */}
+        <section>
+          <h2 className="text-lg font-bold text-foreground mb-3">차트 분석</h2>
+          <div className="h-[450px] w-full rounded-xl overflow-hidden border border-border/50 bg-background/50">
             <SavedChartViewer
               symbol={post.ticker_symbol}
               interval={interval}
@@ -126,94 +170,54 @@ export default function PostDetailPage() {
               chartStyle={chartStyle}
             />
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Post Content */}
-      <article className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <header className="mb-6 border-b border-border pb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
-              {post.ticker_symbol}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {new Date(post.created_at).toLocaleDateString('ko-KR', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </span>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-3 leading-tight">
-            {post.title}
-          </h1>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
-                {(post.profiles?.nickname || 'U')[0]}
-              </div>
-              <div>
-                <p className="text-sm font-medium">{post.profiles?.nickname || '익명'}</p>
-                <p className="text-xs text-muted-foreground">조회 {post.view_count || 0}</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="h-8 gap-1">
-                <Share2 className="h-4 w-4" />
-                <span className="hidden sm:inline">공유</span>
-              </Button>
-            </div>
-          </div>
-        </header>
-
+        {/* Main Body Content */}
         <div
-          className="prose prose-invert max-w-none text-muted-foreground leading-relaxed mb-8"
+          className="prose prose-neutral dark:prose-invert max-w-none leading-loose text-foreground/90"
           dangerouslySetInnerHTML={{ __html: post.content }}
         />
 
-        <div className="flex items-center gap-3 pt-4 border-t border-border">
-          <Button variant="outline" className="gap-2 group">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-3 pt-8">
+          <Button variant="outline" className="h-11 px-6 rounded-full gap-2 group border-border/60 hover:border-primary/50 hover:bg-primary/5">
             <ThumbsUp className="h-4 w-4 group-hover:text-primary transition-colors" />
-            좋아요 0
-          </Button>
-          <Button variant="ghost" className="gap-2">
-            <MessageSquare className="h-4 w-4" />
-            댓글 0
+            좋아요 <span className="ml-1 font-mono">0</span>
           </Button>
         </div>
       </article>
 
-      {/* Comments Section */}
-      <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+      {/* Divider */}
+      <hr className="border-border/40" />
+
+      {/* Comments Section - Clean Style */}
+      <section className="space-y-8">
+        <h3 className="text-xl font-bold flex items-center gap-2">
           댓글 <span className="text-primary">0</span>
         </h3>
 
         {/* Comment Input */}
-        <div className="flex gap-3 mb-8">
-          <div className="h-10 w-10 rounded-full bg-muted/50 flex-shrink-0" />
-          <div className="flex-1">
+        <div className="flex gap-4">
+          <div className="h-10 w-10 rounded-full bg-muted flex-shrink-0" />
+          <div className="flex-1 space-y-3">
             <textarea
-              className="w-full min-h-[80px] rounded-lg border border-border bg-secondary/50 p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-              placeholder="매너있는 댓글을 남겨주세요."
+              className="w-full min-h-[100px] rounded-xl border border-border/60 bg-transparent p-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none placeholder:text-muted-foreground/70"
+              placeholder="의견을 남겨주세요."
               value={comment}
               onChange={(e) => setComment(e.target.value)}
             />
-            <div className="flex justify-end mt-2">
-              <Button size="sm" disabled={!comment.trim()}>등록</Button>
+            <div className="flex justify-end">
+              <Button size="sm" disabled={!comment.trim()} className="rounded-full px-6">등록</Button>
             </div>
           </div>
         </div>
 
-        {/* Comment List */}
-        <div className="space-y-6">
-          <div className="text-center py-8 text-muted-foreground text-sm">
-            아직 댓글이 없습니다. 첫 번째 댓글을 남겨보세요!
-          </div>
+        {/* Comment List Placeholder */}
+        <div className="py-10 text-center text-muted-foreground/60 text-sm">
+          아직 댓글이 없습니다.<br/>첫 번째 댓글의 주인공이 되어보세요!
         </div>
       </section>
+
       {/* Limit Popup */}
       <LimitPopup 
         isOpen={showLimitPopup} 

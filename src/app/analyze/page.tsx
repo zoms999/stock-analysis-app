@@ -142,8 +142,9 @@ export default function AnalyzePage() {
                 {/* 2. Intervals moved to Chart Header */}
 
                 {/* 3. Main Chart Area */}
-                <Card className="border border-border shadow-sm overflow-hidden bg-card">
-                    <div className="px-4 py-2 border-b border-border flex flex-col sm:flex-row justify-between items-center bg-muted/30 gap-4">
+                {/* ✅ 테두리 없는(플랫) 스타일 */}
+                <Card className="border-0 shadow-none overflow-hidden bg-transparent">
+                    <div className="px-4 py-2 flex flex-col sm:flex-row justify-between items-center bg-transparent gap-4">
                         <div className="flex items-center gap-3">
                             <h2 className="font-bold text-lg text-foreground">{symbol}</h2>
                             <span className="text-sm text-muted-foreground mr-2">
@@ -163,7 +164,7 @@ export default function AnalyzePage() {
 
                         <div className="flex items-center gap-2">
                             <Tabs value={interval} onValueChange={setInterval} className="w-full sm:w-auto">
-                                <TabsList className="bg-background border border-border h-8 p-0.5">
+                                <TabsList className="bg-background/60 border-0 h-8 p-0.5">
                                     {activeIntervals.map((item) => (
                                         <TabsTrigger
                                             key={item.value}
@@ -176,7 +177,7 @@ export default function AnalyzePage() {
                                 </TabsList>
                             </Tabs>
 
-                            <div className="flex items-center bg-card border border-border rounded-lg p-0.5 h-8">
+                            <div className="flex items-center bg-background/60 border-0 rounded-lg p-0.5 h-8">
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -196,7 +197,7 @@ export default function AnalyzePage() {
                             </div>
                         </div>
                     </div>
-                    <div className="h-[550px] w-full relative">
+                    <div className="h-[550px] w-full relative rounded-xl overflow-hidden">
                         <ChartAnalyzer
                             symbol={symbol}
                             interval={interval}
@@ -209,14 +210,14 @@ export default function AnalyzePage() {
 
                 {/* 4. Text Editor Area */}
                 <div className="space-y-4">
-                    <Card className="border border-border shadow-sm bg-card">
-                        <div className="px-6 py-3 border-b border-border bg-muted/50">
+                    <Card className="border-0 shadow-none bg-transparent">
+                        <div className="px-6 py-3 bg-transparent">
                             <h3 className="font-semibold text-foreground">분석 내용</h3>
                         </div>
                         <div className="p-6">
                             <Textarea
                                 placeholder="차트 분석 내용을 작성해주세요..."
-                                className="min-h-[200px] text-base bg-background border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500 resize-none"
+                                className="min-h-[200px] text-base bg-background/60 border-0 text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500 resize-none"
                                 value={content}
                                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
                             />

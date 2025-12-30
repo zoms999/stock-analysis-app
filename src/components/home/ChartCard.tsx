@@ -86,7 +86,8 @@ export function ChartCard({ id, symbol, title, user, stats, predictionStatus, ch
   return (
     <div className="flex flex-col gap-4">
       {/* Chart Section */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm hover:shadow-md transition-all group relative">
+      {/* ✅ 테두리 없는(플랫) 카드 */}
+      <div className="rounded-xl border-0 bg-transparent overflow-hidden shadow-none transition-all group relative">
         <div className="p-4 pb-2 flex justify-between items-center">
             <h3 className="font-bold text-sm text-foreground/80">{symbol} Price</h3>
             {predictionStatus && (
@@ -97,7 +98,7 @@ export function ChartCard({ id, symbol, title, user, stats, predictionStatus, ch
         </div>
         
         {/* Chart Area - Fixed Height */}
-        <div className="h-[180px] w-full pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity">
+        <div className="h-[180px] w-full pointer-events-none opacity-90 group-hover:opacity-100 transition-opacity rounded-xl overflow-hidden bg-background/30">
             <SavedChartViewer
               symbol={symbol}
               interval={interval}
@@ -119,24 +120,24 @@ export function ChartCard({ id, symbol, title, user, stats, predictionStatus, ch
       {/* User Info Section */}
       <div onClick={handleCardClick} className="flex items-start gap-3 group/info cursor-pointer">
         <div className="flex flex-col items-center gap-1">
-             <Avatar className="h-10 w-10 border border-border">
+             <Avatar className="h-10 w-10 border-0">
                 <AvatarImage src={user.avatar} />
                 <AvatarFallback>{user.name[0]}</AvatarFallback>
              </Avatar>
-             <span className="text-[10px] text-muted-foreground font-medium">
-                {user.level}
-             </span>
-             <span className="text-[10px] text-muted-foreground font-medium">
-                랭킹{user.ranking}
-             </span>
         </div>
         <div className="flex-1 space-y-1">
             <h4 className="font-bold text-sm group-hover/info:text-primary transition-colors">
                 {title}
                 <span className="ml-2 text-[#4A90E2]">{stats.profit}</span>
             </h4>
-            <div className="text-xs text-muted-foreground">
-                {stats.winRate} • {stats.count}
+            <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                <span className="whitespace-nowrap">
+                    {stats.winRate} • {stats.count}
+                </span>
+                <span className="opacity-70">|</span>
+                <span className="whitespace-nowrap">
+                    {user.level} • 랭킹 {user.ranking}
+                </span>
             </div>
         </div>
       </div>

@@ -155,7 +155,7 @@ export function ChartBoardList() {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as SortOption)}
-          className="px-4 py-2 rounded-lg border border-border bg-card text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto"
+          className="px-4 py-2 rounded-lg border-0 bg-secondary/60 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto"
         >
           {SORT_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>

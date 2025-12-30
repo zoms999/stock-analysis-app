@@ -104,6 +104,7 @@ export function ChartCard({ id, symbol, title, user, stats, predictionStatus, ch
               predictionPoints={predictionPoints}
               chartStyle={chartStyle}
               showStyleToggle={false}
+              mode="card"
             />
         </div>
 

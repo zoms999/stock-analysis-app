@@ -43,6 +43,7 @@ export function PostCard({ post }: PostCardProps) {
                   predictionPoints={predictionPoints}
                   chartStyle={chartStyle}
                   showStyleToggle={false}
+                  mode="card"
                 />
               </div>
            ) : post.chart_image_url ? (

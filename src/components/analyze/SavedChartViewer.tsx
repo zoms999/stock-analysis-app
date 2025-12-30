@@ -27,6 +27,8 @@ interface SavedChartViewerProps {
     chartStyle?: ViewStyle;
     defaultStyle?: ViewStyle; // ✅ 상세 기본 line
     showStyleToggle?: boolean;
+    // ✅ 카드(메인 리스트)에서는 "오늘(현재일)" 기준으로만 보여주기 위해 미래 확장/예측 오버레이를 끌 수 있음
+    mode?: "detail" | "card";
 }
 
 interface CandleDataWithVolume extends CandlestickData {
@@ -40,13 +42,14 @@ export function SavedChartViewer({
     chartStyle = "candle",
     defaultStyle = "line",
     showStyleToggle = true,
+    mode = "detail",
 }: SavedChartViewerProps) {
     const { theme, systemTheme } = useTheme();
     const currentTheme = theme === "system" ? systemTheme : theme;
     const isDark = currentTheme === "dark";
 
     // ✅ Helper to get consistent timestamp in ms
-    const getTs = (t: Time) => (typeof t === 'string' ? new Date(t).getTime() : (t as number) * 1000);
+    const getTs = useCallback((t: Time) => (typeof t === 'string' ? new Date(t).getTime() : (t as number) * 1000), []);
 
     // ✅ startColor -> endColor 로 "구간별" 색을 만들어줌 (step-gradient)
     const lerpColor = (c1: string, c2: string, t: number) => {
@@ -115,15 +118,78 @@ export function SavedChartViewer({
         return 86400;
     };
 
-    const formatTick = (t: number | string, tickMarkType: TickMarkType) => {
+    // ✅ 카드 모드: "오늘(마지막 캔들)" 기준으로 우측 끝을 맞추고 최근 N개만 노출
+    const getCardWindowBars = useCallback((itv: string) => {
+        switch (itv) {
+            case "1": return 240;   // 1분봉: 최근 4시간
+            case "60": return 240;  // 60분봉: 최근 10일
+            case "D": return 45;    // 일봉: 최근 1.5개월
+            case "W": return 52;    // 주봉: 최근 1년
+            case "M": return 36;    // 월봉: 최근 3년
+            case "Y": return 20;    // 연봉: 최근 20년(사실상 충분)
+            default: return 45;
+        }
+    }, []);
+
+    // ✅ 카드 모드: 미래 예측을 보여주되, 축이 멀리(2026 등) 밀리지 않도록 미래 여백을 강하게 제한
+    const getCardFutureBarsCap = useCallback((itv: string) => {
+        switch (itv) {
+            case "1": return 120;  // 1분봉: 최대 2시간치 미래
+            case "60": return 48;  // 60분봉: 최대 2일치 미래
+            case "D": return 10;   // 일봉: 최대 10일치 미래 (카드에서 과도한 공백 방지)
+            case "W": return 8;    // 주봉: 최대 8주
+            case "M": return 6;    // 월봉: 최대 6개월
+            case "Y": return 3;    // 연봉: 최대 3년
+            default: return 10;
+        }
+    }, []);
+
+    // ✅ 상세 모드: ChartAnalyzer처럼 촘촘한 날짜 간격을 위한 barSpacing
+    const getTargetBarSpacingPx = useCallback((itv: string) => {
+        switch (itv) {
+            case "1": return 2;
+            case "60": return 2;
+            case "D": return 2;   // 일봉: 촘촘하게
+            case "W": return 3;
+            case "M": return 5;
+            case "Y": return 7;
+            default: return 2;
+        }
+    }, []);
+
+    // ✅ 상세 모드: "이번 달 1일" Time 생성
+    const buildMonthStartTime = useCallback((sample: Time): Time => {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth();
+        if (typeof sample === "string") {
+            const mm = String(m + 1).padStart(2, "0");
+            return `${y}-${mm}-01` as Time;
+        }
+        return Math.floor(Date.UTC(y, m, 1) / 1000) as Time;
+    }, []);
+
+    // ✅ 상세 모드: time 비교 유틸
+    const compareTime = useCallback((a: Time, b: Time) => getTs(a) - getTs(b), [getTs]);
+
+    const formatTick = (t: number | string, tickMarkType: TickMarkType, itv: string) => {
         const date = typeof t === "string" ? new Date(t) : new Date(t * 1000);
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        const year = date.getFullYear();
+
+        // ✅ 일봉(D)에서는 항상 MM.DD 형식으로 표시 (촘촘하게)
+        if (itv === "D") {
+            return `${month}.${day}`;
+        }
+
         switch (tickMarkType) {
             case TickMarkType.Year:
-                return date.getFullYear().toString();
+                return year.toString();
             case TickMarkType.Month:
-                return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}`;
+                return `${year}.${month}`;
             case TickMarkType.DayOfMonth:
-                return `${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
+                return `${month}.${day}`;
             case TickMarkType.Time:
             case TickMarkType.TimeWithSeconds:
                 return date.toLocaleTimeString("ko-KR", { hour12: false, hour: "2-digit", minute: "2-digit" });
@@ -236,7 +302,8 @@ export function SavedChartViewer({
     // 미래 여백: 예측점이 미래면 그만큼 rightOffset 확보
     const computeFutureBarsFromPrediction = useCallback(() => {
         const last = lastRealRef.current;
-        if (!last) return 20;
+        // ✅ 예측이 없거나 계산 불가한 경우에도 최소 5bar 정도의 미래 여백만 확보 (너무 커지면 실측/예측이 좌측으로 밀림)
+        if (!last) return 5;
 
         const lastTime = last.time;
         const step = getIntervalSeconds(interval);
@@ -261,7 +328,7 @@ export function SavedChartViewer({
             if (t > maxPred) maxPred = t as any;
         }
 
-        if (maxPred <= lastTime) return 20;
+        if (maxPred <= lastTime) return 5;
 
         let diffSeconds = 0;
         if (typeof maxPred === 'string' && typeof lastTime === 'string') {
@@ -270,8 +337,16 @@ export function SavedChartViewer({
              diffSeconds = (maxPred as number) - (lastTime as number);
         }
         const needBars = Math.ceil(diffSeconds / step) + 5;
-        return Math.max(20, needBars);
+        return Math.max(5, needBars);
     }, [predictionPoints, interval]);
+
+    // ✅ 카드 모드: 미래 예측은 보여주되, 축이 멀리(2026 등) 밀리지 않도록 미래 여백을 강하게 제한
+    // (ReferenceError 방지를 위해 computeFutureBarsFromPrediction "이후"에 선언)
+    const computeFutureBarsForCard = useCallback(() => {
+        const base = computeFutureBarsFromPrediction();
+        const cap = getCardFutureBarsCap(interval);
+        return Math.max(0, Math.min(base, cap));
+    }, [computeFutureBarsFromPrediction, getCardFutureBarsCap, interval]);
 
     const buildRangeData = (lastTime: Time, lastValue: number, itv: string, bars: number) => {
         const step = getIntervalSeconds(itv);
@@ -333,15 +408,18 @@ export function SavedChartViewer({
         area.applyOptions({ visible: viewStyle === "line" });
         areaGlow.applyOptions({ visible: viewStyle === "line" });
 
-        // rightOffset + rangeSeries
         if (lastRealRef.current && rangeSeriesRef.current) {
-            const futureBars = computeFutureBarsFromPrediction();
+            // ✅ card 모드: 예측 라인은 보여주되, 미래 여백은 제한
+            const futureBars = mode === "card" ? computeFutureBarsForCard() : computeFutureBarsFromPrediction();
             chart.applyOptions({ timeScale: { rightOffset: futureBars } });
 
             const rangeData = buildRangeData(lastRealRef.current.time, lastRealRef.current.close, interval, futureBars);
             rangeSeriesRef.current.setData(rangeData as any);
+        } else {
+            // fallback
+            chart.applyOptions({ timeScale: { rightOffset: 0 } });
         }
-    }, [viewStyle, interval, computeFutureBarsFromPrediction]);
+    }, [viewStyle, interval, computeFutureBarsFromPrediction, computeFutureBarsForCard, mode]);
 
     // 1) Init/Recreate chart (when theme or viewStyle changes)
     useEffect(() => {
@@ -376,10 +454,13 @@ export function SavedChartViewer({
             },
             timeScale: {
                 visible: true,
-                timeVisible: true,
+                timeVisible: ["1", "60"].includes(interval),
                 secondsVisible: false,
-                rightOffset: 20,
+                rightOffset: mode === "card" ? 0 : 20,
                 borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
+                barSpacing: getTargetBarSpacingPx(interval),
+                minBarSpacing: 0.1,
+                tickMarkFormatter: (t: number | string, tickMarkType: TickMarkType) => formatTick(t, tickMarkType, interval),
             },
             rightPriceScale: {
                 borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
@@ -476,17 +557,7 @@ export function SavedChartViewer({
         rangeSeriesRef.current = range;
         chartRef.current = chart;
 
-        // time formatter
-        const isIntraday = ["60", "1"].includes(interval);
-        chart.applyOptions({
-            timeScale: {
-                visible: true,
-                timeVisible: isIntraday,
-                secondsVisible: false,
-                tickMarkFormatter: formatTick,
-                borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
-            },
-        });
+        // ✅ timeScale 옵션은 createChart 시점에 통일해서 적용 (중복 applyOptions로 덮어쓰면 축/라벨/간격이 깨질 수 있음)
 
         const handleResize = () => {
             if (!chartContainerRef.current) return;
@@ -508,7 +579,7 @@ export function SavedChartViewer({
             chart.remove();
             chartRef.current = null;
         };
-    }, [isDark, viewStyle, interval, applyBaseDataToSeries, clearPredictionSegments]);
+    }, [isDark, viewStyle, interval, applyBaseDataToSeries, clearPredictionSegments, getTargetBarSpacingPx, mode]);
 
     // 2) Fetch data (only when symbol/interval changes)
     useEffect(() => {
@@ -569,7 +640,36 @@ export function SavedChartViewer({
                 // ✅ 방금 로드한 base를 현재 시리즈에 반영
                 applyBaseDataToSeries();
 
-                chartRef.current.timeScale().fitContent();
+                // ✅ card 모드: "오늘(마지막 캔들)" 기준으로 최근 구간 + 제한된 미래(예측)까지 보이게 고정
+                if (mode === "card") {
+                    const chart = chartRef.current;
+                    const count = candleData.length;
+                    const bars = getCardWindowBars(interval);
+                    const to = Math.max(0, count - 1);
+                    const from = Math.max(0, to - bars);
+                    const futureBars = computeFutureBarsForCard();
+                    chart?.timeScale().setVisibleLogicalRange({ from, to: to + futureBars });
+                } else {
+                    // ✅ detail 모드: ChartAnalyzer와 동일하게 "이번 달 1일 ~ 오늘 + 5일 여백" 범위 설정
+                    if (interval === "D" && chartRef.current) {
+                        const lastRealTime = last.time;
+                        const monthStartTime = buildMonthStartTime(lastRealTime);
+                        // 이번 달 1일이 데이터상 어디에 있는지 찾기
+                        let startIdx = candleData.findIndex((c) => compareTime(c.time as Time, monthStartTime) >= 0);
+                        if (startIdx < 0) startIdx = Math.max(0, candleData.length - 30); // 못찾으면 최근 30일
+
+                        // from: 이번 달 1일
+                        const from = startIdx;
+                        // ✅ to: (실측 마지막 인덱스) + (예측에 필요한 미래 bar 수)
+                        // - 이렇게 해야 예측 포인트가 "우측"에 제대로 보이고, 실측/예측이 좌측으로 밀리지 않음
+                        const futureBars = computeFutureBarsFromPrediction();
+                        const to = (candleData.length - 1) + futureBars;
+
+                        chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
+                    } else {
+                        chartRef.current.timeScale().fitContent();
+                    }
+                }
             } catch (e) {
                 console.error("[SavedChartViewer] fetch error:", e);
                 setError("차트 데이터를 불러오는데 실패했습니다.");
@@ -579,12 +679,19 @@ export function SavedChartViewer({
         };
 
         run();
-    }, [symbol, interval, applyBaseDataToSeries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [symbol, interval, applyBaseDataToSeries, mode, getCardWindowBars, computeFutureBarsForCard]);
 
     // 3) Prediction line inject (Segmented Gradient)
     const updatePredictionSeries = useCallback(() => {
         const chart = chartRef.current;
         if (!chart) return;
+
+        // ✅ card 모드: 예측 라인은 보여주되, 마커(라벨)는 카드에서 과밀하니 숨김
+        if (mode === "card") {
+            markerPointsRef.current = [];
+            setOverlayMarkers([]);
+        }
 
         // Old clear
         predSeriesRef.current?.setData([]);
@@ -680,9 +787,12 @@ export function SavedChartViewer({
                     .sort((a, b) => getTs(a.time) - getTs(b.time));
             })();
 
-            markerPointsRef.current = predOnlySorted;
-            // 좌표 업데이트는 다음 프레임에 (시리즈 setData 후 좌표계 안정화)
-            requestAnimationFrame(updateOverlayPositions);
+            // ✅ card 모드에서는 마커를 표시하지 않음
+            if (mode !== "card") {
+                markerPointsRef.current = predOnlySorted;
+                // 좌표 업데이트는 다음 프레임에 (시리즈 setData 후 좌표계 안정화)
+                requestAnimationFrame(updateOverlayPositions);
+            }
             
             if (sorted.length >= 2) {
                  // ✅ 구간별 컬러: 왼쪽(초록) -> 오른쪽(주황) step-gradient
@@ -705,7 +815,7 @@ export function SavedChartViewer({
         // Update range for future
         applyBaseDataToSeries();
 
-    }, [predictionPoints, applyBaseDataToSeries, clearPredictionSegments, addPredictionSegmentSeries]);
+    }, [predictionPoints, applyBaseDataToSeries, clearPredictionSegments, addPredictionSegmentSeries, mode, updateOverlayPositions]);
 
     useEffect(() => {
         updatePredictionSeries();

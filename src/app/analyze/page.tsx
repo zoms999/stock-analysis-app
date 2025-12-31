@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Search, Save, BarChart2, LineChart } from "lucide-react";
 import { ChartAnalyzer } from "@/components/analyze/ChartAnalyzer";
 import { createPost } from "@/lib/api/posts";
+import { searchYahooSymbol } from "@/lib/api/search";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Time } from "lightweight-charts";
@@ -26,6 +27,7 @@ export default function AnalyzePage() {
     const [chartStyle, setChartStyle] = useState<"candle" | "line">("line");
     const [content, setContent] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
+    const [isSearching, setIsSearching] = useState(false);
     const [points, setPoints] = useState<PredictionPoint[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [chartImageUrl, setChartImageUrl] = useState<string>("");
@@ -39,10 +41,40 @@ export default function AnalyzePage() {
         if (isMobile) setInterval("D");
     }, []);
 
-    const handleSearch = (e: React.FormEvent) => {
+    const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (searchQuery.trim()) {
-            setSymbol(searchQuery.toUpperCase());
+        const q = searchQuery.trim();
+        if (!q) return;
+
+        // 이미 티커처럼 보이는 입력(ASCII 위주)은 실패 시 폴백으로 사용
+        const looksLikeTicker = /^[A-Za-z0-9.^=_-]{1,32}$/.test(q);
+
+        try {
+            setIsSearching(true);
+
+            const resolved = await searchYahooSymbol(q);
+            if (resolved) {
+                setSymbol(resolved.toUpperCase());
+                return;
+            }
+
+            if (looksLikeTicker) {
+                // 검색이 실패해도 사용자가 티커를 직접 입력했을 가능성이 높으므로 그대로 시도
+                setSymbol(q.toUpperCase());
+                toast.message("검색 결과가 없어 입력값으로 조회합니다.");
+            } else {
+                toast.error("종목을 찾을 수 없습니다. 다른 키워드(회사명/종목명/티커)로 검색해보세요.");
+            }
+        } catch (err) {
+            console.error("Search error:", err);
+            if (looksLikeTicker) {
+                setSymbol(q.toUpperCase());
+                toast.message("검색에 실패해 입력값으로 조회합니다.");
+            } else {
+                toast.error("검색 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+            }
+        } finally {
+            setIsSearching(false);
         }
     };
 
@@ -127,10 +159,11 @@ export default function AnalyzePage() {
                         <form onSubmit={handleSearch} className="relative w-full max-w-2xl">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                             <Input
-                                placeholder="종목 검색 (예: BTC-USD, AAPL, TSLA)"
+                                placeholder="종목/기업명 검색 (다국어 지원: 예: 삼성전자, トヨタ, Apple, BTC)"
                                 className="pl-12 h-12 text-base rounded-lg bg-card border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500 focus-visible:border-blue-500 shadow-sm"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
+                                disabled={isSearching}
                             />
                         </form>
                     </div>

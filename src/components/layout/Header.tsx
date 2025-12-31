@@ -41,8 +41,35 @@ export function Header() {
 
     // Check Auth & Subscribe to changes
     const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) {
+          // refresh 토큰이 깨진 상태(예: 쿠키/스토리지 정리 후 남은 세션)면 로컬 세션을 정리
+          const anyErr = error as any;
+          if (anyErr?.code === "refresh_token_not_found" || String(anyErr?.message || "").includes("Refresh Token")) {
+            await supabase.auth.signOut({ scope: "local" as any });
+            setUser(null);
+            setUserLevel(1);
+            setIsAdmin(false);
+            return;
+          }
+        }
+        setUser(user);
+      } catch (error: any) {
+        // getUser() 호출 자체가 throw되는 케이스 방어
+        if (error?.code === "refresh_token_not_found" || String(error?.message || "").includes("Refresh Token")) {
+          try {
+            await supabase.auth.signOut({ scope: "local" as any });
+          } catch {
+            // ignore
+          }
+          setUser(null);
+          setUserLevel(1);
+          setIsAdmin(false);
+          return;
+        }
+        console.error("Failed to check user", error);
+      }
     };
     checkUser();
 

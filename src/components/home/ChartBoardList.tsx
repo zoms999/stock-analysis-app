@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChartCard } from "./ChartCard";
 import { fetchPosts, Post, PostSortOption } from "@/lib/api/posts";
 import { getCurrentPrice, getBatchPrices } from "@/lib/api/prices";
@@ -8,6 +8,7 @@ import { calculateAccuracy } from "@/lib/utils/accuracy";
 import { SyncPriceButton } from "@/components/admin/SyncPriceButton";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
+import { clientCacheGet, clientCacheSet } from "@/lib/utils/clientCache";
 
 type SortOption =
   | "all"
@@ -37,10 +38,11 @@ export function ChartBoardList() {
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>("latest");
   const [searchTerm, setSearchTerm] = useState("");
+  const lastRequestIdRef = useRef(0);
 
   useEffect(() => {
     async function loadPosts() {
-      setLoading(true);
+      const requestId = ++lastRequestIdRef.current;
       
       // Map UI sort to API sort
       let apiSort: PostSortOption = 'latest';
@@ -52,6 +54,16 @@ export function ChartBoardList() {
       if (sortBy === 'accuracy_5day') apiSort = 'accuracy_5day';
       if (sortBy === 'accuracy_10day') apiSort = 'accuracy_10day';
       
+      const cacheKey = `home:chartBoard:${apiSort}:limit=12:offset=0`;
+      const cached = clientCacheGet<Post[]>(cacheKey);
+      // ✅ 캐시가 있으면 즉시 렌더(UX 개선) + 백그라운드 갱신
+      if (cached && cached.length > 0) {
+        setPosts(cached);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+
       // Fetch posts with server-side sorting
       const fetchedPosts = await fetchPosts(12, 0, apiSort);
       
@@ -113,8 +125,13 @@ export function ChartBoardList() {
         };
       });
       
+      // ✅ React StrictMode(개발)에서 effect가 2번 돌 수 있어, 최신 요청만 반영
+      if (requestId !== lastRequestIdRef.current) return;
+
       setPosts(postsWithData);
       setLoading(false);
+      // TTL 30초: 홈 리스트는 자주 바뀌지 않지만, 너무 오래된 캐시는 피함
+      clientCacheSet(cacheKey, postsWithData, 30_000);
     }
     
     loadPosts();
@@ -155,6 +172,7 @@ export function ChartBoardList() {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as SortOption)}
+          aria-label="정렬 기준"
           className="px-4 py-2 rounded-lg border-0 bg-secondary/60 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto"
         >
           {SORT_OPTIONS.map((option) => (

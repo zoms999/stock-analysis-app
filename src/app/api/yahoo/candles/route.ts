@@ -1,7 +1,55 @@
 import { NextResponse } from "next/server";
 import YahooFinance from "yahoo-finance2";
 
-const yahooFinance = new YahooFinance();
+// historical() 공지(Deprecated) 및 노이즈 로그 억제
+const yahooFinance = new YahooFinance({ suppressNotices: ["ripHistorical"] });
+
+type CacheEntry = {
+  expiresAt: number;
+  data: any;
+};
+
+// 간단한 메모리 캐시 + 동시요청 합치기(요청 폭주/429 완화)
+const CANDLES_TTL_MS = 60_000;
+const candlesCache = new Map<string, CacheEntry>();
+const candlesInFlight = new Map<string, Promise<any>>();
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function fetchCandlesWithRetry(symbol: string, queryOptions: any, maxAttempts = 3) {
+  let attempt = 0;
+  let lastErr: any = null;
+  while (attempt < maxAttempts) {
+    attempt += 1;
+    try {
+      const chartResult: any = await yahooFinance.chart(symbol, queryOptions);
+      if (!chartResult || !Array.isArray(chartResult.quotes)) {
+        throw new Error("No chart data received from Yahoo Finance");
+      }
+      return chartResult.quotes.map((q: any) => ({
+        date: new Date(q.date),
+        open: q.open ?? 0,
+        high: q.high ?? 0,
+        low: q.low ?? 0,
+        close: q.close ?? 0,
+        volume: q.volume ?? 0,
+      }));
+    } catch (e: any) {
+      lastErr = e;
+      const code = e?.code ?? e?.statusCode;
+      // yahoo-finance2에서 429는 HTTPError.code=429 형태로 들어옵니다.
+      if (code === 429) {
+        // 지수 백오프(0.5s, 1s, 2s)
+        await sleep(500 * Math.pow(2, attempt - 1));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
+}
 
 /**
  * Yahoo Finance API Proxy
@@ -41,48 +89,37 @@ export async function GET(req: Request) {
       interval: interval,
     };
 
-    // Use chart() for intraday data, historical() for daily+
-    let result: Array<{
-      date: Date;
-      open: number;
-      high: number;
-      low: number;
-      close: number;
-      adjClose?: number;
-      volume: number;
-    }>;
-
-    if (["1m", "5m", "15m", "30m", "1h"].includes(interval)) {
-      // Use chart() for intraday intervals
-      const chartResult = await yahooFinance.chart(symbol, queryOptions);
-      if (!chartResult || !chartResult.quotes) {
-        console.error("Yahoo Finance Chart result invalid:", chartResult);
-        throw new Error("No chart data received from Yahoo Finance");
-      }
-      result = chartResult.quotes.map(q => ({
-        date: new Date(q.date),
-        open: q.open ?? 0,
-        high: q.high ?? 0,
-        low: q.low ?? 0,
-        close: q.close ?? 0,
-        volume: q.volume ?? 0,
-      }));
-    } else {
-      // Use historical() for daily, weekly, monthly
-      result = await yahooFinance.historical(symbol, {
-        period1: from,
-        period2: now,
-        interval: interval as "1d" | "1wk" | "1mo",
-      }) as Array<{
-        date: Date;
-        open: number;
-        high: number;
-        low: number;
-        close: number;
-        adjClose?: number;
-        volume: number;
-      }>;
+    // 캐시 키는 now 변동으로 인한 미스가 잦으니 interval+symbol 기준으로 60초 TTL로 묶습니다.
+    const cacheKey = `${symbol}|${interval}`;
+    const cached = candlesCache.get(cacheKey);
+    const nowMs = Date.now();
+    if (cached && cached.expiresAt > nowMs) {
+      return NextResponse.json(cached.data, {
+        status: 200,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          // 브라우저(max-age) + CDN(s-maxage) 모두 캐시하도록 설정
+          "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
+        },
+      });
     }
+
+    const inFlight = candlesInFlight.get(cacheKey);
+    if (inFlight) {
+      const data = await inFlight;
+      return NextResponse.json(data, {
+        status: 200,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
+        },
+      });
+    }
+
+    // Use chart() for all intervals (historical()는 Yahoo 제거 API에 의존)
+    const promise = fetchCandlesWithRetry(symbol, queryOptions, 3);
+    candlesInFlight.set(cacheKey, promise);
+    const result = await promise.finally(() => candlesInFlight.delete(cacheKey));
 
     if (!Array.isArray(result)) {
       console.error("Yahoo Finance Historical result invalid:", result);
@@ -129,11 +166,14 @@ export async function GET(req: Request) {
       return (a.time as number) - (b.time as number);
     });
 
+    // 캐시 저장
+    candlesCache.set(cacheKey, { expiresAt: Date.now() + CANDLES_TTL_MS, data: candles });
+
     return NextResponse.json(candles, {
       status: 200,
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
       },
     });
   } catch (error) {
@@ -142,15 +182,19 @@ export async function GET(req: Request) {
 
     // Provide more helpful error messages
     let userMessage = "차트 데이터를 불러올 수 없습니다.";
+    let status = 500;
     if (errorMessage.includes("No data found") || errorMessage.includes("delisted")) {
       userMessage = "종목을 찾을 수 없습니다. 올바른 심볼을 입력했는지 확인해주세요. (예: BTC-USD, AAPL, TSLA)";
     } else if (errorMessage.includes("Invalid")) {
       userMessage = "잘못된 요청입니다. 종목 심볼과 시간대를 확인해주세요.";
+    } else if (errorMessage.includes("Too Many Requests") || (error as any)?.code === 429) {
+      userMessage = "요청이 많아 일시적으로 차트 데이터를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.";
+      status = 429;
     }
 
     return NextResponse.json(
       { error: userMessage, details: errorMessage },
-      { status: 500 }
+      { status }
     );
   }
 }

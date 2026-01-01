@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Search, Save, BarChart2, LineChart } from "lucide-react";
 import { ChartAnalyzer } from "@/components/analyze/ChartAnalyzer";
 import { createPost } from "@/lib/api/posts";
-import { searchYahooSymbol } from "@/lib/api/search";
+import { searchSymbol } from "@/lib/api/search";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Time } from "lightweight-charts";
@@ -52,7 +52,7 @@ export default function AnalyzePage() {
         try {
             setIsSearching(true);
 
-            const resolved = await searchYahooSymbol(q);
+            const resolved = await searchSymbol(q);
             if (resolved) {
                 setSymbol(resolved.toUpperCase());
                 return;

@@ -9,9 +9,11 @@ import { LimitPopup } from "@/components/subscription/LimitPopup";
 import { toast } from "sonner";
 import { SavedChartViewer } from "@/components/analyze/SavedChartViewer";
 import { PredictionInfo } from "@/components/analyze/PredictionInfo";
-import { fetchPostById, Post } from "@/lib/api/posts";
+import { fetchPostById, fetchPostsBySymbol, Post } from "@/lib/api/posts";
 import { getCurrentPrice } from "@/lib/api/prices";
 import { calculateAccuracy } from "@/lib/utils/accuracy";
+import { PostCard } from "@/components/posts/PostCard";
+import { SORT_OPTIONS, type SortOption } from "@/lib/ui/chartBoardSort";
 
 
 export default function PostDetailPage() {
@@ -21,6 +23,9 @@ export default function PostDetailPage() {
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState("");
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [relatedPosts, setRelatedPosts] = useState<Post[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
+  const [relatedSortBy, setRelatedSortBy] = useState<SortOption>("latest");
 
   const [showLimitPopup, setShowLimitPopup] = useState(false);
   const router = useRouter();
@@ -51,6 +56,39 @@ export default function PostDetailPage() {
     }
     loadPost();
   }, [id]);
+
+  // ✅ 같은 종목 다른 게시물: SORT 기준으로만 정렬(검색창 제거)
+  useEffect(() => {
+    if (!post?.ticker_symbol) return;
+    let cancelled = false;
+    (async () => {
+      setRelatedLoading(true);
+      try {
+        const sort =
+          relatedSortBy === "accuracy"
+            ? "accuracy"
+            : relatedSortBy === "most_analyzed"
+              ? "views"
+              : relatedSortBy === "completed"
+                ? "completed"
+                : "latest";
+
+        const rel = await fetchPostsBySymbol({
+          symbol: post.ticker_symbol,
+          excludeId: id,
+          limit: 12,
+          sort,
+        });
+        if (!cancelled) setRelatedPosts(rel);
+      } finally {
+        if (!cancelled) setRelatedLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [post?.ticker_symbol, relatedSortBy, id]);
 
   if (loading) {
     return (
@@ -92,8 +130,12 @@ export default function PostDetailPage() {
     );
   }
 
+  const relatedSortOptions = SORT_OPTIONS.filter((o) =>
+    ["latest", "accuracy", "most_analyzed", "completed"].includes(o.value)
+  );
+
   return (
-    <div className="container mx-auto max-w-3xl py-8 md:py-12 space-y-10">
+    <div className="container mx-auto max-w-6xl py-8 md:py-12 space-y-10">
       {/* Back Button */}
       <div>
         <Link href="/" className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors">
@@ -102,9 +144,8 @@ export default function PostDetailPage() {
         </Link>
       </div>
 
-      {/* Post Content Wrapper */}
+      {/* Header / Meta */}
       <article className="space-y-8">
-        {/* Header Section */}
         <header className="space-y-6">
           <div className="space-y-4">
             <div className="flex items-center gap-3">
@@ -159,10 +200,10 @@ export default function PostDetailPage() {
           </div>
         )}
 
-        {/* Chart Section - Borderless container, but chart itself usually needs a subtle boundary */}
+        {/* Chart Section (Full width) */}
         <section>
           <h2 className="text-lg font-bold text-foreground mb-3">차트 분석</h2>
-          <div className="h-[450px] w-full rounded-xl overflow-hidden border border-border/50 bg-background/50">
+          <div className="h-[520px] w-full rounded-xl overflow-hidden border border-border/50 bg-background/50">
             <SavedChartViewer
               symbol={post.ticker_symbol}
               interval={interval}
@@ -171,52 +212,100 @@ export default function PostDetailPage() {
             />
           </div>
         </section>
-
-        {/* Main Body Content */}
-        <div
-          className="prose prose-neutral dark:prose-invert max-w-none leading-loose text-foreground/90"
-          dangerouslySetInnerHTML={{ __html: post.content }}
-        />
-
-        {/* Action Buttons */}
-        <div className="flex items-center gap-3 pt-8">
-          <Button variant="outline" className="h-11 px-6 rounded-full gap-2 group border-border/60 hover:border-primary/50 hover:bg-primary/5">
-            <ThumbsUp className="h-4 w-4 group-hover:text-primary transition-colors" />
-            좋아요 <span className="ml-1 font-mono">0</span>
-          </Button>
-        </div>
       </article>
 
-      {/* Divider */}
-      <hr className="border-border/40" />
+      {/* Below chart: content + same-symbol list */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-10">
+        <main className="space-y-10">
+          {/* Main Body Content */}
+          <div
+            className="prose prose-neutral dark:prose-invert max-w-none leading-loose text-foreground/90"
+            dangerouslySetInnerHTML={{ __html: post.content }}
+          />
 
-      {/* Comments Section - Clean Style */}
-      <section className="space-y-8">
-        <h3 className="text-xl font-bold flex items-center gap-2">
-          댓글 <span className="text-primary">0</span>
-        </h3>
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3">
+            <Button variant="outline" className="h-11 px-6 rounded-full gap-2 group border-border/60 hover:border-primary/50 hover:bg-primary/5">
+              <ThumbsUp className="h-4 w-4 group-hover:text-primary transition-colors" />
+              좋아요 <span className="ml-1 font-mono">0</span>
+            </Button>
+          </div>
 
-        {/* Comment Input */}
-        <div className="flex gap-4">
-          <div className="h-10 w-10 rounded-full bg-muted flex-shrink-0" />
-          <div className="flex-1 space-y-3">
-            <textarea
-              className="w-full min-h-[100px] rounded-xl border border-border/60 bg-transparent p-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none placeholder:text-muted-foreground/70"
-              placeholder="의견을 남겨주세요."
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-            />
-            <div className="flex justify-end">
-              <Button size="sm" disabled={!comment.trim()} className="rounded-full px-6">등록</Button>
+          {/* Divider */}
+          <hr className="border-border/40" />
+
+          {/* Comments Section - Clean Style */}
+          <section className="space-y-8">
+            <h3 className="text-xl font-bold flex items-center gap-2">
+              댓글 <span className="text-primary">0</span>
+            </h3>
+
+            {/* Comment Input */}
+            <div className="flex gap-4">
+              <div className="h-10 w-10 rounded-full bg-muted flex-shrink-0" />
+              <div className="flex-1 space-y-3">
+                <textarea
+                  className="w-full min-h-[100px] rounded-xl border border-border/60 bg-transparent p-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none placeholder:text-muted-foreground/70"
+                  placeholder="의견을 남겨주세요."
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                />
+                <div className="flex justify-end">
+                  <Button size="sm" disabled={!comment.trim()} className="rounded-full px-6">등록</Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Comment List Placeholder */}
+            <div className="py-10 text-center text-muted-foreground/60 text-sm">
+              아직 댓글이 없습니다.<br/>첫 번째 댓글의 주인공이 되어보세요!
+            </div>
+          </section>
+        </main>
+
+        {/* Right: Same symbol posts + search filter */}
+        <aside className="hidden lg:block">
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border/50 bg-background/50 p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <div className="text-sm font-semibold">같은 종목 다른 게시물</div>
+                  <div className="text-xs text-muted-foreground">{post.ticker_symbol}</div>
+                </div>
+              </div>
+
+              <select
+                value={relatedSortBy}
+                onChange={(e) => setRelatedSortBy(e.target.value as SortOption)}
+                aria-label="같은 종목 게시물 정렬"
+                className="w-full mb-3 px-3 py-2 rounded-lg border-0 bg-secondary/60 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                {relatedSortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              {relatedLoading ? (
+                <div className="py-8 text-center text-sm text-muted-foreground animate-pulse">불러오는 중...</div>
+              ) : relatedPosts.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  다른 게시물이 없습니다.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {relatedPosts.map((p) => (
+                    <div key={p.id} className="rounded-xl border border-border/40 bg-background/30 p-3">
+                      <PostCard post={p} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-        </div>
-
-        {/* Comment List Placeholder */}
-        <div className="py-10 text-center text-muted-foreground/60 text-sm">
-          아직 댓글이 없습니다.<br/>첫 번째 댓글의 주인공이 되어보세요!
-        </div>
-      </section>
+        </aside>
+      </div>
 
       {/* Limit Popup */}
       <LimitPopup 

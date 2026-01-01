@@ -383,3 +383,37 @@ export async function fetchPostById(id: string): Promise<Post | null> {
 
   return data;
 }
+
+export async function fetchPostsBySymbol(params: {
+  symbol: string;
+  limit?: number;
+  excludeId?: string;
+  sort?: "latest" | "views" | "accuracy";
+}): Promise<Post[]> {
+  const supabase = createClient();
+  const { symbol, limit = 12, excludeId, sort = "latest" } = params;
+
+  let query = supabase
+    .from("posts")
+    .select(`
+      *,
+      profiles:user_id (
+        nickname,
+        avatar_url
+      )
+    `)
+    .eq("ticker_symbol", symbol);
+
+  if (excludeId) query = query.neq("id", excludeId);
+
+  if (sort === "views") query = query.order("view_count", { ascending: false });
+  else if (sort === "accuracy") query = query.order("accuracy_score", { ascending: false, nullsFirst: false });
+  else query = query.order("created_at", { ascending: false });
+
+  const { data, error } = await query.limit(limit);
+  if (error) {
+    console.error("Error fetching posts by symbol:", error);
+    return [];
+  }
+  return data || [];
+}

@@ -17,7 +17,7 @@ import {
     LineSeries,
     AreaSeries,
 } from "lightweight-charts";
-import { fetchYahooCandles } from "@/lib/api/yahoo";
+import { fetchTwelveDataCandles, subscribeTwelveDataPrices } from "@/lib/api/twelvedata";
 import { Button } from "@/components/ui/button";
 
 interface ChartAnalyzerProps {
@@ -538,9 +538,18 @@ export function ChartAnalyzer({
             const areaData = param.seriesData.get(areaSeries) as { value: number } | undefined;
             const volumeData = param.seriesData.get(volumeSeries) as { value: number } | undefined;
 
+            const hoverTimeLabel = (() => {
+                const t = param.time as Time;
+                if (typeof t === "string") {
+                    const d = new Date(t);
+                    return Number.isFinite(d.getTime()) ? d.toLocaleDateString("ko-KR") : t;
+                }
+                return new Date((t as number) * 1000).toLocaleDateString("ko-KR");
+            })();
+
             if (chartStyleRef.current === "candle" && candleData) {
                 setHoveredPrice({
-                    time: new Date((param.time as number) * 1000).toLocaleDateString("ko-KR"),
+                    time: hoverTimeLabel,
                     open: candleData.open,
                     high: candleData.high,
                     low: candleData.low,
@@ -549,7 +558,7 @@ export function ChartAnalyzer({
                 });
             } else if (chartStyleRef.current === "line" && areaData) {
                 setHoveredPrice({
-                    time: new Date((param.time as number) * 1000).toLocaleDateString("ko-KR"),
+                    time: hoverTimeLabel,
                     open: areaData.value,
                     high: areaData.value,
                     low: areaData.value,
@@ -572,16 +581,37 @@ export function ChartAnalyzer({
                     const lastIndex = count - 1;
                     if (logical > lastIndex) {
                         const step = getIntervalSeconds(itv);
-                        const lastTime = last.time as number;
                         const diffBars = Math.max(1, Math.round(logical - lastIndex));
-                        let targetTime = lastTime + diffBars * step;
-                        const now = Math.floor(Date.now() / 1000);
-                        const maxFuture = now + getFutureSeconds();
-                        targetTime = Math.max(targetTime, lastTime + step);
-                        targetTime = clampFutureTime(targetTime, maxFuture);
-                        targetTime = snapTime(targetTime, step);
-                        if (targetTime <= lastTime) targetTime = lastTime + step;
-                        time = targetTime as Time;
+                        const addDays = (dateStr: string, days: number) => {
+                            const d = new Date(dateStr);
+                            if (!Number.isFinite(d.getTime())) return dateStr;
+                            d.setDate(d.getDate() + days);
+                            const year = d.getFullYear();
+                            const month = String(d.getMonth() + 1).padStart(2, "0");
+                            const day = String(d.getDate()).padStart(2, "0");
+                            return `${year}-${month}-${day}`;
+                        };
+
+                        // ✅ 일봉(D)/주봉(W)/월봉(M)/연봉(Y)처럼 날짜 문자열(time="YYYY-MM-DD") 기반일 때도
+                        //    미래 영역 클릭으로 예측 포인트를 정상 생성
+                        if (typeof last.time === "string") {
+                            let daysToAdd = diffBars;
+                            if (itv === "W") daysToAdd = diffBars * 7;
+                            if (itv === "M") daysToAdd = diffBars * 30;
+                            if (itv === "Y") daysToAdd = diffBars * 365;
+                            const nextDate = addDays(last.time, daysToAdd);
+                            time = nextDate as Time;
+                        } else {
+                            const lastTime = last.time as number;
+                            let targetTime = lastTime + diffBars * step;
+                            const now = Math.floor(Date.now() / 1000);
+                            const maxFuture = now + getFutureSeconds();
+                            targetTime = Math.max(targetTime, lastTime + step);
+                            targetTime = clampFutureTime(targetTime, maxFuture);
+                            targetTime = snapTime(targetTime, step);
+                            if (targetTime <= lastTime) targetTime = lastTime + step;
+                            time = targetTime as Time;
+                        }
                     }
                 }
             }
@@ -655,15 +685,15 @@ export function ChartAnalyzer({
             setError(null);
 
             try {
-                let yahooInterval = "1d";
-                if (interval === "Y") yahooInterval = "1mo";
-                if (interval === "M") yahooInterval = "1mo";
-                if (interval === "W") yahooInterval = "1wk";
-                if (interval === "D") yahooInterval = "1d";
-                if (interval === "60") yahooInterval = "1h";
-                if (interval === "1") yahooInterval = "1m";
+                let dataInterval = "1d";
+                if (interval === "Y") dataInterval = "1mo";
+                if (interval === "M") dataInterval = "1mo";
+                if (interval === "W") dataInterval = "1wk";
+                if (interval === "D") dataInterval = "1d";
+                if (interval === "60") dataInterval = "1h";
+                if (interval === "1") dataInterval = "1m";
 
-                const data = (await fetchYahooCandles(symbol, yahooInterval)) as CandleDataWithVolume[];
+                const data = (await fetchTwelveDataCandles(symbol, dataInterval)) as CandleDataWithVolume[];
 
                 if (!data || data.length === 0) {
                     setError(`데이터를 불러올 수 없습니다.`);
@@ -722,13 +752,15 @@ export function ChartAnalyzer({
                     const isIntraday = ["60", "1"].includes(interval);
                     // ✅ BarSpacing(간격)을 여기서 강제 설정 (좁게)
                     const spacing = getTargetBarSpacingPx(interval);
+                    // ✅ 요청사항: 일봉(D) 최초 로딩 시 "오늘~한달 전" + "미래 한달(기본 1개월 모드)"까지 보이도록 우측 여백 확보
+                    const rightOffset = interval === "D" ? futureBars : futureBars;
                     
                     chartRef.current.applyOptions({
                         timeScale: {
                             timeVisible: isIntraday,
                             secondsVisible: false,
                             borderColor: "#D1D5DB",
-                            rightOffset: futureBars,
+                            rightOffset,
                             barSpacing: spacing, // 촘촘한 간격 적용
                             minBarSpacing: 0.1, // 줌아웃 시 아주 촘촘하게
                             tickMarkFormatter: (t: number | string, tickMarkType: TickMarkType) => {
@@ -755,18 +787,31 @@ export function ChartAnalyzer({
 
                     // ✅ [핵심] 일봉(D)일 경우: "이번 달 1일 ~ 오늘" 범위를 정확히 계산하여 가시 영역 설정
                     if (interval === "D") {
-                        const monthStartTime = buildMonthStartTime(lastRealTime);
-                        // 이번 달 1일이 데이터상 어디에 있는지 찾기
-                        let startIdx = candleData.findIndex((c) => compareTime(c.time as Time, monthStartTime) >= 0);
-                        if (startIdx < 0) startIdx = Math.max(0, candleData.length - 30); // 못찾으면 최근 30일
+                        // ✅ 요청사항: "오늘 ~ 한달 전(달력 기준 30일)" 범위만 보이도록
+                        const pad2 = (n: number) => String(n).padStart(2, "0");
+                        const toYmd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
-                        // from: 이번 달 1일
-                        const from = startIdx;
-                        // to: 오늘(마지막 데이터) + 예측을 위한 약간의 여백(5일)
-                        // (lightweight-charts는 logical index 기준이므로, to를 늘리면 미래 공간이 보임)
-                        const to = candleData.length + 5; 
+                        const cutoff = new Date();
+                        cutoff.setDate(cutoff.getDate() - 30);
+                        const cutoffYmd = toYmd(cutoff);
 
-                        chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
+                        const lastIndex = candleData.length - 1;
+                        // Twelve Data 일봉은 보통 "YYYY-MM-DD" 문자열 time을 사용하므로, 문자열 비교로도 안전합니다.
+                        const fromIndex = (() => {
+                            for (let i = 0; i < candleData.length; i++) {
+                                const t = candleData[i]?.time;
+                                if (typeof t === "string") {
+                                    if (t >= cutoffYmd) return i;
+                                } else if (typeof t === "number") {
+                                    const ymd = toYmd(new Date(t * 1000));
+                                    if (ymd >= cutoffYmd) return i;
+                                }
+                            }
+                            return 0;
+                        })();
+
+                        // ✅ 미래 영역(오른쪽)은 futureBars(기본 1개월 모드면 30일) 만큼 확보
+                        chartRef.current.timeScale().setVisibleLogicalRange({ from: fromIndex, to: lastIndex + futureBars });
                     } else {
                         // 기존 로직 유지 (다른 시간대)
                         const width = chartContainerRef.current.clientWidth;
@@ -787,6 +832,15 @@ export function ChartAnalyzer({
         };
 
         fetchData();
+
+        // ✅ 실시간 가격 스트리밍: currentPrice만 갱신(차트 시리즈 보정은 최소화)
+        const sub = subscribeTwelveDataPrices([symbol], (msg) => {
+            const p = Number(msg.price);
+            if (!Number.isFinite(p)) return;
+            setCurrentPrice(p);
+        });
+
+        return () => sub.close();
     }, [symbol, interval, mounted, futureMode, customDays, captureChart, buildMonthStartTime, compareTime]);
 
     // Re-apply future range logic...
@@ -801,6 +855,7 @@ export function ChartAnalyzer({
         rangeSeriesRef.current.setData(rangeData);
         futureBarsRef.current = futureBars;
 
+        // ✅ 요청사항: 일봉(D)에서도 미래 한달(기본 1개월 모드) 영역이 보이도록 우측 여백 확보
         chartRef.current.applyOptions({ timeScale: { rightOffset: futureBars } });
 
         // 유지 로직 (범위 재조정 안함, 사용자가 보고 있던 줌 상태 존중하되 우측 여백만 확보)

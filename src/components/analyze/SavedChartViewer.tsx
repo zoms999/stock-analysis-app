@@ -16,7 +16,7 @@ import {
     LineSeries,
     AreaSeries,
 } from "lightweight-charts";
-import { fetchYahooCandles } from "@/lib/api/yahoo";
+import { fetchTwelveDataCandles, subscribeTwelveDataPrices } from "@/lib/api/twelvedata";
 
 type ViewStyle = "candle" | "line";
 
@@ -592,15 +592,15 @@ export function SavedChartViewer({
             setError(null);
 
             try {
-                let yahooInterval = "1d";
-                if (interval === "Y") yahooInterval = "1mo";
-                if (interval === "M") yahooInterval = "1mo";
-                if (interval === "W") yahooInterval = "1wk";
-                if (interval === "D") yahooInterval = "1d";
-                if (interval === "60") yahooInterval = "1h";
-                if (interval === "1") yahooInterval = "1m";
+                let dataInterval = "1d";
+                if (interval === "Y") dataInterval = "1mo";
+                if (interval === "M") dataInterval = "1mo";
+                if (interval === "W") dataInterval = "1wk";
+                if (interval === "D") dataInterval = "1d";
+                if (interval === "60") dataInterval = "1h";
+                if (interval === "1") dataInterval = "1m";
 
-                const data = (await fetchYahooCandles(symbol, yahooInterval)) as CandleDataWithVolume[];
+                const data = (await fetchTwelveDataCandles(symbol, dataInterval)) as CandleDataWithVolume[];
 
                 if (!data || data.length === 0) {
                     setError("차트 데이터를 불러올 수 없습니다.");
@@ -654,20 +654,34 @@ export function SavedChartViewer({
                 } else {
                     // ✅ detail 모드: ChartAnalyzer와 동일하게 "이번 달 1일 ~ 오늘 + 5일 여백" 범위 설정
                     if (interval === "D" && chartRef.current) {
-                        const lastRealTime = last.time;
-                        const monthStartTime = buildMonthStartTime(lastRealTime);
-                        // 이번 달 1일이 데이터상 어디에 있는지 찾기
-                        let startIdx = candleData.findIndex((c) => compareTime(c.time as Time, monthStartTime) >= 0);
-                        if (startIdx < 0) startIdx = Math.max(0, candleData.length - 30); // 못찾으면 최근 30일
+                        const pad2 = (n: number) => String(n).padStart(2, "0");
+                        const toYmd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
-                        // from: 이번 달 1일
-                        const from = startIdx;
-                        // ✅ to: (실측 마지막 인덱스) + (예측에 필요한 미래 bar 수)
-                        // - 이렇게 해야 예측 포인트가 "우측"에 제대로 보이고, 실측/예측이 좌측으로 밀리지 않음
+                        // ✅ 마지막 실측 캔들 기준으로 "과거 30일" 컷오프 계산 (오늘이 1일이어도 빈 차트 방지)
+                        const lastRealTime = last.time;
+                        const lastDate = typeof lastRealTime === "string" ? new Date(lastRealTime) : new Date((lastRealTime as number) * 1000);
+                        const cutoff = new Date(lastDate);
+                        cutoff.setDate(cutoff.getDate() - 30);
+                        const cutoffYmd = toYmd(cutoff);
+
+                        const fromIndex = (() => {
+                            for (let i = 0; i < candleData.length; i++) {
+                                const t = candleData[i]?.time;
+                                if (typeof t === "string") {
+                                    if (t >= cutoffYmd) return i;
+                                } else if (typeof t === "number") {
+                                    const ymd = toYmd(new Date(t * 1000));
+                                    if (ymd >= cutoffYmd) return i;
+                                }
+                            }
+                            // 못 찾으면 최근 40봉 정도
+                            return Math.max(0, candleData.length - 40);
+                        })();
+
                         const futureBars = computeFutureBarsFromPrediction();
                         const to = (candleData.length - 1) + futureBars;
 
-                        chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
+                        chartRef.current.timeScale().setVisibleLogicalRange({ from: fromIndex, to });
                     } else {
                         chartRef.current.timeScale().fitContent();
                     }
@@ -681,6 +695,20 @@ export function SavedChartViewer({
         };
 
         run();
+
+        // ✅ 실시간 현재가 스트리밍 (마지막 실측 캔들의 close/high/low 보정에 활용 가능)
+        const sub = subscribeTwelveDataPrices([symbol], (msg) => {
+            const p = Number(msg.price);
+            if (!Number.isFinite(p)) return;
+            const last = lastRealRef.current;
+            if (!last) return;
+            lastRealRef.current = {
+                ...last,
+                close: p,
+            };
+        });
+
+        return () => sub.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [symbol, interval, applyBaseDataToSeries, mode, getCardWindowBars, computeFutureBarsForCard]);
 

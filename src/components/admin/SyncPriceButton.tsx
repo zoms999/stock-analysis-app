@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { RotateCw, CheckCircle, AlertCircle } from "lucide-react";
+import { RotateCw } from "lucide-react";
 import { toast } from "sonner"; // Assuming sonner is used, or alerts
 
 export function SyncPriceButton() {

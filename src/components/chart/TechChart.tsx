@@ -3,7 +3,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, IChartApi, CandlestickSeries } from "lightweight-charts";
-import { fetchYahooCandles, CandleData } from "@/lib/api/yahoo";
+import { fetchTwelveDataCandles, subscribeTwelveDataPrices, CandleData } from "@/lib/api/twelvedata";
 
 interface TechChartProps {
   symbol?: string;
@@ -19,14 +19,15 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
   // Data Fetching
   useEffect(() => {
     let isMounted = true;
+    let sub: { close: () => void } | null = null;
 
     const loadData = async () => {
       try {
-        console.log(`[TechChart] Fetching Yahoo Finance data for ${symbol} (${interval})...`);
+        console.log(`[TechChart] Fetching Twelve Data candles for ${symbol} (${interval})...`);
 
-        const candles = await fetchYahooCandles(symbol, interval);
+        const candles = await fetchTwelveDataCandles(symbol, interval);
 
-        console.log(`[TechChart] Yahoo Finance data fetched:`, candles?.length);
+        console.log(`[TechChart] Twelve Data candles fetched:`, candles?.length);
 
         // Only update state if component is still mounted
         if (!isMounted) return;
@@ -38,7 +39,7 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
         }
       } catch (e) {
         // Silently handle errors for TechChart (it's a widget, not critical)
-        console.error(`[TechChart] Yahoo Finance Fetch Error:`, e);
+        console.error(`[TechChart] Twelve Data Fetch Error:`, e);
         if (isMounted) {
           setData([]);
         }
@@ -53,16 +54,37 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
     setLoading(true);
     loadData();
 
-    // Polling interval for Yahoo Finance (60 seconds)
-    const pollingInterval = setInterval(() => {
-      if (isMounted) {
-        loadData();
+    // ✅ Live price streaming via Twelve Data WebSocket (server-proxied SSE)
+    sub = subscribeTwelveDataPrices(
+      [symbol],
+      (msg) => {
+        if (!isMounted) return;
+        const p = Number(msg.price);
+        if (!Number.isFinite(p)) return;
+
+        // 마지막 캔들의 close/high/low만 실시간으로 보정 (초기 OHLC는 time_series가 제공)
+        setData((prev) => {
+          if (!prev || prev.length === 0) return prev;
+          const last = prev[prev.length - 1];
+          const nextLast: CandleData = {
+            ...last,
+            close: p,
+            high: Math.max(last.high, p),
+            low: Math.min(last.low, p),
+          };
+          const next = prev.slice(0, -1);
+          next.push(nextLast);
+          return next;
+        });
+      },
+      () => {
+        // 스트림 오류는 위젯에서 조용히 무시
       }
-    }, 60000);
+    );
 
     return () => {
       isMounted = false;
-      clearInterval(pollingInterval);
+      sub?.close();
     };
   }, [symbol, interval]);
 
@@ -147,7 +169,7 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
     <div className="relative w-full rounded-xl border border-border bg-card p-4 shadow-lg">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-          <span className="text-purple-400">Yahoo Finance</span>
+          <span className="text-purple-400">Twelve Data</span>
           {symbol}
         </h3>
         {loading && <span className="text-xs text-muted-foreground animate-pulse">데이터 연결 중...</span>}

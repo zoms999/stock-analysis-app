@@ -1,31 +1,46 @@
 // src/lib/api/search.ts
 
 /**
- * Yahoo Search API 기반으로 사용자가 입력한 키워드(다국어 포함)를 티커(symbol)로 변환합니다.
- * - 클라이언트에서 직접 `query1.finance.yahoo.com` 호출 시 CORS 이슈가 날 수 있어
- *   내부 프록시 라우트(`/api/yahoo/search`)를 통해 호출합니다.
+ * 사용자가 입력한 키워드(다국어 포함)를 티커(symbol)로 변환합니다.
+ * - Twelve Data 검색(`/api/twelvedata/search`)을 1순위로 사용합니다.
+ * - (옵션) Twelve Data가 못 찾으면 Yahoo 검색(`/api/yahoo/search`)으로 폴백합니다.
  */
-export async function searchYahooSymbol(query: string): Promise<string | null> {
+export async function searchSymbol(query: string): Promise<string | null> {
   const q = query?.trim();
   if (!q) return null;
 
   try {
-    const url = `/api/yahoo/search?q=${encodeURIComponent(q)}`;
-    const res = await fetch(url);
+    // 1) Twelve Data
+    const tdUrl = `/api/twelvedata/search?q=${encodeURIComponent(q)}`;
+    const tdRes = await fetch(tdUrl);
 
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      console.error(`Yahoo Search API Error (${res.status}):`, errorData);
+    if (tdRes.ok) {
+      const tdData: unknown = await tdRes.json().catch(() => null);
+      if (tdData && typeof tdData === "object") {
+        const symbol = (tdData as { symbol?: unknown }).symbol;
+        if (typeof symbol === "string" && symbol.length > 0) return symbol;
+      }
+    } else {
+      const errorData = await tdRes.json().catch(() => ({}));
+      console.warn(`Twelve Data Search API Error (${tdRes.status}):`, errorData);
+    }
+
+    // 2) Yahoo fallback (기존 프록시 유지)
+    const yhUrl = `/api/yahoo/search?q=${encodeURIComponent(q)}`;
+    const yhRes = await fetch(yhUrl);
+
+    if (!yhRes.ok) {
+      const errorData = await yhRes.json().catch(() => ({}));
+      console.error(`Yahoo Search API Error (${yhRes.status}):`, errorData);
       return null;
     }
 
-    const data: unknown = await res.json();
-    if (!data || typeof data !== "object") return null;
-
-    const symbol = (data as { symbol?: unknown }).symbol;
+    const yhData: unknown = await yhRes.json();
+    if (!yhData || typeof yhData !== "object") return null;
+    const symbol = (yhData as { symbol?: unknown }).symbol;
     return typeof symbol === "string" && symbol.length > 0 ? symbol : null;
   } catch (error) {
-    console.error("Yahoo Search API Error:", error);
+    console.error("Search API Error:", error);
     return null;
   }
 }

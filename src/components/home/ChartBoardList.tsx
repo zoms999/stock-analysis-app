@@ -1,44 +1,66 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { ChartCard } from "./ChartCard";
 import { fetchPosts, Post, PostSortOption } from "@/lib/api/posts";
-import { getCurrentPrice, getBatchPrices } from "@/lib/api/prices";
 import { calculateAccuracy } from "@/lib/utils/accuracy";
 import { SyncPriceButton } from "@/components/admin/SyncPriceButton";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { clientCacheGet, clientCacheSet } from "@/lib/utils/clientCache";
-
-type SortOption =
-  | "all"
-  | "accuracy"
-  | "recent_accuracy"
-  | "most_analyzed"
-  | "latest"
-  | "completed"
-  | "daily_accuracy"
-  | "accuracy_5day"
-  | "accuracy_10day";
-
-const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: "all", label: "전체" },
-  { value: "accuracy", label: "정확도순" },
-  { value: "recent_accuracy", label: "최근정확도순" },
-  { value: "most_analyzed", label: "많이분석한종목순" },
-  { value: "latest", label: "최신분석순" },
-  { value: "completed", label: "분석완료순" },
-  { value: "daily_accuracy", label: "정확도 일일순" },
-  { value: "accuracy_5day", label: "정확도 5일순" },
-  { value: "accuracy_10day", label: "정확도 10일순" },
-];
+import { subscribeTwelveDataPrices } from "@/lib/api/twelvedata";
+import { searchSymbol } from "@/lib/api/search";
+import { SORT_OPTIONS, type SortOption } from "@/lib/ui/chartBoardSort";
 
 export function ChartBoardList() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>("latest");
   const [searchTerm, setSearchTerm] = useState("");
+  const [resolvedSymbol, setResolvedSymbol] = useState<string | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
   const lastRequestIdRef = useRef(0);
+  const priceRef = useRef<Map<string, number>>(new Map());
+  const streamRef = useRef<{ close: () => void } | null>(null);
+
+  // ✅ 한글/회사명 검색 지원: 입력이 심볼이 아니면 Twelve Data 검색 프록시로 심볼을 리졸브
+  useEffect(() => {
+    const q = (searchTerm ?? "").trim();
+    if (!q) {
+      setResolvedSymbol(null);
+      setIsResolving(false);
+      return;
+    }
+
+    // 빠른 탈출: 심볼처럼 보이면 리졸브하지 않고 로컬 필터만 수행
+    const looksLikeSymbol = /^[A-Za-z0-9][A-Za-z0-9.:/\\-]{0,30}$/.test(q);
+    const hasKorean = /[가-힣]/.test(q);
+    if (looksLikeSymbol && !hasKorean) {
+      setResolvedSymbol(null);
+      setIsResolving(false);
+      return;
+    }
+
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setIsResolving(true);
+      try {
+        const sym = await searchSymbol(q);
+        if (cancelled) return;
+        setResolvedSymbol(sym);
+      } catch {
+        if (cancelled) return;
+        setResolvedSymbol(null);
+      } finally {
+        if (!cancelled) setIsResolving(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [searchTerm]);
 
   useEffect(() => {
     async function loadPosts() {
@@ -72,14 +94,15 @@ export function ChartBoardList() {
       // But for the sake of the list, we can trust the DB score for sorting order.
       // Let's still fetch prices to show "Current Price" on the card.
       
-      const symbolsToFetch = fetchedPosts
-        .filter((p) => p.prediction_type && p.ticker_symbol)
-        .map((p) => ({ symbol: p.ticker_symbol, source: "yahoo" as const }));
-      
-      let prices = new Map<string, number>();
-      if (symbolsToFetch.length > 0) {
-        prices = await getBatchPrices(symbolsToFetch);
-      }
+      // ✅ 실시간 가격은 WebSocket 스트리밍(서버 SSE 프록시)로 받습니다.
+      //    초기 렌더는 DB 값/예측점수로 먼저 그리고, 가격이 들어오면 UI를 갱신합니다.
+      const symbolsToStream = Array.from(
+        new Set(
+          fetchedPosts
+            .filter((p) => p.prediction_type && p.ticker_symbol)
+            .map((p) => p.ticker_symbol)
+        )
+      );
       
       // Merge Live Prices + DB Accuracy
       // We can use DB accuracy_score as fallback or primary.
@@ -91,8 +114,7 @@ export function ChartBoardList() {
       // Let's use the DB score for 'profitPercentage' if available, or calc it.
       
       const postsWithData = fetchedPosts.map((post) => {
-        const priceKey = `yahoo:${post.ticker_symbol}`;
-        const currentPrice = prices.get(priceKey);
+        const currentPrice = priceRef.current.get(post.ticker_symbol);
         
         // Use DB Accuracy if available, otherwise calc
         let profit = post.accuracy_score;
@@ -132,14 +154,109 @@ export function ChartBoardList() {
       setLoading(false);
       // TTL 30초: 홈 리스트는 자주 바뀌지 않지만, 너무 오래된 캐시는 피함
       clientCacheSet(cacheKey, postsWithData, 30_000);
+
+      // ✅ 스트림 재연결 (sort 변경/리로드 시 심볼 세트가 바뀔 수 있음)
+      streamRef.current?.close();
+      streamRef.current = null;
+      if (symbolsToStream.length > 0) {
+        streamRef.current = subscribeTwelveDataPrices(symbolsToStream, (msg) => {
+          const p = Number(msg.price);
+          if (!Number.isFinite(p)) return;
+          priceRef.current.set(msg.symbol, p);
+
+          // 들어온 가격만 반영해서 카드 UI 갱신(간단)
+          setPosts((prev) =>
+            prev.map((post) => {
+              if (post.ticker_symbol !== msg.symbol) return post;
+              const currentPrice = p;
+
+              let profit = post.accuracy_score;
+              let status = post.prediction_status;
+
+              if (
+                currentPrice &&
+                post.prediction_type &&
+                post.entry_price !== undefined &&
+                post.target_price !== undefined &&
+                post.stop_loss_price !== undefined &&
+                post.target_date
+              ) {
+                const accuracy = calculateAccuracy(
+                  {
+                    predictionType: post.prediction_type,
+                    entryPrice: post.entry_price,
+                    targetPrice: post.target_price,
+                    stopLossPrice: post.stop_loss_price,
+                    targetDate: new Date(post.target_date),
+                  },
+                  currentPrice
+                );
+                profit = accuracy.profitPercentage;
+                status = accuracy.status;
+              }
+
+              return {
+                ...post,
+                currentPrice,
+                profitPercentage: profit,
+                prediction_status: status,
+              };
+            })
+          );
+        });
+      }
     }
     
     loadPosts();
+    return () => {
+      streamRef.current?.close();
+      streamRef.current = null;
+    };
   }, [sortBy]); // Re-fetch when sort changes
 
   // Client-side simple fallback sort or identical to posts if server did it
   // We can just use 'posts' directly since server sorted them.
   const sortedPosts = posts;
+
+  // ✅ 검색(로컬 필터 + 심볼 리졸브 결과 반영)
+  const filteredPosts = useMemo(() => {
+    const q = (searchTerm ?? "").trim();
+    if (!q) return sortedPosts;
+
+    const qLower = q.toLowerCase();
+    const resolved = (resolvedSymbol ?? "").trim();
+
+    const normalize = (s: string) =>
+      s
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "")
+        .replace(/-/g, "/"); // BTC-USD vs BTC/USD
+
+    const resolvedN = resolved ? normalize(resolved) : null;
+
+    // KRX 동치 처리: 005930:KRX <-> 005930.KS/005930.KQ/005930
+    const krxBase =
+      resolvedN && resolvedN.endsWith(":KRX") ? resolvedN.replace(/:KRX$/, "") : null;
+    const krxEquivalents = krxBase ? new Set([`${krxBase}.KS`, `${krxBase}.KQ`, krxBase]) : null;
+
+    return sortedPosts.filter((p) => {
+      const sym = String(p.ticker_symbol ?? "").trim();
+      const title = String(p.title ?? "");
+      const symN = normalize(sym);
+
+      // 1) 리졸브된 심볼이 있으면 그걸 최우선 매칭
+      if (resolvedN) {
+        if (symN === resolvedN) return true;
+        if (krxEquivalents && krxEquivalents.has(symN)) return true;
+      }
+
+      // 2) 텍스트 매칭(심볼/제목)
+      if (sym.toLowerCase().includes(qLower)) return true;
+      if (title.toLowerCase().includes(qLower)) return true;
+      return false;
+    });
+  }, [sortedPosts, searchTerm, resolvedSymbol]);
 
   if (loading) {
     return (
@@ -185,7 +302,7 @@ export function ChartBoardList() {
 
       {/* Grid Layout */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sortedPosts.map((post) => (
+        {filteredPosts.map((post) => (
           <ChartCard
             key={post.id}
             id={post.id}
@@ -211,9 +328,13 @@ export function ChartBoardList() {
         ))}
       </div>
 
-      {sortedPosts.length === 0 && (
+      {filteredPosts.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">
-          아직 차트 분석이 없습니다.
+          {searchTerm.trim()
+            ? isResolving
+              ? "검색 중..."
+              : "검색 결과가 없습니다."
+            : "아직 차트 분석이 없습니다."}
         </div>
       )}
     </section>

@@ -16,7 +16,7 @@ import {
     LineSeries,
     AreaSeries,
 } from "lightweight-charts";
-import { fetchYahooCandles } from "@/lib/api/yahoo";
+import { fetchTwelveDataCandles } from "@/lib/api/twelvedata";
 
 type ViewStyle = "candle" | "line";
 
@@ -592,15 +592,15 @@ export function SavedChartViewer({
             setError(null);
 
             try {
-                let yahooInterval = "1d";
-                if (interval === "Y") yahooInterval = "1mo";
-                if (interval === "M") yahooInterval = "1mo";
-                if (interval === "W") yahooInterval = "1wk";
-                if (interval === "D") yahooInterval = "1d";
-                if (interval === "60") yahooInterval = "1h";
-                if (interval === "1") yahooInterval = "1m";
+                let dataInterval = "1d";
+                if (interval === "Y") dataInterval = "1mo";
+                if (interval === "M") dataInterval = "1mo";
+                if (interval === "W") dataInterval = "1wk";
+                if (interval === "D") dataInterval = "1d";
+                if (interval === "60") dataInterval = "1h";
+                if (interval === "1") dataInterval = "1m";
 
-                const data = (await fetchYahooCandles(symbol, yahooInterval)) as CandleDataWithVolume[];
+                const data = (await fetchTwelveDataCandles(symbol, dataInterval)) as CandleDataWithVolume[];
 
                 if (!data || data.length === 0) {
                     setError("차트 데이터를 불러올 수 없습니다.");

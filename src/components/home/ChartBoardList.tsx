@@ -74,7 +74,7 @@ export function ChartBoardList() {
       
       const symbolsToFetch = fetchedPosts
         .filter((p) => p.prediction_type && p.ticker_symbol)
-        .map((p) => ({ symbol: p.ticker_symbol, source: "yahoo" as const }));
+        .map((p) => ({ symbol: p.ticker_symbol, source: "twelvedata" as const }));
       
       let prices = new Map<string, number>();
       if (symbolsToFetch.length > 0) {
@@ -91,7 +91,7 @@ export function ChartBoardList() {
       // Let's use the DB score for 'profitPercentage' if available, or calc it.
       
       const postsWithData = fetchedPosts.map((post) => {
-        const priceKey = `yahoo:${post.ticker_symbol}`;
+        const priceKey = `twelvedata:${post.ticker_symbol}`;
         const currentPrice = prices.get(priceKey);
         
         // Use DB Accuracy if available, otherwise calc
@@ -190,7 +190,7 @@ export function ChartBoardList() {
             key={post.id}
             id={post.id}
             symbol={post.ticker_symbol}
-            source="yahoo"
+            source="twelvedata"
             title={post.title}
             user={{
               name: post.profiles?.nickname || "익명",

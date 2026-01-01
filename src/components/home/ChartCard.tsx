@@ -19,7 +19,7 @@ const SavedChartViewer = dynamic(() => import("@/components/analyze/SavedChartVi
 interface ChartCardProps {
   id: string;
   symbol: string;
-  source?: "upbit" | "yahoo" | "finnhub";
+  source?: "upbit" | "yahoo" | "finnhub" | "twelvedata";
   title: string;
   user: {
     name: string;

@@ -3,7 +3,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, IChartApi, CandlestickSeries } from "lightweight-charts";
-import { fetchYahooCandles, CandleData } from "@/lib/api/yahoo";
+import { fetchTwelveDataCandles, CandleData } from "@/lib/api/twelvedata";
 
 interface TechChartProps {
   symbol?: string;
@@ -22,11 +22,11 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
 
     const loadData = async () => {
       try {
-        console.log(`[TechChart] Fetching Yahoo Finance data for ${symbol} (${interval})...`);
+        console.log(`[TechChart] Fetching Twelve Data for ${symbol} (${interval})...`);
 
-        const candles = await fetchYahooCandles(symbol, interval);
+        const candles = await fetchTwelveDataCandles(symbol, interval);
 
-        console.log(`[TechChart] Yahoo Finance data fetched:`, candles?.length);
+        console.log(`[TechChart] Twelve Data fetched:`, candles?.length);
 
         // Only update state if component is still mounted
         if (!isMounted) return;
@@ -38,7 +38,7 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
         }
       } catch (e) {
         // Silently handle errors for TechChart (it's a widget, not critical)
-        console.error(`[TechChart] Yahoo Finance Fetch Error:`, e);
+        console.error(`[TechChart] Twelve Data Fetch Error:`, e);
         if (isMounted) {
           setData([]);
         }
@@ -147,7 +147,7 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
     <div className="relative w-full rounded-xl border border-border bg-card p-4 shadow-lg">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-          <span className="text-purple-400">Yahoo Finance</span>
+          <span className="text-purple-400">Twelve Data</span>
           {symbol}
         </h3>
         {loading && <span className="text-xs text-muted-foreground animate-pulse">데이터 연결 중...</span>}

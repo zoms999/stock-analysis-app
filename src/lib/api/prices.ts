@@ -1,7 +1,9 @@
 import { fetchYahooCandles, CandleData as YahooCandleData } from "./yahoo";
 import { fetchUpbitCandles, CandleData as UpbitCandleData } from "./upbit";
+import { fetchFinnhubCandles } from "./finnhub";
+import { fetchTwelveDataCandles, CandleData as TwelveDataCandleData } from "./twelvedata";
 
-export type PriceSource = "yahoo" | "upbit" | "finnhub";
+export type PriceSource = "twelvedata" | "yahoo" | "upbit" | "finnhub";
 
 interface PriceCache {
   [key: string]: {
@@ -18,7 +20,7 @@ const CACHE_DURATION = 60000; // 1 minute cache
  */
 export async function getCurrentPrice(
   symbol: string,
-  source: PriceSource = "yahoo"
+  source: PriceSource = "twelvedata"
 ): Promise<number | null> {
   const cacheKey = `${source}:${symbol}`;
   const now = Date.now();
@@ -31,13 +33,23 @@ export async function getCurrentPrice(
   try {
     let price: number | null = null;
 
-    if (source === "yahoo") {
+    if (source === "twelvedata") {
+      const candles = await fetchTwelveDataCandles(symbol, "1d");
+      if (candles && candles.length > 0) {
+        price = candles[candles.length - 1].close;
+      }
+    } else if (source === "yahoo") {
       const candles = await fetchYahooCandles(symbol, "1d");
       if (candles && candles.length > 0) {
         price = candles[candles.length - 1].close;
       }
     } else if (source === "upbit") {
       const candles = await fetchUpbitCandles(symbol, 1);
+      if (candles && candles.length > 0) {
+        price = candles[candles.length - 1].close;
+      }
+    } else if (source === "finnhub") {
+      const candles = await fetchFinnhubCandles(symbol, "D");
       if (candles && candles.length > 0) {
         price = candles[candles.length - 1].close;
       }

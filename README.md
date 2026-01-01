@@ -50,7 +50,13 @@ npm run dev
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Twelve Data (server-only)
+TWELVEDATA_API_KEY=your_twelve_data_api_key
 ```
+
+> 참고: `.env.local`을 수정/추가한 뒤에는 **개발 서버를 재시작**해야 반영됩니다.
+> 예시 파일은 `ENV.example`을 참고하세요.
 
 ## 📁 프로젝트 구조
 
@@ -76,7 +82,7 @@ src/
 - **UI**: React 19, Tailwind CSS 4
 - **Charts**: Lightweight Charts 5
 - **Database**: Supabase
-- **Data Source**: Yahoo Finance API
+- **Data Source**: Twelve Data API
 - **Language**: TypeScript
 
 ## 📊 차트 사용법

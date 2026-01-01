@@ -97,7 +97,7 @@ export function HeroChart() {
                       {topPost ? `${topSymbol} Top Accuracy` : "Bitcoin (BTC) Price"}
                     </h3>
                     <p className="text-xs text-muted-foreground">
-                      {topPost ? "커뮤니티 최고 정확도 게시글" : "Yahoo Finance Real-time"}
+                      {topPost ? "커뮤니티 최고 정확도 게시글" : "Twelve Data Real-time"}
                     </p>
                  </div>
                  <div className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">

@@ -450,8 +450,18 @@ export function SavedChartViewer({
             width: chartContainerRef.current.clientWidth,
             height: chartContainerRef.current.clientHeight,
             grid: {
-                vertLines: { color: isDark ? "rgba(105,105,105,0.2)" : "rgba(209,213,219,0.3)", visible: true },
-                horzLines: { color: isDark ? "rgba(105,105,105,0.2)" : "rgba(209,213,219,0.3)", visible: true },
+                // ✅ 상세(mode=detail): 가로 라인은 제거하고 세로 라인만 잘 보이도록
+                // ✅ 카드(mode=card): 기존처럼 깔끔하게(과한 대비 방지)
+                vertLines: {
+                    color: mode === "detail"
+                        ? (isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(209, 213, 219, 0.45)")
+                        : (isDark ? "rgba(105,105,105,0.2)" : "rgba(209,213,219,0.3)"),
+                    visible: true,
+                },
+                horzLines: {
+                    color: isDark ? "rgba(105,105,105,0.2)" : "rgba(209,213,219,0.3)",
+                    visible: mode === "detail" ? false : true,
+                },
             },
             timeScale: {
                 visible: true,

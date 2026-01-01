@@ -399,7 +399,8 @@ export function ChartAnalyzer({
             height: chartContainerRef.current.clientHeight,
             grid: {
                 vertLines: {
-                    color: isDark ? "rgba(105, 105, 105, 0.2)" : "rgba(209, 213, 219, 0.3)",
+                    // ✅ 세로 그리드가 더 잘 보이도록 대비/투명도 상향
+                    color: isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(209, 213, 219, 0.45)",
                     style: 0,
                     visible: true,
                 },
@@ -661,7 +662,8 @@ export function ChartAnalyzer({
                 textColor: isDark ? "#6366f1" : "#4B5563",
             },
             grid: {
-                vertLines: { color: isDark ? "rgba(99, 102, 241, 0.05)" : "rgba(209, 213, 219, 0.3)" },
+                // ✅ 테마 변경 시에도 세로 그리드가 흐려지지 않도록 동일하게 상향
+                vertLines: { color: isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(209, 213, 219, 0.45)" },
                 horzLines: { visible: false },
             },
             timeScale: { borderColor: isDark ? "#2a2a2a" : "#E5E7EB" },

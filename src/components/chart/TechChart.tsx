@@ -4,13 +4,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, IChartApi, CandlestickSeries } from "lightweight-charts";
 import { fetchYahooCandles, CandleData } from "@/lib/api/yahoo";
+import { fetchFinnhubCandles } from "@/lib/api/finnhub";
 
 interface TechChartProps {
   symbol?: string;
   interval?: string;
+  source?: "yahoo" | "finnhub";
 }
 
-export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProps) {
+export function TechChart({ symbol = "BTC-USD", interval = "1d", source = "yahoo" }: TechChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [data, setData] = useState<CandleData[]>([]);
@@ -22,11 +24,23 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
 
     const loadData = async () => {
       try {
-        console.log(`[TechChart] Fetching Yahoo Finance data for ${symbol} (${interval})...`);
+        const finnhubResolution = (() => {
+          // 허용: "D","W","M","60","1" 또는 Yahoo 스타일("1d","1wk","1mo","1h","1m")
+          if (["D", "W", "M", "60", "1"].includes(interval)) return interval;
+          if (interval === "1d") return "D";
+          if (interval === "1wk") return "W";
+          if (interval === "1mo") return "M";
+          if (interval === "1h" || interval === "60") return "60";
+          if (interval === "1m") return "1";
+          return "D";
+        })();
 
-        const candles = await fetchYahooCandles(symbol, interval);
+        const candles =
+          source === "finnhub"
+            ? await fetchFinnhubCandles(symbol, finnhubResolution)
+            : await fetchYahooCandles(symbol, interval);
 
-        console.log(`[TechChart] Yahoo Finance data fetched:`, candles?.length);
+        console.log(`[TechChart] ${source} data fetched:`, candles?.length);
 
         // Only update state if component is still mounted
         if (!isMounted) return;
@@ -64,7 +78,7 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
       isMounted = false;
       clearInterval(pollingInterval);
     };
-  }, [symbol, interval]);
+  }, [symbol, interval, source]);
 
   // Chart Rendering
   useEffect(() => {
@@ -105,7 +119,7 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
         },
         timeScale: {
           // ✅ 일/주/월(비-인트라데이)에서는 날짜 단위로 보이도록
-          timeVisible: ["1m", "2m", "5m", "15m", "30m", "60m", "1h", "90m"].includes(interval),
+          timeVisible: ["1", "5", "15", "30", "60", "1m", "2m", "5m", "15m", "30m", "60m", "1h", "90m"].includes(interval),
           secondsVisible: false,
         },
       });

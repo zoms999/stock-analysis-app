@@ -1,5 +1,6 @@
 import { fetchYahooCandles, CandleData as YahooCandleData } from "./yahoo";
 import { fetchUpbitCandles, CandleData as UpbitCandleData } from "./upbit";
+import { fetchFinnhubCandles } from "./finnhub";
 
 export type PriceSource = "yahoo" | "upbit" | "finnhub";
 
@@ -33,6 +34,12 @@ export async function getCurrentPrice(
 
     if (source === "yahoo") {
       const candles = await fetchYahooCandles(symbol, "1d");
+      if (candles && candles.length > 0) {
+        price = candles[candles.length - 1].close;
+      }
+    } else if (source === "finnhub") {
+      // Finnhub: resolution=D 로 최근 캔들 close 사용
+      const candles = await fetchFinnhubCandles(symbol, "D");
       if (candles && candles.length > 0) {
         price = candles[candles.length - 1].close;
       }

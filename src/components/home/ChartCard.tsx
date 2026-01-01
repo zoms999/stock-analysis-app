@@ -36,9 +36,10 @@ interface ChartCardProps {
   chartConfig?: any; // Chart configuration from post
 }
 
-export function ChartCard({ id, symbol, title, user, stats, predictionStatus, chartConfig }: ChartCardProps) {
+export function ChartCard({ id, symbol, source = "yahoo", title, user, stats, predictionStatus, chartConfig }: ChartCardProps) {
   const router = useRouter();
   const [showLimitPopup, setShowLimitPopup] = useState(false);
+  const viewerSource = source === "finnhub" ? "finnhub" : "yahoo";
   
   const statusColors = {
     SUCCESS: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/50",
@@ -106,6 +107,7 @@ export function ChartCard({ id, symbol, title, user, stats, predictionStatus, ch
               chartStyle={chartStyle}
               showStyleToggle={false}
               mode="card"
+              source={viewerSource}
             />
         </div>
 

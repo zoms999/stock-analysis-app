@@ -17,8 +17,10 @@ import {
     AreaSeries,
 } from "lightweight-charts";
 import { fetchYahooCandles } from "@/lib/api/yahoo";
+import { fetchFinnhubCandles } from "@/lib/api/finnhub";
 
 type ViewStyle = "candle" | "line";
+type DataSource = "yahoo" | "finnhub";
 
 interface SavedChartViewerProps {
     symbol: string;
@@ -29,6 +31,8 @@ interface SavedChartViewerProps {
     showStyleToggle?: boolean;
     // ✅ 카드(메인 리스트)에서는 "오늘(현재일)" 기준으로만 보여주기 위해 미래 확장/예측 오버레이를 끌 수 있음
     mode?: "detail" | "card";
+    // ✅ 홈에서 Finnhub로만 교체하고 싶을 때 사용
+    source?: DataSource;
 }
 
 interface CandleDataWithVolume extends CandlestickData {
@@ -43,6 +47,7 @@ export function SavedChartViewer({
     defaultStyle = "line",
     showStyleToggle = true,
     mode = "detail",
+    source = "yahoo",
 }: SavedChartViewerProps) {
     const { theme, systemTheme } = useTheme();
     const currentTheme = theme === "system" ? systemTheme : theme;
@@ -592,6 +597,7 @@ export function SavedChartViewer({
             setError(null);
 
             try {
+                // interval 매핑
                 let yahooInterval = "1d";
                 if (interval === "Y") yahooInterval = "1mo";
                 if (interval === "M") yahooInterval = "1mo";
@@ -600,7 +606,18 @@ export function SavedChartViewer({
                 if (interval === "60") yahooInterval = "1h";
                 if (interval === "1") yahooInterval = "1m";
 
-                const data = (await fetchYahooCandles(symbol, yahooInterval)) as CandleDataWithVolume[];
+                let finnhubResolution = "D";
+                if (interval === "Y") finnhubResolution = "M";
+                if (interval === "M") finnhubResolution = "M";
+                if (interval === "W") finnhubResolution = "W";
+                if (interval === "D") finnhubResolution = "D";
+                if (interval === "60") finnhubResolution = "60";
+                if (interval === "1") finnhubResolution = "1";
+
+                const data =
+                    source === "finnhub"
+                        ? ((await fetchFinnhubCandles(symbol, finnhubResolution)) as CandleDataWithVolume[])
+                        : ((await fetchYahooCandles(symbol, yahooInterval)) as CandleDataWithVolume[]);
 
                 if (!data || data.length === 0) {
                     setError("차트 데이터를 불러올 수 없습니다.");
@@ -682,7 +699,7 @@ export function SavedChartViewer({
 
         run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [symbol, interval, applyBaseDataToSeries, mode, getCardWindowBars, computeFutureBarsForCard]);
+    }, [symbol, interval, source, applyBaseDataToSeries, mode, getCardWindowBars, computeFutureBarsForCard]);
 
     // 3) Prediction line inject (Segmented Gradient)
     const updatePredictionSeries = useCallback(() => {

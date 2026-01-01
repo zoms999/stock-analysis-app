@@ -6,11 +6,16 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { fetchPosts, type Post } from "@/lib/api/posts";
+import { useRouter } from "next/navigation";
+import type { Time } from "lightweight-charts";
 
-const TechChart = dynamic(() => import("@/components/chart/TechChart").then(mod => mod.TechChart), {
+const TechChart = dynamic<{ symbol?: string; interval?: string; source?: "yahoo" | "finnhub" }>(
+  () => import("@/components/chart/TechChart").then(mod => mod.TechChart),
+  {
   ssr: false,
   loading: () => <div className="h-[320px] w-full animate-pulse bg-muted/20 rounded-xl" />
-});
+  }
+);
 
 const SavedChartViewer = dynamic(
   () => import("@/components/analyze/SavedChartViewer").then((mod) => mod.SavedChartViewer),
@@ -21,7 +26,7 @@ const SavedChartViewer = dynamic(
 );
 
 export function HeroChart() {
-  const router = require("next/navigation").useRouter();
+  const router = useRouter();
   const [topPost, setTopPost] = useState<Post | null>(null);
   const [loadingTop, setLoadingTop] = useState(true);
 
@@ -47,13 +52,16 @@ export function HeroChart() {
     };
   }, []);
 
-  const topConfig = (topPost as any)?.chart_config;
+  const topConfig = topPost?.chart_config;
   const topSymbol = topPost?.ticker_symbol || "BTC-USD";
   const topInterval = topConfig?.interval || "D";
-  const topPredictionPoints = topConfig?.prediction_points || [];
-  const topChartStyle = topConfig?.chartStyle || "line";
+  type PredictionPoint = { time: Time; value: number };
+  const topPredictionPoints: PredictionPoint[] = Array.isArray(topConfig?.prediction_points)
+    ? (topConfig.prediction_points as PredictionPoint[])
+    : [];
+  const topChartStyle = topConfig?.chartStyle === "candle" ? "candle" : "line";
   const topAccuracy = useMemo(() => {
-    const v = (topPost as any)?.accuracy_score;
+    const v = topPost?.accuracy_score;
     return typeof v === "number" ? v : null;
   }, [topPost]);
 
@@ -97,7 +105,7 @@ export function HeroChart() {
                       {topPost ? `${topSymbol} Top Accuracy` : "Bitcoin (BTC) Price"}
                     </h3>
                     <p className="text-xs text-muted-foreground">
-                      {topPost ? "커뮤니티 최고 정확도 게시글" : "Yahoo Finance Real-time"}
+                      {topPost ? "커뮤니티 최고 정확도 게시글" : "Finnhub Real-time"}
                     </p>
                  </div>
                  <div className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
@@ -119,9 +127,10 @@ export function HeroChart() {
                         showStyleToggle={false}
                         // ✅ 리스트 카드와 동일한 룩&필로 (미래 여백/마커/글로우 정책 포함)
                         mode="card"
+                        source="finnhub"
                       />
                     ) : (
-                      <TechChart symbol="BTC-USD" interval="1d" />
+                      <TechChart symbol="BTC-USD" interval="D" source="finnhub" />
                     )}
                  </div>
             </div>

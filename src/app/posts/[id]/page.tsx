@@ -1,8 +1,8 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MessageSquare, Heart, Share2, ThumbsUp } from "lucide-react";
+import { ArrowLeft, Share2, ThumbsUp } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { LimitPopup } from "@/components/subscription/LimitPopup";
@@ -28,7 +28,83 @@ export default function PostDetailPage() {
   const [relatedSortBy, setRelatedSortBy] = useState<SortOption>("latest");
 
   const [showLimitPopup, setShowLimitPopup] = useState(false);
-  const router = useRouter();
+  const [isSharing, setIsSharing] = useState(false);
+
+  const errorMessage = (e: unknown) => {
+    if (typeof e === "string") return e;
+    if (e && typeof e === "object" && "message" in e) {
+      return String((e as { message?: unknown }).message);
+    }
+    return String(e);
+  };
+
+  const grantShareReward = async (platform: string) => {
+    try {
+      const res = await fetch(`/api/posts/${id}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (json?.error === "LOGIN_REQUIRED") {
+          toast.info("공유 보상은 로그인 후 받을 수 있어요.");
+          return;
+        }
+        // 실패해도 공유 자체는 성공했을 수 있으니 조용히 안내
+        toast.error("공유 보상 지급에 실패했습니다. 잠시 후 다시 시도해주세요.");
+        return;
+      }
+
+      const reward = json?.reward;
+      const already = json?.alreadyRewarded === true;
+      if (already) {
+        toast.info("오늘은 이미 이 게시글 공유 보상을 받았어요.");
+        return;
+      }
+
+      const viewN = Number(reward?.additionalViews ?? 0);
+      const pts = Number(reward?.points ?? 0);
+      const parts: string[] = [];
+      if (viewN > 0) parts.push(`열람권 +${viewN}`);
+      if (pts > 0) parts.push(`포인트 +${pts}`);
+      toast.success(`공유 보상 지급 완료${parts.length ? `: ${parts.join(", ")}` : ""}`);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleShare = async () => {
+    if (!post) return;
+    if (typeof window === "undefined") return;
+    if (isSharing) return;
+
+    const url = window.location.href;
+    const title = post.title || `${post.ticker_symbol} 차트 분석`;
+    const text = `${post.ticker_symbol} 차트 분석`;
+
+    setIsSharing(true);
+    try {
+      // 1) Web Share API (모바일/일부 브라우저)
+      if (navigator.share) {
+        await navigator.share({ title, text, url });
+        await grantShareReward("webshare");
+        return;
+      }
+
+      // 2) Fallback: 링크 복사
+      await navigator.clipboard.writeText(url);
+      toast.success("링크가 복사되었습니다.");
+      await grantShareReward("copy");
+    } catch (e: unknown) {
+      // 사용자가 공유 취소하면 조용히 종료
+      const msg = errorMessage(e);
+      if (msg.toLowerCase().includes("abort") || msg.includes("취소")) return;
+      toast.error("공유에 실패했습니다.");
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   useEffect(() => {
     async function loadPost() {
@@ -42,13 +118,18 @@ export default function PostDetailPage() {
           const price = await getCurrentPrice(data.ticker_symbol, "yahoo");
           setCurrentPrice(price);
         }
-      } catch (e: any) {
-        if (e?.code === "LIMIT_REACHED" || e?.message?.includes("한도를 초과")) {
+      } catch (e: unknown) {
+        const msg = errorMessage(e);
+        const code =
+          e && typeof e === "object" && "code" in e
+            ? String((e as { code?: unknown }).code ?? "")
+            : "";
+        if (code === "LIMIT_REACHED" || msg.includes("한도를 초과")) {
           console.log("Limit reached error caught, showing popup");
           setShowLimitPopup(true);
         } else {
           console.error("Unknown error in loadPost:", e);
-          toast.error(e.message || "게시글을 불러오는데 실패했습니다.");
+          toast.error(msg || "게시글을 불러오는데 실패했습니다.");
         }
       } finally {
         setLoading(false);
@@ -64,14 +145,15 @@ export default function PostDetailPage() {
     (async () => {
       setRelatedLoading(true);
       try {
-        const sort =
+        const sort = (
           relatedSortBy === "accuracy"
             ? "accuracy"
             : relatedSortBy === "most_analyzed"
               ? "views"
               : relatedSortBy === "completed"
                 ? "completed"
-                : "latest";
+                : "latest"
+        ) as Parameters<typeof fetchPostsBySymbol>[0]["sort"];
 
         const rel = await fetchPostsBySymbol({
           symbol: post.ticker_symbol,
@@ -177,7 +259,14 @@ export default function PostDetailPage() {
               </div>
             </div>
             
-            <Button variant="ghost" size="sm" className="h-9 gap-2 text-muted-foreground hover:text-foreground">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 gap-2 text-muted-foreground hover:text-foreground"
+              onClick={handleShare}
+              disabled={isSharing}
+              title="공유하면 열람권/포인트 보상을 받을 수 있어요"
+            >
               <Share2 className="h-4 w-4" />
               <span className="hidden sm:inline">공유하기</span>
             </Button>

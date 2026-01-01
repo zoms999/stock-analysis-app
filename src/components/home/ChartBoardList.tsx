@@ -23,6 +23,64 @@ export function ChartBoardList() {
   const priceRef = useRef<Map<string, number>>(new Map());
   const streamRef = useRef<{ close: () => void } | null>(null);
 
+  const makeExcerpt = (html: string | null | undefined, maxLen = 120) => {
+    const raw = String(html ?? "");
+    const text = raw
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!text) return "";
+    if (text.length <= maxLen) return text;
+    return `${text.slice(0, maxLen).trimEnd()}...`;
+  };
+
+  const getPointPhase = (post: Post): "진행중" | "완료" | null => {
+    const pts = post?.chart_config?.prediction_points;
+    if (!Array.isArray(pts) || pts.length === 0) return null;
+
+    const interval = String(post?.chart_config?.interval ?? "D");
+    const stepMs =
+      interval === "1" ? 60_000 :
+      interval === "60" ? 3_600_000 :
+      interval === "D" ? 86_400_000 :
+      interval === "W" ? 7 * 86_400_000 :
+      interval === "M" ? 30 * 86_400_000 :
+      interval === "Y" ? 365 * 86_400_000 :
+      86_400_000;
+
+    const toMs = (t: unknown): number | null => {
+      if (typeof t === "number" && Number.isFinite(t)) return t * 1000; // unix seconds
+      if (typeof t === "string") {
+        const s = t.trim();
+        // YYYY-MM-DD는 로컬 00:00 기준으로 해석(일봉 UX 안정화)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+          const ms = new Date(`${s}T00:00:00`).getTime();
+          return Number.isFinite(ms) ? ms : null;
+        }
+        const ms = new Date(s).getTime();
+        return Number.isFinite(ms) ? ms : null;
+      }
+      return null;
+    };
+
+    let maxMs: number | null = null;
+    for (const p of pts) {
+      const timeVal =
+        typeof p === "object" && p !== null && "time" in p
+          ? (p as { time?: unknown }).time
+          : undefined;
+      const ms = toMs(timeVal);
+      if (ms === null) continue;
+      if (maxMs === null || ms > maxMs) maxMs = ms;
+    }
+    if (maxMs === null) return null;
+
+    // ✅ "완료"는 마지막 포인트가 '충분히 과거'일 때만(1 bar 여유)
+    const now = Date.now();
+    return maxMs <= now - stepMs ? "완료" : "진행중";
+  };
+
   // ✅ 한글/회사명 검색 지원: 입력이 심볼이 아니면 Twelve Data 검색 프록시로 심볼을 리졸브
   useEffect(() => {
     const q = (searchTerm ?? "").trim();
@@ -303,12 +361,29 @@ export function ChartBoardList() {
       {/* Grid Layout */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPosts.map((post) => (
+          (() => {
+            const pointsCount = Array.isArray(post?.chart_config?.prediction_points)
+              ? post.chart_config.prediction_points.length
+              : 0;
+
+            const pointPhase = getPointPhase(post);
+
+            const profitLabel =
+              typeof post.profitPercentage === "number"
+                ? `${post.profitPercentage >= 0 ? "+" : ""}${post.profitPercentage.toFixed(2)}%`
+                : pointsCount > 0
+                  ? `포인트 ${pointsCount}개`
+                  : "예측 없음";
+
+            return (
           <ChartCard
             key={post.id}
             id={post.id}
             symbol={post.ticker_symbol}
             source="yahoo"
             title={post.title}
+            excerpt={makeExcerpt(post.content, 140)}
+            pointPhase={pointPhase ?? undefined}
             user={{
               name: post.profiles?.nickname || "익명",
               level: "레벨 1",
@@ -316,15 +391,15 @@ export function ChartBoardList() {
               avatar: post.profiles?.avatar_url,
             }}
             stats={{
-              profit: typeof post.profitPercentage === 'number'
-                ? `${post.profitPercentage >= 0 ? "+" : ""}${post.profitPercentage.toFixed(2)}%`
-                : "예측 없음",
+              profit: profitLabel,
               winRate: post.prediction_status || "대기",
               count: `조회 ${post.view_count || 0}`,
             }}
             predictionStatus={post.prediction_status}
             chartConfig={post.chart_config}
           />
+            );
+          })()
         ))}
       </div>
 

@@ -250,7 +250,7 @@ export default function AnalyzePage() {
                         <div className="p-6">
                             <Textarea
                                 placeholder="차트 분석 내용을 작성해주세요..."
-                                className="min-h-[200px] text-base bg-background/60 border-0 text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500 resize-none"
+                                className="min-h-[400px] text-base bg-background/60 border-0 text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500 resize-none"
                                 value={content}
                                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
                             />

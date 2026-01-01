@@ -707,16 +707,21 @@ export function SavedChartViewer({
         run();
 
         // ✅ 실시간 현재가 스트리밍 (마지막 실측 캔들의 close/high/low 보정에 활용 가능)
-        const sub = subscribeTwelveDataPrices([symbol], (msg) => {
-            const p = Number(msg.price);
-            if (!Number.isFinite(p)) return;
-            const last = lastRealRef.current;
-            if (!last) return;
-            lastRealRef.current = {
-                ...last,
-                close: p,
-            };
-        });
+        // 홈 카드(mode="card")에선 차트 미리보기만 필요하므로 스트리밍 구독을 끄고
+        // 목록 단위(ChartBoardList)의 배치 구독만 사용해 SSE 연결 폭주를 방지합니다.
+        const sub =
+            mode === "card"
+                ? { close: () => {} }
+                : subscribeTwelveDataPrices([symbol], (msg) => {
+                      const p = Number(msg.price);
+                      if (!Number.isFinite(p)) return;
+                      const last = lastRealRef.current;
+                      if (!last) return;
+                      lastRealRef.current = {
+                          ...last,
+                          close: p,
+                      };
+                  });
 
         return () => sub.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps

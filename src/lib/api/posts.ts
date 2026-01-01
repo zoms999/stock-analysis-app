@@ -388,7 +388,7 @@ export async function fetchPostsBySymbol(params: {
   symbol: string;
   limit?: number;
   excludeId?: string;
-  sort?: "latest" | "views" | "accuracy";
+  sort?: "latest" | "views" | "accuracy" | "completed";
 }): Promise<Post[]> {
   const supabase = createClient();
   const { symbol, limit = 12, excludeId, sort = "latest" } = params;
@@ -406,7 +406,11 @@ export async function fetchPostsBySymbol(params: {
 
   if (excludeId) query = query.neq("id", excludeId);
 
-  if (sort === "views") query = query.order("view_count", { ascending: false });
+  if (sort === "completed") {
+    query = query
+      .neq("prediction_status", "WAITING")
+      .order("target_date", { ascending: false, nullsFirst: false });
+  } else if (sort === "views") query = query.order("view_count", { ascending: false });
   else if (sort === "accuracy") query = query.order("accuracy_score", { ascending: false, nullsFirst: false });
   else query = query.order("created_at", { ascending: false });
 

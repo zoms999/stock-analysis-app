@@ -101,7 +101,10 @@ export default function MyPage() {
             <p className="text-muted-foreground">{user?.email || "로그인이 필요합니다"}</p>
             <div className="flex items-center justify-center md:justify-start gap-2 pt-2">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                    Level {subscription?.accessMaxLevel || 1}
+                    LV {profile?.user_level ?? 1}
+                </span>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-600">
+                    열람 {subscription?.accessMaxLevel ?? 1}등급까지
                 </span>
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
                     {subscription?.planName || '무료 멤버십'}

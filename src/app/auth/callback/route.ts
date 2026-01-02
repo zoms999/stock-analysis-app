@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
-  const referralCode = requestUrl.searchParams.get('referral_code')
+  const referralCodeFromQuery = requestUrl.searchParams.get('referral_code')
   const origin = requestUrl.origin
 
   if (code) {
@@ -12,6 +12,25 @@ export async function GET(request: Request) {
     const { data: sessionData } = await supabase.auth.exchangeCodeForSession(code)
 
     // If referral code exists and user just signed up, link to partner
+    const normalizeReferralCode = (value: unknown) => {
+      if (typeof value !== 'string') return null
+      const v = value.trim()
+
+      // 신규: 4자리 숫자
+      const digits = v.replace(/\D/g, '')
+      if (/^\d{4}$/.test(digits)) return digits
+
+      // 레거시 호환(기존 8자리 코드가 남아있을 수 있음)
+      const legacy = v.toUpperCase()
+      if (/^[A-Z0-9]{8}$/.test(legacy)) return legacy
+
+      return null
+    }
+
+    const referralCode =
+      normalizeReferralCode(referralCodeFromQuery) ||
+      normalizeReferralCode((sessionData as any)?.user?.user_metadata?.referral_code)
+
     if (referralCode && sessionData?.user) {
       const userId = sessionData.user.id
 

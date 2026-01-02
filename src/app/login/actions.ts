@@ -7,6 +7,13 @@ import { headers } from 'next/headers'
 
 import { createClient } from '@/lib/supabase/server'
 
+function redirectWithMessage(params: { error?: string; message?: string }) {
+  const qs = new URLSearchParams()
+  if (params.error) qs.set('error', params.error)
+  if (params.message) qs.set('message', params.message)
+  redirect(`/login?${qs.toString()}`)
+}
+
 export async function login(formData: FormData) {
   const supabase = await createClient()
   
@@ -20,7 +27,12 @@ export async function login(formData: FormData) {
 
   if (error) {
     console.error('Login Error:', error)
-    redirect('/login?error=로그인에_실패했습니다')
+    // 이메일 인증이 필요한 경우(회원가입 후 미확인)
+    if ((error as any)?.code === 'email_not_confirmed') {
+      redirectWithMessage({ message: '이메일 확인(인증) 후 로그인해주세요' })
+    }
+
+    redirectWithMessage({ error: '로그인에 실패했습니다' })
   }
 
   revalidatePath('/', 'layout')
@@ -55,7 +67,7 @@ export async function signup(formData: FormData) {
 
   // 비밀번호 유효성 검사
   if (password.length < 6) {
-    redirect('/login?error=비밀번호는_6자_이상이어야_합니다')
+    redirectWithMessage({ error: '비밀번호는 6자 이상이어야 합니다' })
   }
 
   const siteUrl = await getSiteUrl();
@@ -74,12 +86,12 @@ export async function signup(formData: FormData) {
 
   if (error) {
     console.error('Signup Error:', error)
-    redirect('/login?error=회원가입에_실패했습니다')
+    redirectWithMessage({ error: '회원가입에 실패했습니다' })
   }
 
   // 이메일 확인이 필요한 경우
   if (data.user && !data.session) {
-    redirect('/login?message=이메일_확인이_필요합니다')
+    redirectWithMessage({ message: '이메일 확인이 필요합니다' })
   }
 
   revalidatePath('/', 'layout')
@@ -106,7 +118,7 @@ export async function signInWithGoogle(formData: FormData) {
 
   if (error) {
     console.error('Google Login Error:', error)
-    redirect('/login?error=구글_로그인에_실패했습니다')
+    redirectWithMessage({ error: '구글 로그인에 실패했습니다' })
   }
 
   if (data.url) {
@@ -135,7 +147,7 @@ export async function signInWithFacebook(formData: FormData) {
 
   if (error) {
     console.error('Facebook Login Error:', error)
-    redirect('/login?error=페이스북_로그인에_실패했습니다')
+    redirectWithMessage({ error: '페이스북 로그인에 실패했습니다' })
   }
 
   if (data.url) {

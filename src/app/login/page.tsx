@@ -6,32 +6,118 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useState, Suspense, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
 function LoginForm() {
-    const [isSignupMode, setIsSignupMode] = useState(false)
+  const [isSignupMode, setIsSignupMode] = useState(false)
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
   const message = searchParams.get('message')
-  const [referralCode, setReferralCode] = useState<string | null>(null)
+  const [referralCode, setReferralCode] = useState<string>('')
+  const [referralFromUrl, setReferralFromUrl] = useState(false)
+  const [hasReferrer, setHasReferrer] = useState<boolean | null>(null)
+
+  const normalizeReferralCode = (value: string) =>
+    value.replace(/\D/g, '').slice(0, 4)
 
   useEffect(() => {
     // 1. URL에서 ref 코드 확인
     const ref = searchParams.get('ref')
     if (ref) {
-      localStorage.setItem('referralCode', ref)
-      setReferralCode(ref)
+      const normalized = normalizeReferralCode(ref)
+      localStorage.setItem('referralCode', normalized)
+      queueMicrotask(() => {
+        setReferralCode(normalized)
+        setReferralFromUrl(true)
+      })
     } else {
       // 2. 없으면 localStorage 확인 (이전에 방문했을 수 있음)
       const cachedRef = localStorage.getItem('referralCode')
       if (cachedRef) {
-        setReferralCode(cachedRef)
+        const normalized = normalizeReferralCode(cachedRef)
+        queueMicrotask(() => setReferralCode(normalized))
       }
+      queueMicrotask(() => setReferralFromUrl(false))
     }
   }, [searchParams])
+
+  useEffect(() => {
+    // 이미 가입된 유저가 추천인 연결(referred_by)을 완료했다면 입력 UI를 숨김
+    const supabase = createClient()
+    supabase.auth
+      .getUser()
+      .then(async ({ data }) => {
+        const user = data?.user
+        if (!user) {
+          setHasReferrer(false)
+          return
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('referred_by')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        if (profileError) {
+          setHasReferrer(false)
+          return
+        }
+
+        const linked = !!(profile as { referred_by: string | null } | null)?.referred_by
+        setHasReferrer(linked)
+        if (linked) {
+          // 이미 적용된 추천인 코드가 localStorage에 남아있으면 이후 로그인/가입에 재사용되지 않게 정리
+          try {
+            localStorage.removeItem('referralCode')
+          } catch {}
+          setReferralCode('')
+          setReferralFromUrl(false)
+        }
+      })
+      .catch(() => setHasReferrer(false))
+  }, [])
+
+  const handleReferralChange = (v: string) => {
+    const normalized = normalizeReferralCode(v)
+    setReferralCode(normalized)
+    try {
+      if (normalized) localStorage.setItem('referralCode', normalized)
+      else localStorage.removeItem('referralCode')
+    } catch {}
+  }
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background px-4">
       <div className="w-full max-w-md space-y-8 rounded-xl border border-border bg-card p-8 shadow-lg">
+        {hasReferrer !== true && (
+          <div className="rounded-xl border border-border bg-muted/30 p-4">
+            <p className="text-sm font-medium text-foreground">
+              추천인 코드 입력 시 1000 포인트 혜택
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <Input
+                value={referralCode}
+                onChange={(e) => handleReferralChange(e.target.value)}
+                inputMode="numeric"
+                pattern="\d{4}"
+                maxLength={4}
+                placeholder="4자리 숫자"
+                disabled={referralFromUrl && referralCode.length === 4}
+                aria-label="추천인 코드"
+              />
+              {referralFromUrl && referralCode.length === 4 ? (
+                <span className="text-xs text-muted-foreground shrink-0">
+                  링크로 자동 입력됨
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              가입/간편로그인 시 자동 적용됩니다.
+            </p>
+          </div>
+        )}
+
         <div className="text-center">
           <h2 className="text-2xl font-bold tracking-tight text-foreground">
             {isSignupMode ? '회원가입' : 'InvestComm 시작하기'}
@@ -54,7 +140,7 @@ function LoginForm() {
         )}
 
         <form className="mt-8 space-y-6">
-            <input type="hidden" name="referral_code" value={referralCode || ''} />
+            <input type="hidden" name="referral_code" value={hasReferrer === true ? '' : referralCode} />
             <div className="space-y-4">
                 <div>
                     <label htmlFor="email" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">이메일</label>

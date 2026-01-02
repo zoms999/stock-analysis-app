@@ -182,7 +182,7 @@ export function ChartCard({ id, symbol, title, excerpt, pointPhase, user, stats,
                 </span>
                 <span className="opacity-70">|</span>
                 <span className="whitespace-nowrap">
-                  {user.level} • 랭킹 {user.ranking}
+                  {user.level}
                 </span>
               </div>
             </div>

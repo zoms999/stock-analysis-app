@@ -81,26 +81,43 @@ export async function GET(req: Request) {
   let reconnectTimer: NodeJS.Timeout | null = null;
   let reconnectAttempt = 0;
   let closedByClient = false;
+  let streamClosed = false;
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const send = (chunk: string) => controller.enqueue(encoder.encode(chunk));
-      const sendEvent = (event: string, data: unknown) => {
-        send(`event: ${event}\n`);
-        send(`data: ${JSON.stringify(data)}\n\n`);
-      };
-
-      // SSE 기본 설정
-      send("retry: 2000\n\n");
-      sendEvent("status", { event: "connected", symbols });
-
-      // ✅ 프록시/브라우저가 조용히 연결을 끊지 않도록 SSE keep-alive 전송
-      sseKeepAliveTimer = setInterval(() => {
+      const safeCloseStream = () => {
+        if (streamClosed) return;
+        streamClosed = true;
         try {
-          send(`: keep-alive ${Date.now()}\n\n`);
+          controller.close();
         } catch {
           // ignore
         }
+      };
+
+      const safeSend = (chunk: string) => {
+        if (closedByClient || streamClosed) return;
+        try {
+          controller.enqueue(encoder.encode(chunk));
+        } catch {
+          // client disconnected / controller closed
+          closedByClient = true;
+          safeCloseStream();
+        }
+      };
+
+      const safeSendEvent = (event: string, data: unknown) => {
+        safeSend(`event: ${event}\n`);
+        safeSend(`data: ${JSON.stringify(data)}\n\n`);
+      };
+
+      // SSE 기본 설정
+      safeSend("retry: 2000\n\n");
+      safeSendEvent("status", { event: "connected", symbols });
+
+      // ✅ 프록시/브라우저가 조용히 연결을 끊지 않도록 SSE keep-alive 전송
+      sseKeepAliveTimer = setInterval(() => {
+        safeSend(`: keep-alive ${Date.now()}\n\n`);
       }, 15_000);
 
       const wsUrl = `wss://ws.twelvedata.com/v1/quotes/price?apikey=${encodeURIComponent(apiKey)}`;
@@ -108,6 +125,8 @@ export async function GET(req: Request) {
       const cleanupWs = () => {
         if (heartbeatTimer) clearInterval(heartbeatTimer);
         heartbeatTimer = null;
+        if (sseKeepAliveTimer) clearInterval(sseKeepAliveTimer);
+        sseKeepAliveTimer = null;
         try {
           ws?.close();
         } catch {
@@ -117,17 +136,17 @@ export async function GET(req: Request) {
       };
 
       const scheduleReconnect = (reason: string) => {
-        if (closedByClient) return;
+        if (closedByClient || streamClosed) return;
         cleanupWs();
         if (reconnectTimer) clearTimeout(reconnectTimer);
         reconnectAttempt += 1;
         const delay = Math.min(30_000, 1000 * Math.pow(2, Math.min(reconnectAttempt, 5))); // 2s,4s,8s.. (cap)
-        sendEvent("status", { event: "reconnecting", attempt: reconnectAttempt, delayMs: delay, reason });
+        safeSendEvent("status", { event: "reconnecting", attempt: reconnectAttempt, delayMs: delay, reason });
         reconnectTimer = setTimeout(() => connectWs(), delay);
       };
 
       const connectWs = () => {
-        if (closedByClient) return;
+        if (closedByClient || streamClosed) return;
         cleanupWs();
         ws = new WebSocket(wsUrl);
 
@@ -141,7 +160,7 @@ export async function GET(req: Request) {
             })
           );
 
-          sendEvent("status", { event: "subscribed", symbols });
+          safeSendEvent("status", { event: "subscribed", symbols });
 
           // keep-alive: ping every 10s
           heartbeatTimer = setInterval(() => {
@@ -162,7 +181,7 @@ export async function GET(req: Request) {
             res.on("data", (c: Buffer) => (body += c.toString("utf-8")));
             res.on("end", () => {
               const trimmed = body.slice(0, 1500);
-              sendEvent("status", {
+              safeSendEvent("status", {
                 event: "ws_unexpected_response",
                 statusCode,
                 headers,
@@ -171,7 +190,7 @@ export async function GET(req: Request) {
               scheduleReconnect("unexpected-response");
             });
           } catch {
-            sendEvent("status", { event: "ws_unexpected_response", statusCode, headers });
+            safeSendEvent("status", { event: "ws_unexpected_response", statusCode, headers });
             scheduleReconnect("unexpected-response");
           }
         });
@@ -182,14 +201,14 @@ export async function GET(req: Request) {
             const msg = JSON.parse(raw);
             const ev = typeof msg?.event === "string" ? msg.event : "message";
             // 주로 subscribe-status / price 이벤트가 옵니다.
-            sendEvent(ev === "price" ? "price" : "status", msg);
+            safeSendEvent(ev === "price" ? "price" : "status", msg);
           } catch {
-            sendEvent("message", { raw });
+            safeSendEvent("message", { raw });
           }
         });
 
         ws.on("error", (err) => {
-          sendEvent("status", { event: "ws_error", message: (err as any)?.message ?? String(err) });
+          safeSendEvent("status", { event: "ws_error", message: (err as any)?.message ?? String(err) });
           // error 뒤 close가 오지 않는 케이스를 대비해 재연결 예약
           scheduleReconnect("ws_error");
         });
@@ -197,17 +216,22 @@ export async function GET(req: Request) {
         ws.on("close", (code, reason) => {
           if (closedByClient) {
             cleanupWs();
-            try {
-              controller.close();
-            } catch {
-              // ignore
-            }
+            safeCloseStream();
             return;
           }
-          sendEvent("status", { event: "ws_closed", code, reason: reason?.toString?.() ?? "" });
+          safeSendEvent("status", { event: "ws_closed", code, reason: reason?.toString?.() ?? "" });
           scheduleReconnect("ws_closed");
         });
       };
+
+      // ✅ 클라이언트가 연결을 끊으면(abort) 즉시 정리
+      req.signal?.addEventListener?.("abort", () => {
+        closedByClient = true;
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+        cleanupWs();
+        safeCloseStream();
+      });
 
       connectWs();
     },

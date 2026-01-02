@@ -135,29 +135,29 @@ export function Header() {
       <div className="container mx-auto flex h-16 items-center px-4">
         {/* Logo */}
         <div className="mr-8 hidden md:flex">
-          <Link href="/" className="mr-6 flex items-center space-x-2">
+          <Link href="/" className="mr-6 flex items-center space-x-2 cursor-pointer">
             <span className="hidden font-bold sm:inline-block text-xl tracking-tight">
               Invest<span className="text-primary">Comm</span>
             </span>
           </Link>
           <nav className="flex items-center space-x-6 text-sm font-medium">
-            <Link href="/tournaments" className="transition-colors hover:text-foreground/80 text-foreground/60">
+            <Link href="/tournaments" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer">
               토너먼트
             </Link>
             {/* <Link href="/mypage" className="transition-colors hover:text-foreground/80 text-foreground/60">
               마이페이지
             </Link> */}
-            <Link href="/posts" className="transition-colors hover:text-foreground/80 text-foreground/60">
+            <Link href="/posts" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer">
               차트 게시판
             </Link>
-            <Link href="/notices" className="transition-colors hover:text-foreground/80 text-foreground/60">
+            <Link href="/notices" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer">
               공지사항
             </Link>
-            <Link href="/subscription" className="transition-colors hover:text-foreground/80 text-foreground/60">
+            <Link href="/subscription" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer">
               구독하기
             </Link>
             {isAdmin && (
-               <Link href="/admin" className="transition-colors text-red-500 hover:text-red-700 font-bold">
+               <Link href="/admin" className="transition-colors text-red-500 hover:text-red-700 font-bold cursor-pointer">
                 관리자
               </Link>
             )}

@@ -78,6 +78,7 @@ export function SavedChartViewer({
     // chart refs
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
+    const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
     const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const areaSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
@@ -571,14 +572,29 @@ export function SavedChartViewer({
 
         // ✅ timeScale 옵션은 createChart 시점에 통일해서 적용 (중복 applyOptions로 덮어쓰면 축/라벨/간격이 깨질 수 있음)
 
-        const handleResize = () => {
+        const syncSize = () => {
             if (!chartContainerRef.current) return;
-            chart.applyOptions({ 
-                width: chartContainerRef.current.clientWidth,
-                height: chartContainerRef.current.clientHeight
-            });
+            const w = chartContainerRef.current.clientWidth;
+            const h = chartContainerRef.current.clientHeight;
+            if (w <= 0 || h <= 0) return;
+            chart.applyOptions({ width: w, height: h });
+            // 차트 크기 변동 후 오버레이 좌표 재계산 (첫 로딩/레이아웃 확정 시점 포함)
+            requestAnimationFrame(updateOverlayPositions);
         };
-        window.addEventListener("resize", handleResize);
+        window.addEventListener("resize", syncSize);
+
+        // ✅ window resize만으로는 라우트 전환/폰트 로딩 등으로 생기는 컨테이너 크기 변화(초기 렌더)를 못 잡을 수 있어 ResizeObserver 사용
+        if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
+            resizeObserverRef.current?.disconnect();
+            resizeObserverRef.current = new ResizeObserver(() => {
+                // 연속 resize 이벤트에서 layout thrash 방지
+                requestAnimationFrame(syncSize);
+            });
+            resizeObserverRef.current.observe(chartContainerRef.current);
+        }
+
+        // ✅ 초기 1프레임 뒤에 한 번 더 사이즈 동기화 (처음 열 때만 틀어지는 케이스 방지)
+        requestAnimationFrame(syncSize);
 
         // ✅ 재생성 직후 base 데이터 즉시 주입 (이게 없으면 토글시 빈 차트)
         setTimeout(() => {
@@ -586,12 +602,14 @@ export function SavedChartViewer({
         }, 0);
 
         return () => {
-            window.removeEventListener("resize", handleResize);
+            window.removeEventListener("resize", syncSize);
+            resizeObserverRef.current?.disconnect();
+            resizeObserverRef.current = null;
             clearPredictionSegments();
             chart.remove();
             chartRef.current = null;
         };
-    }, [isDark, viewStyle, interval, applyBaseDataToSeries, clearPredictionSegments, getTargetBarSpacingPx, mode]);
+    }, [isDark, viewStyle, interval, applyBaseDataToSeries, clearPredictionSegments, getTargetBarSpacingPx, mode, updateOverlayPositions]);
 
     // 2) Fetch data (only when symbol/interval changes)
     useEffect(() => {
@@ -695,6 +713,11 @@ export function SavedChartViewer({
                     } else {
                         chartRef.current.timeScale().fitContent();
                     }
+                }
+
+                // ✅ 축 범위 설정 이후 오버레이 좌표 재계산 (첫 진입 시 간헐적 불일치 방지)
+                if (mode !== "card") {
+                    requestAnimationFrame(updateOverlayPositions);
                 }
             } catch (e) {
                 console.error("[SavedChartViewer] fetch error:", e);
@@ -859,6 +882,8 @@ export function SavedChartViewer({
         
         // Update range for future
         applyBaseDataToSeries();
+        // ✅ rightOffset 등 timeScale이 바뀐 뒤에도 한 번 더 보정
+        if (mode !== "card") requestAnimationFrame(updateOverlayPositions);
 
     }, [predictionPoints, applyBaseDataToSeries, clearPredictionSegments, addPredictionSegmentSeries, mode, updateOverlayPositions]);
 

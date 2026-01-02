@@ -14,7 +14,17 @@ import { getCurrentPrice } from "@/lib/api/prices";
 import { calculateAccuracy } from "@/lib/utils/accuracy";
 import { PostCard } from "@/components/posts/PostCard";
 import { SORT_OPTIONS, type SortOption } from "@/lib/ui/chartBoardSort";
+import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
 
+type CommentItem = {
+  id: string;
+  post_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  profiles?: { nickname: string | null; avatar_url: string | null } | null;
+};
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -22,6 +32,12 @@ export default function PostDetailPage() {
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState("");
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [meId, setMeId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState<string>("");
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [relatedPosts, setRelatedPosts] = useState<Post[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
@@ -106,6 +122,25 @@ export default function PostDetailPage() {
     }
   };
 
+  // 내 사용자(로그인) 확인
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!cancelled) setMeId(user?.id ?? null);
+      } catch {
+        if (!cancelled) setMeId(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     async function loadPost() {
       setLoading(true);
@@ -137,6 +172,131 @@ export default function PostDetailPage() {
     }
     loadPost();
   }, [id]);
+
+  const loadComments = async () => {
+    setCommentsLoading(true);
+    try {
+      const res = await fetch(`/api/posts/${id}/comments`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "댓글을 불러오는데 실패했습니다.");
+      setComments(Array.isArray(json?.comments) ? (json.comments as CommentItem[]) : []);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e) || "댓글을 불러오는데 실패했습니다.");
+    } finally {
+      setCommentsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadComments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const submitComment = async () => {
+    const text = comment.trim();
+    if (!text) return;
+    if (commentSubmitting) return;
+    setCommentSubmitting(true);
+    try {
+      const res = await fetch(`/api/posts/${id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (json?.error === "LOGIN_REQUIRED") {
+          toast.info("댓글 작성은 로그인 후 이용할 수 있어요.");
+          return;
+        }
+        throw new Error(json?.error || "댓글 작성에 실패했습니다.");
+      }
+      const created = json?.comment as CommentItem | undefined;
+      if (created?.id) {
+        setComments((prev) => [...prev, created]);
+        setComment("");
+      } else {
+        await loadComments();
+        setComment("");
+      }
+      toast.success("댓글이 등록되었습니다.");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e) || "댓글 작성에 실패했습니다.");
+    } finally {
+      setCommentSubmitting(false);
+    }
+  };
+
+  const startEdit = (c: CommentItem) => {
+    setEditingId(c.id);
+    setEditingText(c.content);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingText("");
+  };
+
+  const saveEdit = async (commentId: string) => {
+    const text = editingText.trim();
+    if (!text) {
+      toast.info("내용을 입력해주세요.");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/comments/${commentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (json?.error === "LOGIN_REQUIRED") {
+          toast.info("로그인이 필요합니다.");
+          return;
+        }
+        if (json?.error === "FORBIDDEN_OR_NOT_FOUND") {
+          toast.error("수정 권한이 없거나 댓글을 찾을 수 없습니다.");
+          return;
+        }
+        throw new Error(json?.error || "댓글 수정에 실패했습니다.");
+      }
+      const updated = json?.comment as CommentItem | undefined;
+      if (updated?.id) {
+        setComments((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      } else {
+        await loadComments();
+      }
+      toast.success("댓글이 수정되었습니다.");
+      cancelEdit();
+    } catch (e: unknown) {
+      toast.error(errorMessage(e) || "댓글 수정에 실패했습니다.");
+    }
+  };
+
+  const deleteComment = async (commentId: string) => {
+    const ok = window.confirm("댓글을 삭제할까요?");
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/comments/${commentId}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (json?.error === "LOGIN_REQUIRED") {
+          toast.info("로그인이 필요합니다.");
+          return;
+        }
+        if (json?.error === "FORBIDDEN_OR_NOT_FOUND") {
+          toast.error("삭제 권한이 없거나 댓글을 찾을 수 없습니다.");
+          return;
+        }
+        throw new Error(json?.error || "댓글 삭제에 실패했습니다.");
+      }
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      toast.success("댓글이 삭제되었습니다.");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e) || "댓글 삭제에 실패했습니다.");
+    }
+  };
 
   // ✅ 같은 종목 다른 게시물: SORT 기준으로만 정렬(검색창 제거)
   useEffect(() => {
@@ -326,7 +486,7 @@ export default function PostDetailPage() {
           {/* Comments Section - Clean Style */}
           <section className="space-y-8">
             <h3 className="text-xl font-bold flex items-center gap-2">
-              댓글 <span className="text-primary">0</span>
+              댓글 <span className="text-primary">{comments.length}</span>
             </h3>
 
             {/* Comment Input */}
@@ -340,15 +500,103 @@ export default function PostDetailPage() {
                   onChange={(e) => setComment(e.target.value)}
                 />
                 <div className="flex justify-end">
-                  <Button size="sm" disabled={!comment.trim()} className="rounded-full px-6">등록</Button>
+                  <Button
+                    size="sm"
+                    disabled={!comment.trim() || commentSubmitting}
+                    className="rounded-full px-6"
+                    onClick={submitComment}
+                    title={meId ? undefined : "로그인이 필요합니다."}
+                  >
+                    {commentSubmitting ? "등록 중..." : "등록"}
+                  </Button>
                 </div>
               </div>
             </div>
 
-            {/* Comment List Placeholder */}
-            <div className="py-10 text-center text-muted-foreground/60 text-sm">
-              아직 댓글이 없습니다.<br/>첫 번째 댓글의 주인공이 되어보세요!
-            </div>
+            {/* Comment List */}
+            {commentsLoading ? (
+              <div className="py-10 text-center text-muted-foreground/60 text-sm animate-pulse">
+                댓글을 불러오는 중...
+              </div>
+            ) : comments.length === 0 ? (
+              <div className="py-10 text-center text-muted-foreground/60 text-sm">
+                아직 댓글이 없습니다.<br />
+                첫 번째 댓글의 주인공이 되어보세요!
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {comments.map((c) => {
+                  const isMine = !!meId && c.user_id === meId;
+                  const nickname = c.profiles?.nickname || "익명";
+                  return (
+                    <div key={c.id} className="rounded-xl border border-border/50 bg-background/40 p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-xs font-bold border border-border/50">
+                          {String(nickname)[0] || "U"}
+                        </div>
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm font-semibold">{nickname}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {new Date(c.created_at).toLocaleString("ko-KR")}
+                              </div>
+                            </div>
+                            {isMine && (
+                              <div className="flex items-center gap-2">
+                                {editingId === c.id ? (
+                                  <>
+                                    <button
+                                      className="text-xs text-primary hover:underline"
+                                      onClick={() => saveEdit(c.id)}
+                                    >
+                                      저장
+                                    </button>
+                                    <button
+                                      className="text-xs text-muted-foreground hover:underline"
+                                      onClick={cancelEdit}
+                                    >
+                                      취소
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      className="text-xs text-muted-foreground hover:underline"
+                                      onClick={() => startEdit(c)}
+                                    >
+                                      수정
+                                    </button>
+                                    <button
+                                      className="text-xs text-red-500 hover:underline"
+                                      onClick={() => deleteComment(c.id)}
+                                    >
+                                      삭제
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {editingId === c.id ? (
+                            <textarea
+                              className="w-full min-h-[90px] rounded-xl border border-border/60 bg-transparent p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none"
+                              placeholder="댓글을 수정하세요."
+                              aria-label="댓글 수정"
+                              value={editingText}
+                              onChange={(e) => setEditingText(e.target.value)}
+                            />
+                          ) : (
+                            <div className="text-sm whitespace-pre-wrap leading-relaxed">{c.content}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
         </main>
 

@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { GlobalSearch } from "@/components/common/GlobalSearch";
 
 export function Header() {
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -272,6 +273,8 @@ export function Header() {
               <span className="text-primary font-bold">차트 분석하기</span>
             </Button>
           </Link>
+
+          <GlobalSearch />
 
           <Clock />
 

@@ -16,6 +16,7 @@ const sections: NavSection[] = [
       { href: "/admin/users", label: "회원 관리" },
       { href: "/admin/partners", label: "파트너 관리" },
       { href: "/admin/settlements", label: "정산 관리" },
+      { href: "/admin/points/withdrawals", label: "포인트 출금" },
       { href: "/admin/statistics", label: "통계 대시보드" },
     ],
   },

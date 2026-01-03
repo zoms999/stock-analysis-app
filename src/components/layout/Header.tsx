@@ -196,6 +196,13 @@ export function Header() {
 
             <nav className="grid gap-2">
               <Link
+                href="/"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+              >
+                홈
+              </Link>
+              <Link
                 href="/tournaments"
                 onClick={() => setMobileMenuOpen(false)}
                 className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"

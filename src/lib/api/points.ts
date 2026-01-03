@@ -129,20 +129,36 @@ export async function getWithdrawalRequests(status?: string) {
     
     let query = supabase
         .from('withdraw_requests')
-        .select('*, profiles:user_id(nickname, email)') // Join profiles
+        .select('*')
         .order('created_at', { ascending: false });
 
     if (status) {
         query = query.eq('status', status);
     }
 
-    const { data, error } = await query;
+    const { data: requests, error } = await query;
     if (error) throw error;
 
+    if (!requests || requests.length === 0) return [];
+
+    // Manually fetch profiles
+    const userIds = Array.from(new Set(requests.map((r: any) => r.user_id)));
+    const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, nickname, email')
+        .in('id', userIds);
+    
+    if (profileError) {
+        console.error("Failed to fetch profiles for withdrawals", profileError);
+        // Return requests without user info or throw? Return partial is better
+    }
+
+    const profileMap = new Map(profiles?.map((p: any) => [p.id, p]) || []);
+
     // Map profiles to user property
-    return data.map((item: any) => ({
+    return requests.map((item: any) => ({
         ...item,
-        user: item.profiles
+        user: profileMap.get(item.user_id) || { nickname: 'Unknown', email: 'Unknown' }
     })) as WithdrawRequest[];
 }
 

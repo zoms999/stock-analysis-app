@@ -58,6 +58,8 @@ export async function getAccessToken(): Promise<string> {
     throw new Error("KIS_APP_KEY 또는 KIS_APP_SECRET 환경변수가 설정되지 않았습니다.");
   }
 
+  console.log(`[KIS API] Token Request - Mode: ${IS_VIRTUAL ? "Virtual (모의투자)" : "Real (실전투자)"}, Base: ${KIS_REST_BASE}`);
+
   const res = await fetch(`${KIS_REST_BASE}/oauth2/tokenP`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -491,6 +493,7 @@ export async function fetchKisCandles(symbol: string, interval: string): Promise
     return (a.time as number) - (b.time as number);
   });
 }
+
 
 
 

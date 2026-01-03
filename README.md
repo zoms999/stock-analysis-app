@@ -48,8 +48,19 @@ npm run dev
 `.env.local` 파일을 생성하고 다음 변수를 설정하세요:
 
 ```env
+# Supabase
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# TwelveData (해외주식/암호화폐/외환 실시간)
+TWELVEDATA_API_KEY=your_twelvedata_api_key
+
+# 한국투자증권 KIS Developers (국내주식 실시간)
+# https://apiportal.koreainvestment.com 에서 발급
+KIS_APP_KEY=your_kis_app_key
+KIS_APP_SECRET=your_kis_app_secret
+KIS_IS_VIRTUAL=false  # true: 모의투자, false: 실전투자
 ```
 
 ## 📁 프로젝트 구조

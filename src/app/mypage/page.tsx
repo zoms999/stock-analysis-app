@@ -10,11 +10,12 @@ import { getUserActivity, ActivityItem } from "@/lib/api/activity";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Settings, CreditCard, User as UserIcon, BarChart3, Loader2, Users, DollarSign, ExternalLink, Link as LinkIcon } from "lucide-react";
+import { Settings, CreditCard, User as UserIcon, BarChart3, Loader2, Users, DollarSign, ExternalLink, Link as LinkIcon, AlertTriangle, Copy } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { generateReferralCode } from "@/app/mypage/actions";
-import { Copy } from "lucide-react";
+import { SubscriptionManagement } from "@/components/subscription/SubscriptionManagement";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function MyPage() {
   const router = useRouter();
@@ -24,6 +25,8 @@ export default function MyPage() {
   const [usage, setUsage] = useState<TodayUsage | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [partnerDashboard, setPartnerDashboard] = useState<PartnerDashboard | null>(null);
+  const [fullSubscription, setFullSubscription] = useState<any>(null);
+  const [paymentAlert, setPaymentAlert] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [generatingCode, setGeneratingCode] = useState(false);
   const supabase = createClient();
@@ -51,6 +54,24 @@ export default function MyPage() {
         setActivity(activityData);
         setProfile(profileData);
         setPartnerDashboard(partnerData);
+
+        // Fetch full subscription details with Stripe info
+        try {
+          const fullSubRes = await fetch("/api/stripe/subscription");
+          if (fullSubRes.ok) {
+            const fullSubData = await fullSubRes.json();
+            setFullSubscription(fullSubData.subscription);
+
+            // Check for payment issues
+            if (fullSubData.subscription?.status === "past_due") {
+              setPaymentAlert("결제가 실패했습니다. 결제 수단을 확인해주세요.");
+            } else if (fullSubData.subscription?.status === "unpaid") {
+              setPaymentAlert("결제가 완료되지 않았습니다. 결제 수단을 업데이트해주세요.");
+            }
+          }
+        } catch (err) {
+          console.error("Failed to fetch full subscription:", err);
+        }
       }
     } catch (error) {
       console.error('Failed to load user data:', error);
@@ -87,6 +108,25 @@ export default function MyPage() {
 
   return (
     <div className="container py-8 max-w-5xl mx-auto space-y-8">
+      {/* Payment Alert */}
+      {paymentAlert && (
+        <Alert variant="destructive" className="border-red-500/50 bg-red-500/10">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>결제 문제</AlertTitle>
+          <AlertDescription className="flex items-center justify-between">
+            <span>{paymentAlert}</span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="ml-4"
+              onClick={() => router.push("/subscription")}
+            >
+              결제 수단 업데이트
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Profile Header */}
       <section className="flex flex-col md:flex-row items-center gap-6 p-8 rounded-2xl border border-border bg-card shadow-sm">
         <Avatar className="h-24 w-24 border-2 border-primary/20">
@@ -283,6 +323,16 @@ export default function MyPage() {
               >
                 {subscription?.planName === 'Free' ? '플랜 업그레이드' : '플랜 변경'}
               </Button>
+
+              {/* Subscription Management for paid users */}
+              {subscription?.planName !== 'Free' && fullSubscription && (
+                <div className="mt-4 pt-4 border-t">
+                  <SubscriptionManagement 
+                    subscription={fullSubscription}
+                    onUpdate={loadUserData}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
 

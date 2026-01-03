@@ -167,3 +167,174 @@ export function subscribeTwelveDataPrices(
     },
   };
 }
+
+// ─────────────────────────────────────────────────────────────
+// 통합 실시간 스트림 (TwelveData + KIS 겸용)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 통합 실시간 가격 이벤트
+ * - TwelveData와 KIS 모두 동일한 형식으로 전달
+ */
+export type UnifiedPriceEvent = {
+  event: "price";
+  symbol: string;
+  price: number;
+  change?: number;
+  change_percent?: number;
+  volume?: number;
+  timestamp?: string | number;
+  provider: "twelvedata" | "kis";
+};
+
+/**
+ * 통합 실시간 가격 스트림(SSE) 구독.
+ *
+ * 종목코드에 따라 자동으로 적절한 데이터 소스로 라우팅합니다:
+ * - 국내주식 (6자리 숫자, KRX:XXXXXX): KIS Developers WebSocket
+ * - 해외주식/암호화폐/외환: TwelveData WebSocket
+ *
+ * @param symbols 종목 심볼 배열 (예: ["005930", "AAPL", "BTC-USD"])
+ * @param onPrice 가격 이벤트 콜백
+ * @param onError 에러 콜백
+ * @param onStatus 상태 이벤트 콜백 (연결/구독/재연결 등)
+ */
+export function subscribeUnifiedPrices(
+  symbols: string[],
+  onPrice: (msg: UnifiedPriceEvent) => void,
+  onError?: (err: unknown) => void,
+  onStatus?: (status: Record<string, unknown>) => void
+) {
+  const normalized = Array.from(
+    new Set(
+      symbols
+        .map((s) => (s ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  if (normalized.length === 0) return { close: () => {} };
+
+  // 통합 스트림 API 사용
+  const url = `/api/stream?symbols=${encodeURIComponent(normalized.join(","))}`;
+  const es = new EventSource(url);
+
+  const handlePrice = (ev: MessageEvent) => {
+    try {
+      const data = JSON.parse(String(ev.data));
+      // price 필드를 숫자로 정규화
+      const price = typeof data.price === "string" ? parseFloat(data.price) : data.price;
+      const event: UnifiedPriceEvent = {
+        event: "price",
+        symbol: data.symbol,
+        price,
+        change: data.change,
+        change_percent: data.change_percent,
+        volume: data.volume,
+        timestamp: data.timestamp,
+        provider: data.provider ?? "twelvedata",
+      };
+      onPrice(event);
+    } catch (e) {
+      onError?.(e);
+    }
+  };
+
+  const handleStatus = (ev: MessageEvent) => {
+    try {
+      const data = JSON.parse(String(ev.data));
+      onStatus?.(data);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleError = (e: Event) => {
+    onError?.(e);
+  };
+
+  es.addEventListener("price", handlePrice as EventListener);
+  es.addEventListener("status", handleStatus as EventListener);
+  es.addEventListener("error", handleError as EventListener);
+
+  return {
+    close: () => {
+      es.removeEventListener("price", handlePrice as EventListener);
+      es.removeEventListener("status", handleStatus as EventListener);
+      es.removeEventListener("error", handleError as EventListener);
+      es.close();
+    },
+  };
+}
+
+/**
+ * KIS 전용 실시간 가격 스트림(SSE) 구독.
+ * - 국내주식만 구독할 때 사용
+ *
+ * @param symbols 6자리 종목코드 배열 (예: ["005930", "000660"])
+ */
+export function subscribeKisPrices(
+  symbols: string[],
+  onPrice: (msg: UnifiedPriceEvent) => void,
+  onError?: (err: unknown) => void,
+  onStatus?: (status: Record<string, unknown>) => void
+) {
+  const normalized = Array.from(
+    new Set(
+      symbols
+        .map((s) => (s ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  if (normalized.length === 0) return { close: () => {} };
+
+  const url = `/api/kis/stream?symbols=${encodeURIComponent(normalized.join(","))}`;
+  const es = new EventSource(url);
+
+  const handlePrice = (ev: MessageEvent) => {
+    try {
+      const data = JSON.parse(String(ev.data));
+      const price = typeof data.price === "string" ? parseFloat(data.price) : data.price;
+      const event: UnifiedPriceEvent = {
+        event: "price",
+        symbol: data.symbol,
+        price,
+        change: data.change,
+        change_percent: data.change_percent,
+        volume: data.volume,
+        timestamp: data.timestamp,
+        provider: "kis",
+      };
+      onPrice(event);
+    } catch (e) {
+      onError?.(e);
+    }
+  };
+
+  const handleStatus = (ev: MessageEvent) => {
+    try {
+      const data = JSON.parse(String(ev.data));
+      onStatus?.(data);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleError = (e: Event) => {
+    onError?.(e);
+  };
+
+  es.addEventListener("price", handlePrice as EventListener);
+  es.addEventListener("status", handleStatus as EventListener);
+  es.addEventListener("error", handleError as EventListener);
+
+  return {
+    close: () => {
+      es.removeEventListener("price", handlePrice as EventListener);
+      es.removeEventListener("status", handleStatus as EventListener);
+      es.removeEventListener("error", handleError as EventListener);
+      es.close();
+    },
+  };
+}

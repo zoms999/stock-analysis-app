@@ -20,6 +20,7 @@ const SavedChartViewer = dynamic(() => import("@/components/analyze/SavedChartVi
 interface ChartCardProps {
   id: string;
   symbol: string;
+  koreanName?: string | null;
   source?: "upbit" | "yahoo" | "finnhub";
   title: string;
   excerpt?: string;
@@ -39,7 +40,7 @@ interface ChartCardProps {
   chartConfig?: any; // Chart configuration from post
 }
 
-export function ChartCard({ id, symbol, title, excerpt, pointPhase, user, stats, predictionStatus, chartConfig }: ChartCardProps) {
+export function ChartCard({ id, symbol, koreanName, title, excerpt, pointPhase, user, stats, predictionStatus, chartConfig }: ChartCardProps) {
   const router = useRouter();
   const [showLimitPopup, setShowLimitPopup] = useState(false);
   
@@ -114,7 +115,9 @@ export function ChartCard({ id, symbol, title, excerpt, pointPhase, user, stats,
           {/* Chart Section */}
           <div className="rounded-xl border-0 bg-transparent overflow-hidden shadow-none transition-all group relative cursor-pointer">
             <div className="p-4 pb-2 flex justify-between items-center">
-              <h3 className="font-bold text-sm text-foreground/80">{symbol} Price</h3>
+              <h3 className="font-bold text-sm text-foreground/80">
+                {symbol} {koreanName && <span className="font-normal text-muted-foreground">({koreanName})</span>} Price
+              </h3>
             <div className="flex items-center gap-2">
               {pointPhase && (
                 <span className={`px-2 py-0.5 rounded-md border text-[10px] font-bold ${pointPhaseClass}`}>

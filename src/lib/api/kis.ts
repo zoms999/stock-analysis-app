@@ -365,4 +365,132 @@ export function isKrxSymbol(raw: string): boolean {
   return normalizeKrxSymbol(raw) !== null;
 }
 
+// ─────────────────────────────────────────────────────────────
+// 8. 과거 캔들 데이터 조회 (REST)
+// ─────────────────────────────────────────────────────────────
+
+export interface CandleData {
+  time: string | number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+}
+
+/**
+ * KIS API를 이용해 국내주식 과거 캔들 데이터를 조회합니다.
+ * @param symbol 6자리 종목코드
+ * @param interval "1d", "1wk", "1mo", "1m", "5m", "15m", "30m", "1h"
+ */
+export async function fetchKisCandles(symbol: string, interval: string): Promise<CandleData[]> {
+  const code = normalizeKrxSymbol(symbol);
+  if (!code) throw new Error(`유효하지 않은 국내주식 종목코드입니다: ${symbol}`);
+
+  const accessToken = await getAccessToken();
+  const appKey = process.env.KIS_APP_KEY!;
+  const appSecret = process.env.KIS_APP_SECRET!;
+
+  // 일/주/월 vs 분봉 구분
+  const isMinute = ["1m", "5m", "15m", "30m", "1h"].includes(interval);
+  
+  // TR ID 설정
+  // FHKST03010100: 주식 현재가 일자별 (일/주/월)
+  // FHKST03010200: 주식 현재가 분봉
+  const trId = isMinute ? "FHKST03010200" : "FHKST03010100";
+  
+  const url = new URL(`${KIS_REST_BASE}/uapi/domestic-stock/v1/quotations/${isMinute ? "inquire-time-itemchartprice" : "inquire-daily-itemchartprice"}`);
+  
+  if (isMinute) {
+    url.searchParams.set("FID_COND_MRKT_DIV_CODE", "J");
+    url.searchParams.set("FID_INPUT_ISCD", code);
+    url.searchParams.set("FID_INPUT_HOUR_1", ""); // 빈칸이면 현재시간까지
+    url.searchParams.set("FID_PW_RESV_RT_1", "");
+    url.searchParams.set("FID_ETC_CLS_CODE", "");
+  } else {
+    url.searchParams.set("FID_COND_MRKT_DIV_CODE", "J");
+    url.searchParams.set("FID_INPUT_ISCD", code);
+    url.searchParams.set("FID_PERIOD_DIV_CODE", interval === "1wk" ? "W" : interval === "1mo" ? "M" : "D");
+    url.searchParams.set("FID_ORG_ADJ_PRC", "0"); // 수정주가
+    
+    // 일봉 조회 시 시작/종료일자가 필수일 수 있음
+    // KIS 문서상 FID_INPUT_DATE_1 (시작일), FID_INPUT_DATE_2 (종료일) 필요
+    // 19800104 ~ 현재
+    const today = new Date().toISOString().split("T")[0].replace(/-/g, "");
+    url.searchParams.set("FID_INPUT_DATE_1", "19800104"); // 충분히 과거
+    url.searchParams.set("FID_INPUT_DATE_2", today);
+  }
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "authorization": `Bearer ${accessToken}`,
+      "appkey": appKey,
+      "appsecret": appSecret,
+      "tr_id": trId,
+      "custtype": "P",
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error(`[KIS API] HTTP Error: ${res.status}`, text);
+    throw new Error(`KIS API Error: ${res.status} ${text}`);
+  }
+
+  const data = await res.json();
+  
+  if (data.rt_cd !== "0") {
+    console.error(`[KIS API] Business Error: ${data.msg_cd}`, data.msg1);
+    throw new Error(`KIS API Error: ${data.msg_cd} ${data.msg1}`);
+  }
+
+  const output = data.output2 || data.output; // 일봉은 output2에 데이터가 있고, 분봉은 output2에 있음 (KIS 구조상 다를 수 있음)
+  // 확인 결과: 
+  // FHKST03010100 (일봉) -> output1(현재가등), output2(일자별 데이터 배열)
+  // FHKST03010200 (분봉) -> output1(현재가등), output2(분봉 데이터 배열)
+  
+  if (!Array.isArray(output)) {
+    return [];
+  }
+
+  return output.map((item: any) => {
+    if (isMinute) {
+      // 분봉 응답 필드: stck_cntg_hour(HHMMSS), stck_prpr(종가), stck_oprc(시가), stck_hgpr(고가), stck_lwpr(저가), cntg_vol(거래량)
+      // 시간 처리를 위해 오늘 날짜와 조합 필요 (단순 표시용이면 HH:mm)
+      // TwelveData 호환을 위해 YYYY-MM-DD HH:mm:ss 또는 Unix Timestamp 권장
+      const yymmdd = item.stck_bsop_date || new Date().toISOString().split("T")[0].replace(/-/g, "");
+      const hhmmss = item.stck_cntg_hour;
+      const dateStr = `${yymmdd.slice(0, 4)}-${yymmdd.slice(4, 6)}-${yymmdd.slice(6, 8)} ${hhmmss.slice(0, 2)}:${hhmmss.slice(2, 4)}:${hhmmss.slice(4, 6)}`;
+      const timestamp = Math.floor(new Date(dateStr).getTime() / 1000);
+
+      return {
+        time: timestamp,
+        open: parseFloat(item.stck_oprc),
+        high: parseFloat(item.stck_hgpr),
+        low: parseFloat(item.stck_lwpr),
+        close: parseFloat(item.stck_prpr),
+        volume: parseFloat(item.cntg_vol),
+      };
+    } else {
+      // 일봉 응답 필드: stck_bsop_date(YYYYMMDD), stck_clpr(종가), stck_oprc(시가), stck_hgpr(고가), stck_lwpr(저가), acml_vol(누적거래량)
+      const date = item.stck_bsop_date;
+      const dateStr = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+      
+      return {
+        time: dateStr,
+        open: parseFloat(item.stck_oprc),
+        high: parseFloat(item.stck_hgpr),
+        low: parseFloat(item.stck_lwpr),
+        close: parseFloat(item.stck_clpr),
+        volume: parseFloat(item.acml_vol),
+      };
+    }
+  }).sort((a, b) => {
+    if (typeof a.time === "string" && typeof b.time === "string") return a.time.localeCompare(b.time);
+    return (a.time as number) - (b.time as number);
+  });
+}
+
+
 

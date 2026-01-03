@@ -15,6 +15,7 @@ import { calculateAccuracy } from "@/lib/utils/accuracy";
 import { PostCard } from "@/components/posts/PostCard";
 import { SORT_OPTIONS, type SortOption } from "@/lib/ui/chartBoardSort";
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getKoreanName } from "@/lib/constants/krx_names";
 
 type CommentItem = {
   id: string;
@@ -372,6 +373,8 @@ export default function PostDetailPage() {
     );
   }
 
+  const krName = post?.ticker_symbol ? getKoreanName(post.ticker_symbol) : null;
+
   const relatedSortOptions = SORT_OPTIONS.filter((o) =>
     ["latest", "accuracy", "most_analyzed", "completed"].includes(o.value)
   );
@@ -394,6 +397,7 @@ export default function PostDetailPage() {
               <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-bold tracking-tight">
                 {post.ticker_symbol}
               </span>
+              {krName && <span className="text-sm text-foreground/80 font-medium">({krName})</span>}
               <span className="text-sm text-muted-foreground">
                 {new Date(post.created_at).toLocaleDateString('ko-KR', {
                   year: 'numeric',

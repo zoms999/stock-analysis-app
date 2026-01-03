@@ -11,6 +11,7 @@ import { clientCacheGet, clientCacheSet } from "@/lib/utils/clientCache";
 import { subscribeTwelveDataPrices } from "@/lib/api/twelvedata";
 import { searchSymbol } from "@/lib/api/search";
 import { SORT_OPTIONS, type SortOption } from "@/lib/ui/chartBoardSort";
+import { getKoreanName } from "@/lib/constants/krx_names";
 
 export function ChartBoardList() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -382,6 +383,7 @@ export function ChartBoardList() {
             symbol={post.ticker_symbol}
             source="yahoo"
             title={post.title}
+            koreanName={getKoreanName(post.ticker_symbol)}
             excerpt={makeExcerpt(post.content, 140)}
             pointPhase={pointPhase ?? undefined}
             user={{

@@ -40,16 +40,38 @@ export async function fetchTwelveDataCandles(symbol: string, interval: string): 
     return raw;
   };
   const s = normalizeSymbol(s0);
-  const key = `${s}|${itv}`;
 
-  // ✅ 한국 주식(예: 005930.KS/005930.KQ)은 Twelve Data 플랜 제한이 걸리는 경우가 많아
-  //    바로 Yahoo 프록시로 폴백합니다.
+  // ✅ 국내주식 판별 (6자리 숫자 또는 :KRX 접미사)
+  const baseKr = s.replace(/:KRX$/i, "");
+  const isKrx = /^\d{6}$/.test(baseKr);
+
+  // ✅ 국내주식인 경우 KIS 전용 API로 라우팅
+  if (isKrx) {
+    try {
+      const url = `/api/kis/candles?symbol=${encodeURIComponent(baseKr)}&interval=${encodeURIComponent(itv)}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.details || err.error || "KIS API 호출 실패");
+      }
+      return await res.json();
+    } catch (e: any) {
+      console.warn("[KIS Fallback failed, trying Yahoo]", e.message);
+      // KIS 실패 시 기존 Yahoo 폴백 시도 (보험용)
+      try {
+        return await fetchYahooCandles(`${baseKr}.KS`, itv);
+      } catch {
+        return await fetchYahooCandles(`${baseKr}.KQ`, itv);
+      }
+    }
+  }
+
+  // ✅ Yahoo 스타일 수동 입력 대응 (기존 로직 유지)
   if (s.endsWith(".KS") || s.endsWith(".KQ")) {
     try {
       return await fetchYahooCandles(s, itv);
     } catch (e: any) {
       const msg = String(e?.message ?? e);
-      // Yahoo 429가 잦아서 사용자에게 명확한 안내를 제공합니다.
       if (msg.includes("429") || msg.includes("요청이 많아")) {
         throw new Error("현재 데이터 제공자(Yahoo) 요청이 많아 일시적으로 차트를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
       }
@@ -57,6 +79,7 @@ export async function fetchTwelveDataCandles(symbol: string, interval: string): 
     }
   }
 
+  const key = `${s}|${itv}`;
   const now = Date.now();
   const cached = cache.get(key);
   if (cached && cached.expiresAt > now) return cached.data;
@@ -80,27 +103,6 @@ export async function fetchTwelveDataCandles(symbol: string, interval: string): 
       // 분당 크레딧 초과 등은 그대로 메시지를 노출(사용자에게 원인 제공)
       if (msg.includes("API credits") || msg.includes("current minute")) {
         throw new Error(msg);
-      }
-
-      // ✅ Pro 플랜 제한/심볼 제한이면 Yahoo로 재시도(가능한 경우)
-      const isProLimited = msg.includes("Pro (Pro plan)") || msg.includes("starting with Pro");
-      const baseKr = s.replace(/:KRX$/i, "");
-      const looksLikeKrNumber = /^\d{6}$/.test(baseKr);
-      const isKrxSymbol = s.toUpperCase().endsWith(":KRX");
-      if (isProLimited && looksLikeKrNumber) {
-        // 사용자가 "KRX로 Twelve Data에서 된다"는 케이스는 맞지만,
-        // 실제로는 플랜 제한일 수 있어 명확히 안내합니다.
-        if (isKrxSymbol) {
-          throw new Error(
-            "KRX 종목(예: 005930:KRX)은 Twelve Data에서 지원하지만 현재 플랜에서는 제한됩니다. (Pro 요금제 필요)"
-          );
-        }
-        // 숫자 6자리만 들어온 경우엔 Yahoo로 폴백 시도
-        try {
-          return await fetchYahooCandles(`${baseKr}.KS`, itv);
-        } catch {
-          return await fetchYahooCandles(`${baseKr}.KQ`, itv);
-        }
       }
 
       throw new Error(msg);

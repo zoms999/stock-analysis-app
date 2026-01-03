@@ -26,6 +26,14 @@ export async function searchSymbol(query: string): Promise<string | null> {
     }
 
     // 2) Yahoo fallback (기존 프록시 유지)
+    // ⚠️ 단, 검색어에 한글이 포함된 경우 Yahoo 검색이 502/Bad Request를 자주 일으키므로
+    // Yahoo 폴백을 스킵하고 바로 null을 반환하여 불필요한 오류를 방지합니다.
+    const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(q);
+    if (hasKorean) {
+      console.log("한글 검색어 감지: Yahoo 폴백을 스킵합니다.");
+      return null;
+    }
+
     const yhUrl = `/api/yahoo/search?q=${encodeURIComponent(q)}`;
     const yhRes = await fetch(yhUrl);
 

@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Time } from "lightweight-charts";
 import { LimitPopup } from "@/components/subscription/LimitPopup";
+import { getKoreanName } from "@/lib/constants/krx_names";
 
 interface PredictionPoint {
     time: Time;
@@ -31,6 +32,7 @@ export default function AnalyzePage() {
     const [points, setPoints] = useState<PredictionPoint[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [chartImageUrl, setChartImageUrl] = useState<string>("");
+    const krName = getKoreanName(symbol);
 
     const [showLimitPopup, setShowLimitPopup] = useState(false);
 
@@ -178,8 +180,16 @@ export default function AnalyzePage() {
                 {/* ✅ 테두리 없는(플랫) 스타일 */}
                 <Card className="border-0 shadow-none overflow-hidden bg-transparent">
                     <div className="px-4 py-2 flex flex-col sm:flex-row justify-between items-center bg-transparent gap-4">
+
                         <div className="flex items-center gap-3">
-                            <h2 className="font-bold text-lg text-foreground">{symbol}</h2>
+                            <h2 className="font-bold text-lg text-foreground flex items-center gap-2">
+                                {symbol}
+                                {krName && (
+                                    <span className="text-base font-normal text-muted-foreground">
+                                        ({krName})
+                                    </span>
+                                )}
+                            </h2>
                             <span className="text-sm text-muted-foreground mr-2">
                                 {interval === "Y" && "연봉"}
                                 {interval === "M" && "월봉"}

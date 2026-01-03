@@ -190,12 +190,12 @@ export function Header() {
         </Button>
 
         <Dialog open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>메뉴</DialogTitle>
+          <DialogContent className="!max-w-none !w-full !h-full !p-0 !rounded-none !border-0 !translate-x-0 !translate-y-0 !top-0 !left-0 z-[100] flex flex-col bg-background">
+            <DialogHeader className="px-6 py-4 border-b">
+              <DialogTitle className="text-left">메뉴</DialogTitle>
             </DialogHeader>
 
-            <nav className="grid gap-2">
+            <nav className="grid gap-2 p-6 overflow-y-auto">
               <Link
                 href="/"
                 onClick={() => setMobileMenuOpen(false)}

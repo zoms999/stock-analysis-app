@@ -1,10 +1,8 @@
-'use client';
-
 import { Tournament, TournamentEntry, PredictionSlot } from '@/types/tournament';
 import PredictionPanel from './PredictionPanel';
-// Import ChartAnalyzer or a placeholder if ChartAnalyzer is too specific
-// For now, let's use a placeholder or reuse if easy. ChartAnalyzer seems complex, let's stick to a placeholder for the MVP or check imports.
-import dynamic from 'next/dynamic';
+import RealtimeLeaderboard from './RealtimeLeaderboard';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 interface TournamentDetailViewProps {
   tournament: Tournament;
@@ -15,6 +13,8 @@ interface TournamentDetailViewProps {
 }
 
 export default function TournamentDetailView({ tournament, userEntry, onUnlockSlots, onSubmit }: TournamentDetailViewProps) {
+  const isEnded = tournament.status === 'SETTLED' || new Date(tournament.target_date) < new Date();
+
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-8">
       <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
@@ -37,6 +37,19 @@ export default function TournamentDetailView({ tournament, userEntry, onUnlockSl
               </div>
            </div>
 
+           {/* Results Button if Ended */}
+           {isEnded && (
+             <div className="bg-yellow-900/20 border border-yellow-700/50 p-6 rounded-xl text-center">
+                <h3 className="text-xl font-bold text-yellow-500 mb-2">대회가 종료되었습니다!</h3>
+                <p className="text-gray-400 mb-4">결과를 확인하고 상금을 수령하세요 (자동 지급됨).</p>
+                <Link href={`/tournaments/${tournament.id}/results`}>
+                    <Button size="lg" className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold">
+                        🏆 결과 확인하기
+                    </Button>
+                </Link>
+             </div>
+           )}
+
            {/* Info / Rule Book */}
            <div className="bg-gray-900/50 rounded-xl p-6 border border-gray-800/50">
               <h4 className="font-bold text-gray-300 mb-2">대회 규칙</h4>
@@ -48,19 +61,24 @@ export default function TournamentDetailView({ tournament, userEntry, onUnlockSl
            </div>
         </div>
 
-        {/* Right Column: Interaction */}
+        {/* Right Column: Interaction & Leaderboard */}
         <div className="lg:col-span-4 flex flex-col gap-6">
            <div className="hidden lg:block">
               <h1 className="text-3xl font-black mb-2 leading-tight">{tournament.title}</h1>
               <div className="text-2xl font-bold text-yellow-500 mb-4">{tournament.prize_pool}</div>
            </div>
 
-           <PredictionPanel 
-             tournament={tournament}
-             userEntry={userEntry}
-             onUnlockSlots={onUnlockSlots}
-             onSubmit={onSubmit}
-           />
+           {!isEnded && (
+             <PredictionPanel 
+               tournament={tournament}
+               userEntry={userEntry}
+               onUnlockSlots={onUnlockSlots}
+               onSubmit={onSubmit}
+             />
+           )}
+
+           {/* Real-time Leaderboard */}
+           <RealtimeLeaderboard tournamentId={tournament.id} />
         </div>
 
       </div>

@@ -17,6 +17,7 @@ export function Header() {
   const [user, setUser] = useState<any>(null);
   const [userLevel, setUserLevel] = useState<number>(1);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isPartner, setIsPartner] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
@@ -51,6 +52,7 @@ export function Header() {
             setUser(null);
             setUserLevel(1);
             setIsAdmin(false);
+            setIsPartner(false);
             return;
           }
         }
@@ -66,6 +68,7 @@ export function Header() {
           setUser(null);
           setUserLevel(1);
           setIsAdmin(false);
+          setIsPartner(false);
           return;
         }
         console.error("Failed to check user", error);
@@ -79,6 +82,7 @@ export function Header() {
         setUser(null);
         setUserLevel(1);
         setIsAdmin(false);
+        setIsPartner(false);
         router.refresh();
       } else if (_event === 'SIGNED_IN') {
         router.refresh();
@@ -101,13 +105,14 @@ export function Header() {
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('user_level,is_admin')
+                .select('user_level,is_admin,is_partner')
                 .eq('id', user.id)
                 .single();
 
             if (data && !error) {
                 setUserLevel(data.user_level ?? 1);
                 setIsAdmin((data as any).is_admin === true || (data.user_level ?? 1) >= 99);
+                setIsPartner((data as any).is_partner === true);
             }
         } catch (e) {
             console.error("Failed to fetch user level", e);
@@ -156,6 +161,11 @@ export function Header() {
             <Link href="/subscription" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer">
               구독하기
             </Link>
+            {isPartner && (
+               <Link href="/partner/dashboard" className="transition-colors text-purple-600 hover:text-purple-800 font-bold cursor-pointer">
+                파트너
+              </Link>
+            )}
             {isAdmin && (
                <Link href="/admin" className="transition-colors text-red-500 hover:text-red-700 font-bold cursor-pointer">
                 관리자
@@ -213,6 +223,15 @@ export function Header() {
               >
                 구독하기
               </Link>
+              {isPartner && (
+                <Link
+                  href="/partner/dashboard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-md px-3 py-2 text-sm font-bold text-purple-600 hover:bg-purple-50"
+                >
+                  파트너
+                </Link>
+              )}
               {isAdmin && (
                 <Link
                   href="/admin"

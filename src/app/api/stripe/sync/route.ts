@@ -89,34 +89,73 @@ export async function POST(req: Request) {
       current_period_end: unixToIsoOrNull(subscription.current_period_end),
     }
 
-    // 기존 row가 있으면 update, 없으면 insert (unique 제약이 없어도 동작하도록)
-    const { data: existing, error: existingError } = await supabaseAdmin
+    // 기존 구독 찾기: stripe_subscription_id 또는 user_id로
+    const { data: existingByStripeId, error: existingByStripeError } = await supabaseAdmin
       .from("subscriptions")
       .select("id")
       .eq("stripe_subscription_id", subscriptionId)
       .limit(1)
       .maybeSingle()
 
-    if (existingError) {
-      return NextResponse.json({ error: existingError.message }, { status: 500 })
+    if (existingByStripeError) {
+      return NextResponse.json({ error: existingByStripeError.message }, { status: 500 })
     }
 
-    if (existing?.id) {
+    // user_id로 기존 구독 찾기 (unique 제약 때문에)
+    const { data: existingByUserId, error: existingByUserError } = await supabaseAdmin
+      .from("subscriptions")
+      .select("id, stripe_subscription_id, status")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle()
+
+    if (existingByUserError && existingByUserError.code !== "PGRST116") {
+      // PGRST116은 "no rows returned" 에러이므로 무시
+      return NextResponse.json({ error: existingByUserError.message }, { status: 500 })
+    }
+
+    // 기존 구독이 있고, 다른 Stripe 구독 ID를 가지고 있다면 취소 처리
+    if (existingByUserId && existingByUserId.stripe_subscription_id !== subscriptionId) {
+      // 기존 구독을 canceled로 업데이트
+      await supabaseAdmin
+        .from("subscriptions")
+        .update({
+          status: "canceled",
+          canceled_at: new Date().toISOString(),
+        })
+        .eq("id", existingByUserId.id)
+    }
+
+    // stripe_subscription_id로 찾은 기존 구독이 있으면 업데이트
+    if (existingByStripeId?.id) {
       const { error: updateError } = await supabaseAdmin
         .from("subscriptions")
         .update(subscriptionData)
-        .eq("id", existing.id)
+        .eq("id", existingByStripeId.id)
 
       if (updateError) {
         return NextResponse.json({ error: updateError.message }, { status: 500 })
       }
     } else {
+      // 새로 insert (기존 user_id 구독은 이미 취소 처리됨)
       const { error: insertError } = await supabaseAdmin
         .from("subscriptions")
         .insert(subscriptionData)
 
       if (insertError) {
-        return NextResponse.json({ error: insertError.message }, { status: 500 })
+        // unique 제약 위반 시 기존 구독을 업데이트로 처리
+        if (insertError.code === "23505" && insertError.message.includes("user_id")) {
+          const { error: updateError } = await supabaseAdmin
+            .from("subscriptions")
+            .update(subscriptionData)
+            .eq("user_id", user.id)
+
+          if (updateError) {
+            return NextResponse.json({ error: updateError.message }, { status: 500 })
+          }
+        } else {
+          return NextResponse.json({ error: insertError.message }, { status: 500 })
+        }
       }
     }
 

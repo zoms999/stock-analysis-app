@@ -113,7 +113,8 @@ export async function createCustomerPortalSession(
   customerId: string,
   returnUrl: string
 ) {
-  const { stripe } = await import("./client");
+  const { getStripe } = await import("./client");
+  const stripe = await getStripe();
 
   try {
     const session = await stripe.billingPortal.sessions.create({

@@ -15,7 +15,6 @@ import { NextResponse } from "next/server";
 import WebSocket from "ws";
 import {
   getApprovalKey,
-  KIS_WS_BASE,
   KIS_TR_CODES,
   buildSubscribeMessage,
   parseRealtimePrice,
@@ -55,10 +54,13 @@ export async function GET(req: Request) {
     );
   }
 
-  // WebSocket 접속키 발급
+  // WebSocket 접속키 및 Base URL 발급
   let approvalKey: string;
+  let wsBase: string;
   try {
-    approvalKey = await getApprovalKey();
+    const config = await getApprovalKey();
+    approvalKey = config.approvalKey;
+    wsBase = config.wsBase;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: `KIS 인증 실패: ${message}` }, { status: 500 });
@@ -138,7 +140,9 @@ export async function GET(req: Request) {
 
         // 재연결 시 접속키 갱신
         try {
-          approvalKey = await getApprovalKey();
+          const config = await getApprovalKey();
+          approvalKey = config.approvalKey;
+          wsBase = config.wsBase;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           safeSendEvent("status", { event: "auth_error", message });
@@ -147,7 +151,7 @@ export async function GET(req: Request) {
         }
 
         // KIS WebSocket 연결
-        ws = new WebSocket(KIS_WS_BASE);
+        ws = new WebSocket(wsBase);
 
         ws.on("open", () => {
           reconnectAttempt = 0;
@@ -254,7 +258,3 @@ export async function GET(req: Request) {
     },
   });
 }
-
-
-
-

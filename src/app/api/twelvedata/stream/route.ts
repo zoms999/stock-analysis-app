@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import WebSocket from "ws";
+import { getSystemConfig } from "@/lib/config-helper";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,7 +70,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "No valid symbols provided" }, { status: 400 });
   }
 
-  const apiKey = process.env.TWELVEDATA_API_KEY ?? process.env.NEXT_PUBLIC_TWELVEDATA_API_KEY;
+  const apiKey = await getSystemConfig("TWELVEDATA_API_KEY");
   if (!apiKey) {
     return NextResponse.json({ error: "Twelve Data API key is not configured" }, { status: 500 });
   }
@@ -262,6 +263,3 @@ export async function GET(req: Request) {
     },
   });
 }
-
-
-

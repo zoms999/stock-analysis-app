@@ -1,5 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
+import { getSystemConfig } from "@/lib/config-helper";
 
 type TwelvePriceSingleResponse =
   | { price: string }
@@ -102,7 +103,7 @@ export async function updateMarketPrices() {
   log('Starting market price update...');
 
   try {
-    const apiKey = process.env.TWELVEDATA_API_KEY ?? process.env.NEXT_PUBLIC_TWELVEDATA_API_KEY;
+    const apiKey = await getSystemConfig("TWELVEDATA_API_KEY");
     if (!apiKey) {
       log("TWELVEDATA_API_KEY is not configured. Skipping price update.");
       return { success: true, updated: 0, logs };

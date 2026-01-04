@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSystemConfig } from "@/lib/config-helper";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -256,7 +257,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ symbol: KO_SYMBOL_FALLBACK[q], source: "fallback" }, { status: 200 });
   }
 
-  const apiKey = process.env.TWELVEDATA_API_KEY ?? process.env.NEXT_PUBLIC_TWELVEDATA_API_KEY;
+  const apiKey = await getSystemConfig("TWELVEDATA_API_KEY");
   if (!apiKey) {
     return NextResponse.json({ error: "Twelve Data API key is not configured" }, { status: 500 });
   }
@@ -307,5 +308,3 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "검색 중 오류가 발생했습니다.", details: errorMessage }, { status: 500 });
   }
 }
-
-

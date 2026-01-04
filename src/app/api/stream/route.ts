@@ -14,13 +14,13 @@ import { NextResponse } from "next/server";
 import WebSocket from "ws";
 import {
   getApprovalKey,
-  KIS_WS_BASE,
   KIS_TR_CODES,
   buildSubscribeMessage,
   parseRealtimePrice,
   normalizeKrxSymbol,
   isKrxSymbol,
 } from "@/lib/api/kis";
+import { getSystemConfig } from "@/lib/config-helper";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,9 +109,9 @@ export async function GET(req: Request) {
   }
 
   // 환경변수 확인
-  const twelveApiKey = process.env.TWELVEDATA_API_KEY ?? process.env.NEXT_PUBLIC_TWELVEDATA_API_KEY;
-  const kisAppKey = process.env.KIS_APP_KEY;
-  const kisAppSecret = process.env.KIS_APP_SECRET;
+  const twelveApiKey = await getSystemConfig('TWELVEDATA_API_KEY');
+  const kisAppKey = await getSystemConfig('KIS_APP_KEY');
+  const kisAppSecret = await getSystemConfig('KIS_APP_SECRET');
 
   // 글로벌 심볼이 있는데 TwelveData 키가 없으면 에러
   if (classified.global.length > 0 && !twelveApiKey) {
@@ -143,6 +143,7 @@ export async function GET(req: Request) {
 
   // KIS 접속키 (재연결 시 갱신)
   let kisApprovalKey: string | null = null;
+  let kisWsBase: string | null = null; // KIS WS Base URL
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -219,7 +220,9 @@ export async function GET(req: Request) {
         cleanupKisWs();
 
         try {
-          kisApprovalKey = await getApprovalKey();
+          const config = await getApprovalKey();
+          kisApprovalKey = config.approvalKey;
+          kisWsBase = config.wsBase;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           safeSendEvent("status", { event: "kis_auth_error", message });
@@ -227,7 +230,7 @@ export async function GET(req: Request) {
           return;
         }
 
-        wsKis = new WebSocket(KIS_WS_BASE);
+        wsKis = new WebSocket(kisWsBase);
 
         wsKis.on("open", () => {
           kisReconnectAttempt = 0;
@@ -455,7 +458,3 @@ export async function GET(req: Request) {
     },
   });
 }
-
-
-
-

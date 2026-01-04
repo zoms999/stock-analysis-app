@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSystemConfig } from "@/lib/config-helper";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,10 +111,10 @@ export async function GET(req: Request) {
     const symbol = normalizeSymbolForTwelveData(rawSymbol);
     const { interval, mode, outputsize } = mapIntervalToTwelve(intervalArg);
 
-    const apiKey = process.env.TWELVEDATA_API_KEY ?? process.env.NEXT_PUBLIC_TWELVEDATA_API_KEY;
+    const apiKey = await getSystemConfig("TWELVEDATA_API_KEY");
     if (!apiKey) {
       return NextResponse.json(
-        { error: "Twelve Data API key is not configured", hint: "`.env.local`에 TWELVEDATA_API_KEY=... 를 추가하세요." },
+        { error: "Twelve Data API key is not configured", hint: "시스템 설정에서 TWELVEDATA_API_KEY를 설정하세요." },
         { status: 500 }
       );
     }
@@ -216,5 +217,3 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "차트 데이터를 불러올 수 없습니다.", details: errorMessage }, { status: 500 });
   }
 }
-
-

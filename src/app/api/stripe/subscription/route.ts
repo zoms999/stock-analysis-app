@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe/client";
+import { getStripe } from "@/lib/stripe/client";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
@@ -46,6 +46,7 @@ export async function GET() {
 
     if (subscription.stripe_subscription_id) {
       try {
+        const stripe = await getStripe();
         const stripeSubscription = await stripe.subscriptions.retrieve(
           subscription.stripe_subscription_id
         ) as any;
@@ -129,6 +130,7 @@ export async function PATCH(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
+    const stripe = await getStripe();
     let result;
 
     switch (action) {
@@ -272,6 +274,7 @@ export async function DELETE() {
       );
     }
 
+    const stripe = await getStripe();
     // Cancel immediately
     await stripe.subscriptions.cancel(stripeSubId);
 

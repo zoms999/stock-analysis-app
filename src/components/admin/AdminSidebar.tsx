@@ -28,7 +28,10 @@ const sections: NavSection[] = [
       { href: "/admin/notices", label: "공지사항" },
     ],
   },
-  { title: "설정", items: [{ href: "/admin/settings", label: "설정" }] },
+  { title: "설정", items: [
+    { href: "/admin/settings", label: "설정" },
+    { href: "/admin/config", label: "시스템 설정" }
+  ] },
 ]
 
 export function AdminSidebar() {

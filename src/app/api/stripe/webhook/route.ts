@@ -1,9 +1,10 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe/client";
+import { getStripe } from "@/lib/stripe/client";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
 import { accrueReferralSettlement } from "@/lib/stripe/referral-settlement";
+import { getSystemConfig } from "@/lib/config-helper";
 
 // ─────────────────────────────────────────────────────────────
 // Helper Functions
@@ -59,6 +60,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
+  const stripe = await getStripe();
   const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
   const supabase = getSupabaseAdmin();
 
@@ -352,6 +354,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
     return;
   }
 
+  const stripe = await getStripe();
   // Get subscription details from Stripe
   const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
 
@@ -409,6 +412,7 @@ async function handleChargeRefunded(charge: any) {
     return;
   }
 
+  const stripe = await getStripe();
   const invoice = await stripe.invoices.retrieve(invoiceId) as any;
   const subscriptionId = invoice.subscription as string;
 
@@ -493,13 +497,15 @@ export async function POST(req: Request) {
     return new NextResponse("No signature", { status: 400 });
   }
 
+  const stripe = await getStripe();
+  const webhookSecret = await getSystemConfig("STRIPE_WEBHOOK_SECRET");
   let event: Stripe.Event;
 
   try {
     event = stripe.webhooks.constructEvent(
       body,
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      webhookSecret!
     );
     console.log("[WEBHOOK] Event verified:", event.type);
   } catch (error: any) {

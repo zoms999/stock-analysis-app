@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe/client";
+import { getStripe } from "@/lib/stripe/client";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -19,6 +19,7 @@ export async function POST(req: Request) {
     }
 
     const { return_url } = await req.json();
+    const stripe = await getStripe();
 
     // Get user's subscription with Stripe customer ID
     const { data: subscription, error: subError } = await supabase

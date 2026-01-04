@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { getSystemConfig } from "@/lib/config-helper";
+
+export const runtime = "nodejs"; 
 
 /**
  * Finnhub API Proxy to avoid CORS issues and hide API key
@@ -10,7 +13,16 @@ export async function GET(req: Request) {
     const symbol = searchParams.get("symbol") ?? "AAPL";
     const resolution = searchParams.get("resolution") ?? "D";
 
-    const apiKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
+    // Try 'FINNHUB_API_KEY' first, then 'NEXT_PUBLIC_FINNHUB_API_KEY' (legacy support)
+    let apiKey = await getSystemConfig("FINNHUB_API_KEY");
+    if (!apiKey) {
+      apiKey = await getSystemConfig("NEXT_PUBLIC_FINNHUB_API_KEY");
+    }
+    
+    // As a last fallback during migration, check process.env (optional, can be removed)
+    if (!apiKey) {
+       apiKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY || "";
+    }
     
     if (!apiKey) {
       return NextResponse.json(

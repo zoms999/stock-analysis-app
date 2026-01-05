@@ -175,6 +175,9 @@ const KO_SYMBOL_FALLBACK: Record<string, string> = {
 
   "LG": "003550:KRX",        // 지주
   "SK": "034730:KRX",        // 지주
+  "SKC": "011790:KRX",
+  "에스케이씨": "011790:KRX",
+  "SKC솔믹스": "336370:KRX",
   "롯데지주": "004990:KRX",
   "두산": "000150:KRX",
 

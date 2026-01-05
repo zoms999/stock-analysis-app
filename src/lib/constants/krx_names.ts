@@ -81,6 +81,8 @@ export const KRX_SYMBOL_TO_NAME: Record<string, string> = {
   "000720:KRX": "현대건설",
   "003550:KRX": "LG",
   "034730:KRX": "SK",
+  "011790:KRX": "SKC",
+  "336370:KRX": "SKC솔믹스",
   "004990:KRX": "롯데지주",
   "000150:KRX": "두산",
   "015760:KRX": "한국전력",

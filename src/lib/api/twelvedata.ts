@@ -7,7 +7,7 @@ export interface CandleData {
   volume?: number;
 }
 
-import { fetchYahooCandles } from "./yahoo";
+
 
 export type TwelvePriceEvent = {
   event: "price";
@@ -47,37 +47,16 @@ export async function fetchTwelveDataCandles(symbol: string, interval: string): 
 
   // ✅ 국내주식인 경우 KIS 전용 API로 라우팅
   if (isKrx) {
-    try {
-      const url = `/api/kis/candles?symbol=${encodeURIComponent(baseKr)}&interval=${encodeURIComponent(itv)}`;
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.details || err.error || "KIS API 호출 실패");
-      }
-      return await res.json();
-    } catch (e: any) {
-      console.warn("[KIS Fallback failed, trying Yahoo]", e.message);
-      // KIS 실패 시 기존 Yahoo 폴백 시도 (보험용)
-      try {
-        return await fetchYahooCandles(`${baseKr}.KS`, itv);
-      } catch {
-        return await fetchYahooCandles(`${baseKr}.KQ`, itv);
-      }
+    const url = `/api/kis/candles?symbol=${encodeURIComponent(baseKr)}&interval=${encodeURIComponent(itv)}`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.details || err.error || "KIS API 호출 실패");
     }
+    return await res.json();
   }
 
-  // ✅ Yahoo 스타일 수동 입력 대응 (기존 로직 유지)
-  if (s.endsWith(".KS") || s.endsWith(".KQ")) {
-    try {
-      return await fetchYahooCandles(s, itv);
-    } catch (e: any) {
-      const msg = String(e?.message ?? e);
-      if (msg.includes("429") || msg.includes("요청이 많아")) {
-        throw new Error("현재 데이터 제공자(Yahoo) 요청이 많아 일시적으로 차트를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
-      }
-      throw e;
-    }
-  }
+
 
   const key = `${s}|${itv}`;
   const now = Date.now();

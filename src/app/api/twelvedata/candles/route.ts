@@ -102,8 +102,24 @@ function mapIntervalToTwelve(intervalArg: string) {
  * Twelve Data REST (time_series) Proxy
  * GET /api/twelvedata/candles?symbol=AAPL&interval=1d
  */
+// ✅ 전역 서킷 브레이커: Rate Limit 도달 시 모든 요청 잠시 차단
+let globalBlockUntil = 0;
+
+/**
+ * Twelve Data REST (time_series) Proxy
+ * GET /api/twelvedata/candles?symbol=AAPL&interval=1d
+ */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
+
+  // 1. 서킷 브레이커 체크
+  if (Date.now() < globalBlockUntil) {
+    const waitSec = Math.ceil((globalBlockUntil - Date.now()) / 1000);
+    return NextResponse.json(
+      { error: `API 요청 한도 초과. ${waitSec}초 뒤에 다시 시도해주세요.` },
+      { status: 429 }
+    );
+  }
 
   try {
     const rawSymbol = searchParams.get("symbol") ?? "AAPL";
@@ -163,11 +179,23 @@ export async function GET(req: Request) {
       }
 
       if (!res.ok) {
+        // HTTP 에러 감지 시
+        const msg = bodyText;
+        if (res.status === 429 || msg.includes("API credits") || msg.includes("limit")) {
+          // 크레딧 부족 / 레이트 리밋 발생 시 60초간 전역 차단
+          globalBlockUntil = Date.now() + 60_000;
+        }
         return { ok: false as const, status: res.status, details: bodyText.slice(0, 800) };
       }
 
+      // 200 OK라도 내부적으로 에러 메시지가 있을 수 있음 (Twelve Data 특성)
       if (!json || (json as any)?.status !== "ok" || !Array.isArray((json as any)?.values)) {
-        return { ok: false as const, status: 502, details: (json as any)?.message ?? json ?? "Unexpected response" };
+        const details = (json as any)?.message ?? (json as any)?.error ?? "Unexpected response";
+        // "You have run out of API credits..." 메시지 체크
+        if (typeof details === "string" && (details.includes("API credits") || details.includes("current minute"))) {
+             globalBlockUntil = Date.now() + 60_000;
+        }
+        return { ok: false as const, status: 502, details: details };
       }
 
       const values = (json as any).values as Array<any>;
@@ -200,6 +228,7 @@ export async function GET(req: Request) {
     const result = await promise.finally(() => inFlight.delete(cacheKey));
 
     if (!result.ok) {
+        // 이미 위에서 globalBlockUntil 갱신 로직이 있으므로 여기선 단순히 에러 리턴
       return NextResponse.json({ error: "차트 데이터를 불러올 수 없습니다.", details: result.details }, { status: result.status });
     }
 

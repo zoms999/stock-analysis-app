@@ -10,6 +10,9 @@
  */
 
 import { getSystemConfig } from '../config-helper';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 // ─────────────────────────────────────────────────────────────
 // 1. 기본 설정 (동적 로딩)
@@ -71,6 +74,25 @@ export async function getAccessToken(): Promise<string> {
     return tokenCache.accessToken;
   }
 
+  // 파일 캐시 확인 (서버 재시작 시 대응)
+  try {
+    const tmpDir = os.tmpdir();
+    const cachePath = path.join(tmpDir, 'kis_token_cache.json');
+    if (fs.existsSync(cachePath)) {
+      const fileData = fs.readFileSync(cachePath, 'utf8');
+      const loadedCache = JSON.parse(fileData) as TokenCache;
+      
+      // 파일 캐시가 유효하면 메모리에 로드하고 반환
+      if (loadedCache.expiresAt - 5 * 60 * 1000 > now) {
+        console.log('[KIS API] Loaded token from disk cache');
+        tokenCache = loadedCache;
+        return loadedCache.accessToken;
+      }
+    }
+  } catch (err) {
+    console.warn('[KIS API] Failed to load token from disk:', err);
+  }
+
   const { appKey, appSecret, restBase, isVirtual } = await getKisConfig();
 
   console.log(`[KIS API] Token Request - Mode: ${isVirtual ? "Virtual (모의투자)" : "Real (실전투자)"}, Base: ${restBase}`);
@@ -98,6 +120,16 @@ export async function getAccessToken(): Promise<string> {
     accessToken,
     expiresAt: now + expiresIn * 1000,
   };
+
+  // 파일에 캐시 저장
+  try {
+    const tmpDir = os.tmpdir();
+    const cachePath = path.join(tmpDir, 'kis_token_cache.json');
+    fs.writeFileSync(cachePath, JSON.stringify(tokenCache), 'utf8');
+    console.log('[KIS API] Token saved to disk cache');
+  } catch (err) {
+    console.warn('[KIS API] Failed to save token to disk:', err);
+  }
 
   return accessToken;
 }

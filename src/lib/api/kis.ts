@@ -62,6 +62,7 @@ interface TokenCache {
 }
 
 let tokenCache: TokenCache | null = null;
+let tokenRequestPromise: Promise<string> | null = null;
 
 /**
  * 접근 토큰 발급 (POST /oauth2/tokenP)
@@ -69,20 +70,24 @@ let tokenCache: TokenCache | null = null;
 export async function getAccessToken(): Promise<string> {
   const now = Date.now();
 
-  // 캐시된 토큰이 아직 유효하면 재사용 (만료 5분 전 갱신)
+  // 1. 메모리 캐시 체크
   if (tokenCache && tokenCache.expiresAt - 5 * 60 * 1000 > now) {
     return tokenCache.accessToken;
   }
 
-  // 파일 캐시 확인 (서버 재시작 시 대응)
+  // 2. 진행 중인 요청이 있다면 기다림 (Race Condition 방지)
+  if (tokenRequestPromise) {
+    return tokenRequestPromise;
+  }
+
+  // 3. 파일 캐시 확인 (최초 1회만, 혹은 메모리에 없을 때만)
   try {
     const tmpDir = os.tmpdir();
     const cachePath = path.join(tmpDir, 'kis_token_cache.json');
     if (fs.existsSync(cachePath)) {
       const fileData = fs.readFileSync(cachePath, 'utf8');
       const loadedCache = JSON.parse(fileData) as TokenCache;
-      
-      // 파일 캐시가 유효하면 메모리에 로드하고 반환
+
       if (loadedCache.expiresAt - 5 * 60 * 1000 > now) {
         console.log('[KIS API] Loaded token from disk cache');
         tokenCache = loadedCache;
@@ -93,45 +98,55 @@ export async function getAccessToken(): Promise<string> {
     console.warn('[KIS API] Failed to load token from disk:', err);
   }
 
-  const { appKey, appSecret, restBase, isVirtual } = await getKisConfig();
+  // 4. 실제로 토큰 발급 요청 (Singleton Promise 시작)
+  tokenRequestPromise = (async () => {
+    try {
+      const { appKey, appSecret, restBase, isVirtual } = await getKisConfig();
 
-  console.log(`[KIS API] Token Request - Mode: ${isVirtual ? "Virtual (모의투자)" : "Real (실전투자)"}, Base: ${restBase}`);
+      console.log(`[KIS API] Token Request - Mode: ${isVirtual ? "Virtual (모의투자)" : "Real (실전투자)"}, Base: ${restBase}`);
 
-  const res = await fetch(`${restBase}/oauth2/tokenP`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      appkey: appKey,
-      appsecret: appSecret,
-    }),
-  });
+      const res = await fetch(`${restBase}/oauth2/tokenP`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          grant_type: "client_credentials",
+          appkey: appKey,
+          appsecret: appSecret,
+        }),
+      });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`KIS 토큰 발급 실패: ${res.status} ${text}`);
-  }
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`KIS 토큰 발급 실패: ${res.status} ${text}`);
+      }
 
-  const data = await res.json();
-  const accessToken = data.access_token as string;
-  const expiresIn = (data.expires_in as number) ?? 86400; // 초 단위
+      const data = await res.json();
+      const accessToken = data.access_token as string;
+      const expiresIn = (data.expires_in as number) ?? 86400; // 초 단위
 
-  tokenCache = {
-    accessToken,
-    expiresAt: now + expiresIn * 1000,
-  };
+      tokenCache = {
+        accessToken,
+        expiresAt: Date.now() + expiresIn * 1000,
+      };
 
-  // 파일에 캐시 저장
-  try {
-    const tmpDir = os.tmpdir();
-    const cachePath = path.join(tmpDir, 'kis_token_cache.json');
-    fs.writeFileSync(cachePath, JSON.stringify(tokenCache), 'utf8');
-    console.log('[KIS API] Token saved to disk cache');
-  } catch (err) {
-    console.warn('[KIS API] Failed to save token to disk:', err);
-  }
+      // 파일에 캐시 저장
+      try {
+        const tmpDir = os.tmpdir();
+        const cachePath = path.join(tmpDir, 'kis_token_cache.json');
+        fs.writeFileSync(cachePath, JSON.stringify(tokenCache), 'utf8');
+        console.log('[KIS API] Token saved to disk cache');
+      } catch (err) {
+        console.warn('[KIS API] Failed to save token to disk:', err);
+      }
 
-  return accessToken;
+      return accessToken;
+    } finally {
+      // 요청이 끝나면 (성공이든 실패든) Promise 초기화하여 재시도 가능하게 함
+      tokenRequestPromise = null;
+    }
+  })();
+
+  return tokenRequestPromise;
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -240,3 +240,6 @@
 - [실시간 동기화 확인](./REALTIME_VERIFICATION.md)
 - [요구사항](./요구사항.txt)
 
+
+
+

@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Figma - AI UI Builder</title>
+    <!-- 아이콘 사용을 위한 CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-dark: #2C2C2C;
+            --bg-panel: #1E1E1E;
+            --bg-canvas: #333333;
+            --text-main: #FFFFFF;
+            --text-sub: #A0A0A0;
+            --accent: #0D99FF; /* Figma Blue */
+            --accent-hover: #007BE5;
+            --border: #444444;
+            --success: #1BC47D;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none; /* 앱처럼 보이게 드래그 방지 */
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- 1. Header --- */
+        header {
+            height: 48px;
+            background-color: var(--bg-dark);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+        }
+
+        .header-left, .header-center, .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .menu-icon { font-size: 18px; cursor: pointer; }
+        
+        .toolbar-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-sub);
+        }
+        .toolbar-btn.active {
+            background-color: var(--accent);
+            color: white;
+        }
+        .toolbar-btn:hover:not(.active) { background-color: #444; }
+
+        .project-title { font-weight: 600; font-size: 14px; }
+        
+        /* 기능 #7, #6 버튼들 */
+        .btn-action {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-code { background-color: transparent; border: 1px solid var(--text-sub); color: var(--text-main); }
+        .btn-deploy { background-color: var(--accent); color: white; }
+        .btn-share { background-color: var(--success); color: white; }
+
+        /* 협업자 아바타 (기능 #8) */
+        .avatars { display: flex; padding-right: 10px; }
+        .avatar {
+            width: 24px; height: 24px;
+            border-radius: 50%;
+            background-color: #FF5722;
+            border: 2px solid var(--bg-dark);
+            margin-left: -8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: bold;
+        }
+
+        /* --- Main Layout --- */
+        .workspace {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 48px);
+        }
+
+        /* --- 2. Left Sidebar (Layers) --- */
+        .sidebar-left {
+            width: 240px;
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+        .panel-header {
+            padding: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-sub);
+        }
+        .layer-item {
+            padding: 8px 16px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        .layer-item:hover { background-color: #333; }
+        .layer-item.selected { background-color: #0D99FF20; color: var(--accent); }
+        .layer-icon { width: 14px; text-align: center; color: var(--text-sub); }
+
+        /* --- 3. Canvas Area --- */
+        .canvas-area {
+            flex: 1;
+            background-color: var(--bg-canvas);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+        }
+
+        /* The "Artboard" / Website View */
+        .artboard {
+            width: 800px;
+            height: 600px;
+            background-color: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            position: relative;
+            transform: scale(0.9);
+            color: black; /* 웹사이트 내부는 Black text */
+            overflow: hidden;
+            cursor: default;
+        }
+
+        /* Mockup Content (Cafe Landing Page) */
+        .mock-nav { display: flex; justify-content: space-between; padding: 20px; align-items: center; border-bottom: 1px solid #eee; }
+        .mock-logo { font-weight: bold; font-size: 20px; color: #5D4037; }
+        .mock-menu { display: flex; gap: 20px; font-size: 14px; color: #666; }
+        .mock-hero { 
+            padding: 60px 40px; text-align: center; background-color: #F8F5F2; 
+            height: 300px; display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .mock-h1 { font-size: 36px; margin-bottom: 16px; color: #333; }
+        .mock-p { color: #666; margin-bottom: 30px; }
+        
+        /* 기능 #2: 선택 가능한 요소 스타일 */
+        .selectable { border: 2px solid transparent; transition: 0.2s; position: relative; }
+        .selectable:hover { border-color: #0d99ff50; }
+        .selectable.active { border-color: var(--accent); }
+        
+        /* Resize Handles for Active Element */
+        .resize-handle {
+            position: absolute; width: 8px; height: 8px;
+            background: white; border: 1px solid var(--accent);
+            display: none;
+        }
+        .selectable.active .resize-handle { display: block; }
+        .rh-nw { top: -4px; left: -4px; } .rh-ne { top: -4px; right: -4px; }
+        .rh-sw { bottom: -4px; left: -4px; } .rh-se { bottom: -4px; right: -4px; }
+
+        .mock-btn {
+            background-color: #5D4037; color: white; 
+            padding: 12px 24px; border-radius: 4px; border: none; font-size: 14px;
+        }
+
+        /* --- Feature #1: Floating Prompt Bar --- */
+        .prompt-bar-container {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 500px;
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 100;
+        }
+        .ai-sparkle { color: #D4AF37; }
+        .prompt-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 14px;
+            outline: none;
+        }
+        .btn-generate {
+            background: linear-gradient(135deg, #FF5722, #D84315);
+            color: white; border: none; padding: 8px 16px; border-radius: 6px;
+            font-size: 12px; font-weight: bold; cursor: pointer;
+        }
+
+        /* --- 4. Right Sidebar (Properties & AI) --- */
+        .sidebar-right {
+            width: 280px;
+            background-color: var(--bg-panel);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .tabs { display: flex; border-bottom: 1px solid var(--border); }
+        .tab { 
+            flex: 1; text-align: center; padding: 12px; font-size: 12px; font-weight: 600; 
+            color: var(--text-sub); cursor: pointer; border-bottom: 2px solid transparent;
+        }
+        .tab.active { color: var(--text-main); border-bottom-color: var(--text-main); }
+
+        .property-section { padding: 16px; border-bottom: 1px solid var(--border); }
+        .section-title { font-size: 11px; font-weight: 700; color: var(--text-sub); margin-bottom: 12px; text-transform: uppercase; }
+        
+        .prop-row { display: flex; justify-content: space-between; margin-bottom: 10px; gap: 8px; }
+        .prop-item { flex: 1; }
+        .prop-label { font-size: 10px; color: var(--text-sub); margin-bottom: 4px; display: block; }
+        .prop-input { 
+            width: 100%; background: #333; border: 1px solid transparent; 
+            color: white; padding: 6px; border-radius: 4px; font-size: 12px; 
+        }
+        .prop-input:focus { border-color: var(--accent); outline: none; }
+
+        /* Feature #3, #5: AI Feature Definition List */
+        .ai-feature-box {
+            background-color: #252525;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+        .ai-feature-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
+        }
+        .ai-tag { font-size: 10px; background: #333; padding: 2px 4px; border-radius: 4px; color: var(--accent); }
+        .ai-desc { font-size: 12px; line-height: 1.4; color: #ddd; }
+        .ai-edit-icon { font-size: 10px; cursor: pointer; color: var(--text-sub); }
+        .ai-edit-icon:hover { color: white; }
+
+        /* Collaborator Cursor Mockup */
+        .cursor-mock {
+            position: absolute; top: 200px; left: 600px;
+            pointer-events: none; z-index: 50;
+        }
+        .cursor-arrow { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 12px solid #F24E1E; transform: rotate(-30deg); }
+        .cursor-label { background: #F24E1E; padding: 2px 6px; border-radius: 4px; font-size: 10px; color: white; margin-top: 4px; display: inline-block;}
+
+    </style>
+</head>
+<body>
+
+    <!-- 1. Header -->
+    <header>
+        <div class="header-left">
+            <i class="fa-solid fa-bars menu-icon"></i>
+            <span class="project-title">Cafe Landing Project <span style="color:var(--text-sub); font-weight:400; font-size:12px;">(Draft)</span></span>
+        </div>
+        
+        <div class="header-center">
+            <div class="toolbar-btn active"><i class="fa-solid fa-arrow-pointer"></i></div>
+            <div class="toolbar-btn"><i class="fa-regular fa-square"></i></div>
+            <div class="toolbar-btn"><i class="fa-solid fa-t"></i></div>
+            <div class="toolbar-btn"><i class="fa-solid fa-hand"></i></div>
+            <div class="toolbar-btn"><i class="fa-regular fa-comment-dots"></i></div>
+        </div>
+
+        <div class="header-right">
+            <!-- 기능 #8: 협업자 -->
+            <div class="avatars">
+                <div class="avatar" style="background:#E91E63">Y</div>
+                <div class="avatar" style="background:#2196F3">K</div>
+            </div>
+            <!-- 기능 #12: 공유 -->
+            <button class="btn-action btn-share"><i class="fa-solid fa-share-nodes"></i> Share</button>
+            <!-- 기능 #6: 코드 -->
+            <button class="btn-action btn-code"><i class="fa-solid fa-code"></i> Dev Mode</button>
+            <!-- 기능 #7: 배포 -->
+            <button class="btn-action btn-deploy"><i class="fa-solid fa-rocket"></i> Deploy</button>
+        </div>
+    </header>
+
+    <div class="workspace">
+        
+        <!-- 2. Left Sidebar -->
+        <aside class="sidebar-left">
+            <div class="panel-header">Layers</div>
+            <div class="layer-item"><span class="layer-icon">#</span> Cafe Landing Page</div>
+            <div class="layer-item" style="padding-left:32px"><span class="layer-icon"><i class="fa-solid fa-layer-group"></i></span> Header</div>
+            <div class="layer-item" style="padding-left:48px"><span class="layer-icon">T</span> Logo</div>
+            <div class="layer-item" style="padding-left:48px"><span class="layer-icon"><i class="fa-solid fa-list"></i></span> Menu</div>
+            <div class="layer-item" style="padding-left:32px"><span class="layer-icon"><i class="fa-solid fa-image"></i></span> Hero Section</div>
+            <div class="layer-item selected" style="padding-left:48px"><span class="layer-icon"><i class="fa-solid fa-square-check"></i></span> CTA Button</div>
+        </aside>
+
+        <!-- 3. Main Canvas -->
+        <section class="canvas-area" id="canvas">
+            
+            <!-- The Mock Website (Artboard) -->
+            <div class="artboard">
+                
+                <!-- Mock Element: Header -->
+                <div class="mock-nav selectable">
+                    <div class="mock-logo selectable">Cafe Aroma</div>
+                    <div class="mock-menu selectable">
+                        <span>About</span>
+                        <span>Menu</span>
+                        <span>Location</span>
+                    </div>
+                </div>
+
+                <!-- Mock Element: Hero -->
+                <div class="mock-hero selectable">
+                    <h1 class="mock-h1 selectable">Premium Coffee &amp; Chill</h1>
+                    <p class="mock-p selectable">Experience the best beans from Ethiopia in the heart of Seoul.</p>
+                    
+                    <!-- 기능 #2, #3: Selected Element (Button) -->
+                    <button class="mock-btn selectable active" id="demo-btn">
+                        Order Now
+                        <div class="resize-handle rh-nw"></div>
+                        <div class="resize-handle rh-ne"></div>
+                        <div class="resize-handle rh-sw"></div>
+                        <div class="resize-handle rh-se"></div>
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Collaborator Cursor Mockup -->
+            <div class="cursor-mock">
+                <div class="cursor-arrow"></div>
+                <div class="cursor-label">Designer Kim</div>
+            </div>
+
+            <!-- 기능 #1: Floating Prompt Bar -->
+            <div class="prompt-bar-container">
+                <i class="fa-solid fa-wand-magic-sparkles ai-sparkle"></i>
+                <input type="text" class="prompt-input" placeholder="Ask AI to change text color or add a footer..." value="">
+                <button class="btn-generate">Generate</button>
+            </div>
+
+        </section>
+
+        <!-- 4. Right Sidebar -->
+        <aside class="sidebar-right">
+            <div class="tabs">
+                <div class="tab">Design</div>
+                <div class="tab">Prototype</div>
+                <div class="tab active"><i class="fa-solid fa-robot"></i> AI Logic</div>
+            </div>
+
+            <!-- Selection Info -->
+            <div class="property-section">
+                <div class="section-title">Selected: Button</div>
+                <div class="prop-row">
+                    <div class="prop-item">
+                        <label class="prop-label">X</label>
+                        <input type="text" class="prop-input" value="340">
+                    </div>
+                    <div class="prop-item">
+                        <label class="prop-label">Y</label>
+                        <input type="text" class="prop-input" value="420">
+                    </div>
+                </div>
+                <div class="prop-row">
+                    <div class="prop-item">
+                        <label class="prop-label">Width</label>
+                        <input type="text" class="prop-input" value="120">
+                    </div>
+                    <div class="prop-item">
+                        <label class="prop-label">Height</label>
+                        <input type="text" class="prop-input" value="48">
+                    </div>
+                </div>
+                <div class="prop-row">
+                    <div class="prop-item">
+                        <label class="prop-label">Fill</label>
+                        <div style="display:flex; gap:5px;">
+                            <div style="width:20px; height:20px; background:#5D4037; border-radius:4px; border:1px solid #fff;"></div>
+                            <input type="text" class="prop-input" value="#5D4037">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 기능 #3, #5: Feature Definitions -->
+            <div class="property-section" style="border-bottom:none; flex:1;">
+                <div class="section-title" style="display:flex; justify-content:space-between;">
+                    AI Feature Specs
+                    <i class="fa-solid fa-arrows-rotate" style="cursor:pointer; font-size:10px;"></i>
+                </div>
+                
+                <!-- Definition Item 1 -->
+                <div class="ai-feature-box">
+                    <div class="ai-feature-header">
+                        <span class="ai-tag">ID: BTN_01</span>
+                        <i class="fa-solid fa-pen ai-edit-icon"></i>
+                    </div>
+                    <div class="ai-desc">
+                        클릭 시 '/order' 페이지로 이동합니다. 비회원일 경우 로그인 모달을 먼저 띄웁니다.
+                    </div>
+                </div>
+
+                <!-- Definition Item 2 -->
+                <div class="ai-feature-box" style="opacity:0.6">
+                    <div class="ai-feature-header">
+                        <span class="ai-tag">ID: NAV_MENU</span>
+                    </div>
+                    <div class="ai-desc">
+                        반응형 동작: 모바일 사이즈(768px 이하)에서는 햄버거 메뉴로 전환됩니다.
+                    </div>
+                </div>
+
+                <div style="margin-top:20px; text-align:center;">
+                    <button class="btn-action btn-code" style="width:100%; justify-content:center;">
+                        <i class="fa-solid fa-file-contract"></i> View Full Spec
+                    </button>
+                </div>
+            </div>
+
+        </aside>
+
+    </div>
+
+    <!-- 간단한 인터랙션 스크립트 -->
+    <script>
+        // 요소 선택 시각화 (기능 #2 시뮬레이션)
+        const selectables = document.querySelectorAll('.selectable');
+        selectables.forEach(el => {
+            el.addEventListener('click', (e) => {
+                e.stopPropagation(); // 부모 클릭 방지
+                
+                // 기존 active 제거
+                document.querySelectorAll('.selectable.active').forEach(active => {
+                    active.classList.remove('active');
+                    // 핸들러가 있다면 숨김 처리됨 (CSS 제어)
+                });
+
+                // 현재 요소 active
+                el.classList.add('active');
+
+                // 우측 패널 값 업데이트 시늉
+                const type = el.tagName === 'DIV' ? 'Group' : 'Button';
+                document.querySelector('.section-title').innerText = `Selected: ${type}`;
+            });
+        });
+
+        // 캔버스 배경 클릭 시 선택 해제
+        document.getElementById('canvas').addEventListener('click', () => {
+            document.querySelectorAll('.selectable.active').forEach(active => {
+                active.classList.remove('active');
+            });
+            document.querySelector('.section-title').innerText = `Selected: None`;
+        });
+
+        // 프롬프트 입력 시뮬레이션 (기능 #1)
+        const btnGenerate = document.querySelector('.btn-generate');
+        const promptInput = document.querySelector('.prompt-input');
+        
+        btnGenerate.addEventListener('click', () => {
+            if(!promptInput.value) return;
+            
+            const originalText = btnGenerate.innerText;
+            btnGenerate.innerText = 'Generatng...';
+            btnGenerate.style.opacity = '0.7';
+            
+            setTimeout(() => {
+                btnGenerate.innerText = originalText;
+                btnGenerate.style.opacity = '1';
+                alert('AI: 디자인이 업데이트 되었습니다! (Prototype Mock)');
+                promptInput.value = '';
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

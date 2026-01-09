@@ -15,6 +15,7 @@ import {
     HistogramSeries,
     LineSeries,
     AreaSeries,
+    LogicalRange,
 } from "lightweight-charts";
 import { fetchTwelveDataCandles, subscribeTwelveDataPrices } from "@/lib/api/twelvedata";
 
@@ -108,6 +109,10 @@ export function SavedChartViewer({
     const baseAreaRef = useRef<{ time: Time; value: number }[]>([]);
     const baseVolumeRef = useRef<HistogramData[]>([]);
     const lastRealRef = useRef<{ time: Time; close: number } | null>(null);
+
+    // ✅ 차트가 재성성될 때(테마 변경 등) 기존 줌/스크롤 위치(LogicalRange)를 저장해두었다가 복구
+    const savedRangeRef = useRef<LogicalRange | null>(null);
+    const prevIntervalRef = useRef<string>(interval);
 
     const getIntervalSeconds = (itv: string) => {
         if (itv === "1") return 60;
@@ -410,24 +415,239 @@ export function SavedChartViewer({
         // ✅ 카드에서는 글로우 OFF (번짐 방지)
         areaGlow.applyOptions({ visible: viewStyle === "line" && mode !== "card" });
 
-        if (lastRealRef.current && rangeSeriesRef.current) {
+
+        if (savedRangeRef.current) {
+            // ✅ 저장된 뷰가 있다면 복구 (테마 변경 시 깜빡임/리셋 방지)
+            chart.timeScale().setVisibleLogicalRange(savedRangeRef.current);
+            savedRangeRef.current = null; // 1회성 소모
+        } else if (lastRealRef.current && rangeSeriesRef.current) {
             // ✅ card 모드: 예측 라인은 보여주되, 미래 여백은 제한
             const futureBars = mode === "card" ? computeFutureBarsForCard() : computeFutureBarsFromPrediction();
             chart.applyOptions({ timeScale: { rightOffset: futureBars } });
 
             const rangeData = buildRangeData(lastRealRef.current.time, lastRealRef.current.close, interval, futureBars);
             rangeSeriesRef.current.setData(rangeData as any);
+            
+            // ✅ card 모드: "오늘(마지막 캔들)" 기준으로 최근 구간 + 제한된 미래(예측)까지 보이게 고정
+            if (mode === "card") {
+                const count = baseC.length; // candle.getData().length 대신 baseC 사용
+                const bars = getCardWindowBars(interval);
+                const toIndex = Math.max(0, count - 1);
+                const fromIndex = Math.max(0, toIndex - bars);
+                chart.timeScale().setVisibleLogicalRange({ from: fromIndex, to: toIndex + futureBars });
+            } else {
+                // ✅ detail 모드: "이번 달 1일 ~ 오늘 + 5일 여백" 범위 설정 (기존 디폴트 로직)
+                if (interval === "D") {
+                    const last = baseC[baseC.length - 1];
+                    const pad2 = (n: number) => String(n).padStart(2, "0");
+                    const toYmd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+                    const lastRealTime = last.time;
+                    const lastDate = typeof lastRealTime === "string" ? new Date(lastRealTime) : new Date((lastRealTime as number) * 1000);
+                    const cutoff = new Date(lastDate);
+                    cutoff.setDate(cutoff.getDate() - 30);
+                    const cutoffYmd = toYmd(cutoff);
+
+                    const fromIndex = (() => {
+                        for (let i = 0; i < baseC.length; i++) {
+                            const t = baseC[i]?.time;
+                            if (typeof t === "string") {
+                                if (t >= cutoffYmd) return i;
+                            } else if (typeof t === "number") {
+                                const ymd = toYmd(new Date(t * 1000));
+                                if (ymd >= cutoffYmd) return i;
+                            }
+                        }
+                        return Math.max(0, baseC.length - 40);
+                    })();
+
+                    const toIndex = (baseC.length - 1) + futureBars;
+                    chart.timeScale().setVisibleLogicalRange({ from: fromIndex, to: toIndex });
+                } else {
+                    chart.timeScale().fitContent();
+                }
+            }
         } else {
             // fallback
             chart.applyOptions({ timeScale: { rightOffset: 0 } });
         }
     }, [viewStyle, interval, computeFutureBarsFromPrediction, computeFutureBarsForCard, mode]);
 
+
+    // 3) Prediction line inject (Segmented Gradient)
+    const updatePredictionSeries = useCallback(() => {
+        const chart = chartRef.current;
+        if (!chart) return;
+
+        // ✅ card 모드: 예측 라인은 보여주되, 마커(라벨)는 카드에서 과밀하니 숨김
+        if (mode === "card") {
+            markerPointsRef.current = [];
+            setOverlayMarkers([]);
+        }
+
+        // Old clear
+        predSeriesRef.current?.setData([]);
+        predGlowSeriesRef.current?.setData([]);
+
+        // New clear
+        clearPredictionSegments();
+
+        if (predictionPoints && predictionPoints.length > 0) {
+            let dataToShow = [...predictionPoints];
+            
+            // Connect to last real point if available
+            let lastRealPoint = null;
+            if (lastRealRef.current) {
+                const lastReal = { time: lastRealRef.current.time, value: lastRealRef.current.close };
+                lastRealPoint = lastReal;
+
+                // Diff check (using getTs)
+                const firstPred = dataToShow[0];
+                const t1 = getTs(firstPred.time);
+                const t2 = getTs(lastReal.time);
+                if (t1 !== t2) {
+                   dataToShow = [lastReal, ...dataToShow];
+                }
+            }
+
+            // Sort first
+            const sortedRaw = dataToShow.sort((a, b) => getTs(a.time) - getTs(b.time));
+
+            // ✅ Normalize types! (Must be all string OR all number)
+            // Use lastReal type as reference if exists, else first point
+            const refTime = lastRealPoint ? lastRealPoint.time : sortedRaw[0]?.time;
+            const useString = typeof refTime === 'string';
+
+            const normalized = sortedRaw
+                .map(p => {
+                    const ms = getTs(p.time);
+                    if (isNaN(ms)) return null; // Filter invalid
+
+                    let newTime: Time;
+                    
+                    if (useString) {
+                        // Convert to YYYY-MM-DD
+                        const d = new Date(ms);
+                        const y = d.getFullYear();
+                        const m = String(d.getMonth() + 1).padStart(2, '0');
+                        const day = String(d.getDate()).padStart(2, '0');
+                        newTime = `${y}-${m}-${day}` as Time;
+                    } else {
+                        // Convert to UTCTimestamp (seconds)
+                        newTime = Math.floor(ms / 1000) as Time;
+                    }
+                    return { time: newTime, value: p.value };
+                })
+                .filter((p): p is { time: Time; value: number } => p !== null);
+
+            // ✅ Deduplicate! (Keep last occurrence for same time)
+            const uniqueMap = new Map<string | number, number>();
+            normalized.forEach(p => uniqueMap.set(p.time as string | number, p.value));
+
+            const sorted = Array.from(uniqueMap.entries())
+                .map(([t, v]) => ({ time: t as Time, value: v }))
+                .sort((a, b) => getTs(a.time) - getTs(b.time));
+
+            // ✅ Overlay marker points: predictionPoints만 (lastReal 연결점 제외)
+            // normalized에는 lastReal이 섞일 수 있으니, predictionPoints만 따로 normalize/dedupe하여 사용
+            const predOnlySorted = (() => {
+                const predOnlyRaw = [...predictionPoints].sort((a, b) => getTs(a.time) - getTs(b.time));
+                const refT = lastRealRef.current ? lastRealRef.current.time : predOnlyRaw[0]?.time;
+                const useStr = typeof refT === "string";
+                const predOnlyNorm = predOnlyRaw
+                    .map((p) => {
+                        const ms = getTs(p.time);
+                        if (isNaN(ms)) return null;
+                        let newTime: Time;
+                        if (useStr) {
+                            const d = new Date(ms);
+                            const y = d.getFullYear();
+                            const m = String(d.getMonth() + 1).padStart(2, "0");
+                            const day = String(d.getDate()).padStart(2, "0");
+                            newTime = `${y}-${m}-${day}` as Time;
+                        } else {
+                            newTime = Math.floor(ms / 1000) as Time;
+                        }
+                        return { time: newTime, value: p.value };
+                    })
+                    .filter((p): p is { time: Time; value: number } => p !== null);
+
+                const map = new Map<string | number, number>();
+                predOnlyNorm.forEach((p) => map.set(p.time as any, p.value));
+                return Array.from(map.entries())
+                    .map(([t, v]) => ({ time: t as Time, value: v }))
+                    .sort((a, b) => getTs(a.time) - getTs(b.time));
+            })();
+
+            // ✅ card 모드에서는 마커를 표시하지 않음
+            if (mode !== "card") {
+                markerPointsRef.current = predOnlySorted;
+                // 좌표 업데이트는 다음 프레임에 (시리즈 setData 후 좌표계 안정화)
+                requestAnimationFrame(updateOverlayPositions);
+            }
+            
+            if (sorted.length >= 2) {
+                 // ✅ 구간별 컬러: 왼쪽(초록) -> 오른쪽(주황) step-gradient
+                const startColor = "#22c55e"; // green
+                const endColor = "#f97316";   // orange
+                const segCount = sorted.length - 1;
+
+                for (let i = 0; i < segCount; i++) {
+                    const t = segCount === 1 ? 1 : i / (segCount - 1);
+                    const color = lerpColor(startColor, endColor, t);
+
+                    const { seg, glow } = addPredictionSegmentSeries(color);
+                    seg?.setData([sorted[i], sorted[i + 1]]);
+                    glow?.setData([sorted[i], sorted[i + 1]]);
+                }
+            }
+
+        }
+        
+        // Update range for future
+        applyBaseDataToSeries();
+        // ✅ rightOffset 등 timeScale이 바뀐 뒤에도 한 번 더 보정
+        if (mode !== "card") requestAnimationFrame(updateOverlayPositions);
+
+    }, [predictionPoints, applyBaseDataToSeries, clearPredictionSegments, addPredictionSegmentSeries, mode, updateOverlayPositions]);
+
+
+    const _addPredictionSegmentSeries_UNUSED = useCallback((color: string) => {
+        const chart = chartRef.current;
+        if (!chart) return { seg: null as any, glow: null as any };
+
+        // glow 먼저 (뒤에 깔림)
+        const glow = chart.addSeries(LineSeries, {
+            color: hexToRgba(color, mode === "card" ? 0.18 : 0.35),
+            lineWidth: (mode === "card" ? 4 : 10) as any,
+            crosshairMarkerVisible: false,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            visible: true,
+        }) as ISeriesApi<"Line">;
+
+        const seg = chart.addSeries(LineSeries, {
+            color: hexToRgba(color, 1),
+            lineWidth: 3,
+            lineStyle: 0,
+            crosshairMarkerVisible: false,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        }) as ISeriesApi<"Line">;
+
+        predGlowSegmentSeriesRef.current.push(glow);
+        predSegmentSeriesRef.current.push(seg);
+
+        return { seg, glow };
+    }, [mode]);
+
+
+
     // 1) Init/Recreate chart (when theme or viewStyle changes)
     useEffect(() => {
         if (!chartContainerRef.current) return;
 
-        // cleanup old chart
+        // cleanup old chart (safeguard, though cleanup function handles it)
         if (chartRef.current) {
             chartRef.current.remove();
             chartRef.current = null;
@@ -441,6 +661,12 @@ export function SavedChartViewer({
         predSegmentSeriesRef.current = [];
         predGlowSegmentSeriesRef.current = [];
         rangeSeriesRef.current = null;
+
+        // check interval change
+        if (prevIntervalRef.current !== interval) {
+            savedRangeRef.current = null;
+        }
+        prevIntervalRef.current = interval;
 
         const chart = createChart(chartContainerRef.current, {
             layout: {
@@ -599,9 +825,18 @@ export function SavedChartViewer({
         // ✅ 재생성 직후 base 데이터 즉시 주입 (이게 없으면 토글시 빈 차트)
         setTimeout(() => {
             applyBaseDataToSeries();
+            updatePredictionSeries(); // ✅ 차트 재생성 후 예측 라인도 다시 그려야 함
         }, 0);
 
         return () => {
+             // ✅ CLEANUP runs BEFORE next effect setup. Save range HEREs.
+            if (chartRef.current) {
+                // interval 변경이 아닐 때만 저장하고 싶지만, 
+                // 여기서 next interval을 알 수 없음.
+                // 그러므로 무조건 저장하고, setup(위쪽)에서 interval 비교 후 채택/폐기 결정
+                savedRangeRef.current = chartRef.current.timeScale().getVisibleLogicalRange();
+            }
+
             window.removeEventListener("resize", syncSize);
             resizeObserverRef.current?.disconnect();
             resizeObserverRef.current = null;
@@ -609,7 +844,7 @@ export function SavedChartViewer({
             chart.remove();
             chartRef.current = null;
         };
-    }, [isDark, viewStyle, interval, applyBaseDataToSeries, clearPredictionSegments, getTargetBarSpacingPx, mode, updateOverlayPositions]);
+    }, [isDark, viewStyle, interval, applyBaseDataToSeries, clearPredictionSegments, getTargetBarSpacingPx, mode, updateOverlayPositions, updatePredictionSeries]);
 
     // 2) Fetch data (only when symbol/interval changes)
     useEffect(() => {
@@ -670,50 +905,19 @@ export function SavedChartViewer({
                 // ✅ 방금 로드한 base를 현재 시리즈에 반영
                 applyBaseDataToSeries();
 
-                // ✅ card 모드: "오늘(마지막 캔들)" 기준으로 최근 구간 + 제한된 미래(예측)까지 보이게 고정
-                if (mode === "card") {
-                    const chart = chartRef.current;
-                    const count = candleData.length;
-                    const bars = getCardWindowBars(interval);
-                    const to = Math.max(0, count - 1);
-                    const from = Math.max(0, to - bars);
-                    const futureBars = computeFutureBarsForCard();
-                    chart?.timeScale().setVisibleLogicalRange({ from, to: to + futureBars });
-                } else {
-                    // ✅ detail 모드: ChartAnalyzer와 동일하게 "이번 달 1일 ~ 오늘 + 5일 여백" 범위 설정
-                    if (interval === "D" && chartRef.current) {
-                        const pad2 = (n: number) => String(n).padStart(2, "0");
-                        const toYmd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-
-                        // ✅ 마지막 실측 캔들 기준으로 "과거 30일" 컷오프 계산 (오늘이 1일이어도 빈 차트 방지)
-                        const lastRealTime = last.time;
-                        const lastDate = typeof lastRealTime === "string" ? new Date(lastRealTime) : new Date((lastRealTime as number) * 1000);
-                        const cutoff = new Date(lastDate);
-                        cutoff.setDate(cutoff.getDate() - 30);
-                        const cutoffYmd = toYmd(cutoff);
-
-                        const fromIndex = (() => {
-                            for (let i = 0; i < candleData.length; i++) {
-                                const t = candleData[i]?.time;
-                                if (typeof t === "string") {
-                                    if (t >= cutoffYmd) return i;
-                                } else if (typeof t === "number") {
-                                    const ymd = toYmd(new Date(t * 1000));
-                                    if (ymd >= cutoffYmd) return i;
-                                }
-                            }
-                            // 못 찾으면 최근 40봉 정도
-                            return Math.max(0, candleData.length - 40);
-                        })();
-
-                        const futureBars = computeFutureBarsFromPrediction();
-                        const to = (candleData.length - 1) + futureBars;
-
-                        chartRef.current.timeScale().setVisibleLogicalRange({ from: fromIndex, to });
-                    } else {
-                        chartRef.current.timeScale().fitContent();
-                    }
-                }
+                // applyBaseDataToSeries 내부로 로직 이동됨 (savedRangeRef 체크 포함)
+                // 하지만 FETCH 직후에는 savedRangeRef가 없을 것이므로(interval/symbol 변경),
+                // applyBaseDataToSeries 내부의 default logic이 실행되어야 하는데,
+                // 위에서 호출한 applyBaseDataToSeries()가 이미 로직을 수행함.
+                // 따라서 여기서는 중복 호출할 필요가 없음.
+                
+                // 단, FETCH 시점에는 savedRangeRef가 비어있어야 함을 보장해야 하지만, 
+                // interval 변경 시에는 effect[1]이 먼저 돌아 null or savedRange가 됨.
+                // symbol 변경 시에는 savedRangeRef가 이전 값일 수 있나?
+                // symbol 변경 -> effect[1] 안 돔 -> savedRangeRef 그대로? 
+                // symbol 변경 시에는 무조건 리셋하고 싶음.
+                savedRangeRef.current = null; // 안전장치: 데이터 새로 받으면 뷰 리셋
+                applyBaseDataToSeries();
 
                 // ✅ 축 범위 설정 이후 오버레이 좌표 재계산 (첫 진입 시 간헐적 불일치 방지)
                 if (mode !== "card") {
@@ -750,169 +954,9 @@ export function SavedChartViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [symbol, interval, applyBaseDataToSeries, mode, getCardWindowBars, computeFutureBarsForCard]);
 
-    // 3) Prediction line inject (Segmented Gradient)
-    const updatePredictionSeries = useCallback(() => {
-        const chart = chartRef.current;
-        if (!chart) return;
 
-        // ✅ card 모드: 예측 라인은 보여주되, 마커(라벨)는 카드에서 과밀하니 숨김
-        if (mode === "card") {
-            markerPointsRef.current = [];
-            setOverlayMarkers([]);
-        }
 
-        // Old clear
-        predSeriesRef.current?.setData([]);
-        predGlowSeriesRef.current?.setData([]);
 
-        // New clear
-        clearPredictionSegments();
-
-        if (predictionPoints && predictionPoints.length > 0) {
-            let dataToShow = [...predictionPoints];
-            
-            // Connect to last real point if available
-            let lastRealPoint = null;
-            if (lastRealRef.current) {
-                const lastReal = { time: lastRealRef.current.time, value: lastRealRef.current.close };
-                lastRealPoint = lastReal;
-
-                // Diff check (using getTs)
-                const firstPred = dataToShow[0];
-                const t1 = getTs(firstPred.time);
-                const t2 = getTs(lastReal.time);
-                if (t1 !== t2) {
-                   dataToShow = [lastReal, ...dataToShow];
-                }
-            }
-
-            // Sort first
-            const sortedRaw = dataToShow.sort((a, b) => getTs(a.time) - getTs(b.time));
-
-            // ✅ Normalize types! (Must be all string OR all number)
-            // Use lastReal type as reference if exists, else first point
-            const refTime = lastRealPoint ? lastRealPoint.time : sortedRaw[0]?.time;
-            const useString = typeof refTime === 'string';
-
-            const normalized = sortedRaw
-                .map(p => {
-                    const ms = getTs(p.time);
-                    if (isNaN(ms)) return null; // Filter invalid
-
-                    let newTime: Time;
-                    
-                    if (useString) {
-                        // Convert to YYYY-MM-DD
-                        const d = new Date(ms);
-                        const y = d.getFullYear();
-                        const m = String(d.getMonth() + 1).padStart(2, '0');
-                        const day = String(d.getDate()).padStart(2, '0');
-                        newTime = `${y}-${m}-${day}` as Time;
-                    } else {
-                        // Convert to UTCTimestamp (seconds)
-                        newTime = Math.floor(ms / 1000) as Time;
-                    }
-                    return { time: newTime, value: p.value };
-                })
-                .filter((p): p is { time: Time; value: number } => p !== null);
-
-            // ✅ Deduplicate! (Keep last occurrence for same time)
-            const uniqueMap = new Map<string | number, number>();
-            normalized.forEach(p => uniqueMap.set(p.time as string | number, p.value));
-
-            const sorted = Array.from(uniqueMap.entries())
-                .map(([t, v]) => ({ time: t as Time, value: v }))
-                .sort((a, b) => getTs(a.time) - getTs(b.time));
-
-            // ✅ Overlay marker points: predictionPoints만 (lastReal 연결점 제외)
-            // normalized에는 lastReal이 섞일 수 있으니, predictionPoints만 따로 normalize/dedupe하여 사용
-            const predOnlySorted = (() => {
-                const predOnlyRaw = [...predictionPoints].sort((a, b) => getTs(a.time) - getTs(b.time));
-                const refT = lastRealRef.current ? lastRealRef.current.time : predOnlyRaw[0]?.time;
-                const useStr = typeof refT === "string";
-                const predOnlyNorm = predOnlyRaw
-                    .map((p) => {
-                        const ms = getTs(p.time);
-                        if (isNaN(ms)) return null;
-                        let newTime: Time;
-                        if (useStr) {
-                            const d = new Date(ms);
-                            const y = d.getFullYear();
-                            const m = String(d.getMonth() + 1).padStart(2, "0");
-                            const day = String(d.getDate()).padStart(2, "0");
-                            newTime = `${y}-${m}-${day}` as Time;
-                        } else {
-                            newTime = Math.floor(ms / 1000) as Time;
-                        }
-                        return { time: newTime, value: p.value };
-                    })
-                    .filter((p): p is { time: Time; value: number } => p !== null);
-
-                const map = new Map<string | number, number>();
-                predOnlyNorm.forEach((p) => map.set(p.time as any, p.value));
-                return Array.from(map.entries())
-                    .map(([t, v]) => ({ time: t as Time, value: v }))
-                    .sort((a, b) => getTs(a.time) - getTs(b.time));
-            })();
-
-            // ✅ card 모드에서는 마커를 표시하지 않음
-            if (mode !== "card") {
-                markerPointsRef.current = predOnlySorted;
-                // 좌표 업데이트는 다음 프레임에 (시리즈 setData 후 좌표계 안정화)
-                requestAnimationFrame(updateOverlayPositions);
-            }
-            
-            if (sorted.length >= 2) {
-                 // ✅ 구간별 컬러: 왼쪽(초록) -> 오른쪽(주황) step-gradient
-                const startColor = "#22c55e"; // green
-                const endColor = "#f97316";   // orange
-                const segCount = sorted.length - 1;
-
-                for (let i = 0; i < segCount; i++) {
-                    const t = segCount === 1 ? 1 : i / (segCount - 1);
-                    const color = lerpColor(startColor, endColor, t);
-
-                    const { seg, glow } = addPredictionSegmentSeries(color);
-                    seg?.setData([sorted[i], sorted[i + 1]]);
-                    glow?.setData([sorted[i], sorted[i + 1]]);
-                }
-            }
-
-        }
-        
-        // Update range for future
-        applyBaseDataToSeries();
-        // ✅ rightOffset 등 timeScale이 바뀐 뒤에도 한 번 더 보정
-        if (mode !== "card") requestAnimationFrame(updateOverlayPositions);
-
-    }, [predictionPoints, applyBaseDataToSeries, clearPredictionSegments, addPredictionSegmentSeries, mode, updateOverlayPositions]);
-
-    useEffect(() => {
-        updatePredictionSeries();
-    }, [updatePredictionSeries]);
-
-    // overlay sync with chart interactions
-    useEffect(() => {
-        const chart = chartRef.current;
-        if (!chart) return;
-
-        updateOverlayPositions();
-        const handle = () => requestAnimationFrame(updateOverlayPositions);
-        chart.timeScale().subscribeVisibleLogicalRangeChange(handle);
-        chart.timeScale().subscribeSizeChange(handle);
-
-        return () => {
-            chart.timeScale().unsubscribeVisibleLogicalRangeChange(handle);
-            chart.timeScale().unsubscribeSizeChange(handle);
-        };
-    }, [updateOverlayPositions]);
-
-    // Update prediction when base data loaded (to connect line)
-    useEffect(() => {
-        if (!loading && lastRealRef.current) {
-            updatePredictionSeries();
-        }
-    }, [loading, updatePredictionSeries]);
 
     const containerBg = useMemo(() => (isDark ? "bg-[#0a0a0a]" : "bg-white"), [isDark]);
 

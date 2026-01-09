@@ -23,7 +23,7 @@ interface PredictionPoint {
 
 export default function AnalyzePage() {
     const router = useRouter();
-    const [symbol, setSymbol] = useState("BTC-USD");
+    const [symbol, setSymbol] = useState<string | null>(null);
     const [interval, setInterval] = useState("D");
     const [chartStyle, setChartStyle] = useState<"candle" | "line">("line");
     const [content, setContent] = useState("");
@@ -32,7 +32,7 @@ export default function AnalyzePage() {
     const [points, setPoints] = useState<PredictionPoint[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [chartImageUrl, setChartImageUrl] = useState<string>("");
-    const krName = getKoreanName(symbol);
+    const krName = symbol ? getKoreanName(symbol) : null;
 
     const [showLimitPopup, setShowLimitPopup] = useState(false);
 
@@ -90,6 +90,7 @@ export default function AnalyzePage() {
     ];
 
     const handleSave = async () => {
+        if (!symbol) return;
         if (!content.trim()) {
             toast.error("본문 내용을 입력해주세요.");
             return;
@@ -174,82 +175,92 @@ export default function AnalyzePage() {
                     </div>
                 </div>
 
-                {/* 2. Intervals moved to Chart Header */}
+                {!symbol ? (
+                    <div className="flex flex-col items-center justify-center h-[500px] text-muted-foreground border-2 border-dashed rounded-lg">
+                        <BarChart2 className="w-16 h-16 mb-4 opacity-50" />
+                        <p className="text-lg font-medium">분석할 종목을 검색해주세요</p>
+                        <p className="text-sm">종목명, 티커, 기업명으로 검색할 수 있습니다.</p>
+                    </div>
+                ) : (
+                    <>
+                        {/* 2. Intervals moved to Chart Header */}
 
-                {/* 3. Main Chart Area */}
-                {/* ✅ 테두리 없는(플랫) 스타일 */}
-                <Card className="border-0 shadow-none overflow-hidden bg-transparent">
-                    <div className="px-4 py-2 flex flex-col sm:flex-row justify-between items-center bg-transparent gap-4">
+                        {/* 3. Main Chart Area */}
+                        {/* ✅ 테두리 없는(플랫) 스타일 */}
+                        <Card className="border-0 shadow-none overflow-hidden bg-transparent">
+                            <div className="px-4 py-2 flex flex-col sm:flex-row justify-between items-center bg-transparent gap-4">
 
-                        <div className="flex items-center gap-3">
-                            <h2 className="font-bold text-lg text-foreground flex items-center gap-2">
-                                {symbol}
-                                {krName && (
-                                    <span className="text-base font-normal text-muted-foreground">
-                                        ({krName})
+                                <div className="flex items-center gap-3">
+                                    <h2 className="font-bold text-lg text-foreground flex items-center gap-2">
+                                        {symbol}
+                                        {krName && (
+                                            <span className="text-base font-normal text-muted-foreground">
+                                                ({krName})
+                                            </span>
+                                        )}
+                                    </h2>
+                                    <span className="text-sm text-muted-foreground mr-2">
+                                        {interval === "Y" && "연봉"}
+                                        {interval === "M" && "월봉"}
+                                        {interval === "W" && "주봉"}
+                                        {interval === "D" && "일봉"}
+                                        {interval === "60" && "60분봉"}
+                                        {interval === "1" && "1분봉"}
                                     </span>
-                                )}
-                            </h2>
-                            <span className="text-sm text-muted-foreground mr-2">
-                                {interval === "Y" && "연봉"}
-                                {interval === "M" && "월봉"}
-                                {interval === "W" && "주봉"}
-                                {interval === "D" && "일봉"}
-                                {interval === "60" && "60분봉"}
-                                {interval === "1" && "1분봉"}
-                            </span>
-                            {(interval === "1" || interval === "60") && (
-                                <span className="text-xs text-amber-500 hidden sm:inline-block">
-                                    ⚠️ {interval === "1" ? "최근 7일" : "최근 60일"}
-                                </span>
-                            )}
-                        </div>
+                                    {(interval === "1" || interval === "60") && (
+                                        <span className="text-xs text-amber-500 hidden sm:inline-block">
+                                            ⚠️ {interval === "1" ? "최근 7일" : "최근 60일"}
+                                        </span>
+                                    )}
+                                </div>
 
-                        <div className="flex items-center gap-2">
-                            <Tabs value={interval} onValueChange={setInterval} className="w-full sm:w-auto">
-                                <TabsList className="bg-background/60 border-0 h-8 p-0.5">
-                                    {activeIntervals.map((item) => (
-                                        <TabsTrigger
-                                            key={item.value}
-                                            value={item.value}
-                                            className="text-xs px-3 h-7 data-[state=active]:bg-blue-600 data-[state=active]:text-white rounded-sm"
+                                <div className="flex items-center gap-2">
+                                    <Tabs value={interval} onValueChange={setInterval} className="w-full sm:w-auto">
+                                        <TabsList className="bg-background/60 border-0 h-8 p-0.5">
+                                            {activeIntervals.map((item) => (
+                                                <TabsTrigger
+                                                    key={item.value}
+                                                    value={item.value}
+                                                    className="text-xs px-3 h-7 data-[state=active]:bg-blue-600 data-[state=active]:text-white rounded-sm"
+                                                >
+                                                    {item.label}
+                                                </TabsTrigger>
+                                            ))}
+                                        </TabsList>
+                                    </Tabs>
+
+                                    <div className="flex items-center bg-background/60 border-0 rounded-lg p-0.5 h-8">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className={`h-7 px-2 rounded-sm ${chartStyle === 'candle' ? 'bg-blue-600 text-white hover:bg-blue-700 hover:text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                                            onClick={() => setChartStyle('candle')}
                                         >
-                                            {item.label}
-                                        </TabsTrigger>
-                                    ))}
-                                </TabsList>
-                            </Tabs>
-
-                            <div className="flex items-center bg-background/60 border-0 rounded-lg p-0.5 h-8">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={`h-7 px-2 rounded-sm ${chartStyle === 'candle' ? 'bg-blue-600 text-white hover:bg-blue-700 hover:text-white' : 'text-muted-foreground hover:text-foreground'}`}
-                                    onClick={() => setChartStyle('candle')}
-                                >
-                                    <BarChart2 className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={`h-7 px-2 rounded-sm ${chartStyle === 'line' ? 'bg-blue-600 text-white hover:bg-blue-700 hover:text-white' : 'text-muted-foreground hover:text-foreground'}`}
-                                    onClick={() => setChartStyle('line')}
-                                >
-                                    <LineChart className="h-4 w-4" />
-                                </Button>
+                                            <BarChart2 className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className={`h-7 px-2 rounded-sm ${chartStyle === 'line' ? 'bg-blue-600 text-white hover:bg-blue-700 hover:text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                                            onClick={() => setChartStyle('line')}
+                                        >
+                                            <LineChart className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                    <div className="h-[550px] w-full relative rounded-xl overflow-hidden">
-                        <ChartAnalyzer
-                            symbol={symbol}
-                            interval={interval}
-                            chartStyle={chartStyle}
-                            onPointsChange={setPoints}
-                            onChartCapture={setChartImageUrl}
-                        />
-                    </div>
-                </Card>
+                            <div className="h-[550px] w-full relative rounded-xl overflow-hidden">
+                                <ChartAnalyzer
+                                    symbol={symbol}
+                                    interval={interval}
+                                    chartStyle={chartStyle}
+                                    onPointsChange={setPoints}
+                                    onChartCapture={setChartImageUrl}
+                                />
+                            </div>
+                        </Card>
+                    </>
+                )}
 
                 {/* 4. Text Editor Area */}
                 <div className="space-y-4">

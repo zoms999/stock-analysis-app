@@ -83,6 +83,8 @@ export function ChartAnalyzer({
     const [dataCount, setDataCount] = useState<number>(0);
     const [error, setError] = useState<string | null>(null);
     const [showPointsPanel, setShowPointsPanel] = useState(false);
+    // ✅ 차트 생성 완료 상태를 관리하여 데이터 페치 런타임 보장
+    const [isChartReady, setIsChartReady] = useState(false);
 
     const isMobileRef = useRef(false);
     const [isNarrowScreen, setIsNarrowScreen] = useState(false);
@@ -149,7 +151,7 @@ export function ChartAnalyzer({
             chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleChartUpdate);
             chart.timeScale().unsubscribeSizeChange(handleChartUpdate);
         };
-    }, [points, updateOverlayPositions]);
+    }, [points, updateOverlayPositions, isChartReady]);
 
     // --- [Future Range UI] ---
     const [futureMode, setFutureMode] = useState<"1m" | "3m" | "custom">("1m");
@@ -514,6 +516,7 @@ export function ChartAnalyzer({
         predictionGlowSeriesRef.current = predictionGlowSeries as ISeriesApi<"Line">;
         rangeSeriesRef.current = rangeSeries as ISeriesApi<"Line">;
         chartRef.current = chart;
+        setIsChartReady(true);
 
         const handleResize = () => {
             if (!chartContainerRef.current || !chartRef.current) return;
@@ -645,6 +648,7 @@ export function ChartAnalyzer({
             predictionGlowSeriesRef.current = null;
             rangeSeriesRef.current = null;
             chartRef.current = null;
+            setIsChartReady(false);
         };
     }, [mounted, clearPredictionSegments, interval]); // Added interval to deps to recreate chart opts if needed
 
@@ -681,7 +685,7 @@ export function ChartAnalyzer({
     // 2) Fetch Data
     useEffect(() => {
         const fetchData = async () => {
-            if (!candlestickSeriesRef.current || !areaSeriesRef.current || !volumeSeriesRef.current || !mounted) return;
+            if (!isChartReady || !candlestickSeriesRef.current || !areaSeriesRef.current || !volumeSeriesRef.current || !mounted) return;
 
             setLoading(true);
             setError(null);
@@ -843,7 +847,7 @@ export function ChartAnalyzer({
         });
 
         return () => sub.close();
-    }, [symbol, interval, mounted, futureMode, customDays, captureChart, buildMonthStartTime, compareTime]);
+    }, [symbol, interval, mounted, futureMode, customDays, captureChart, buildMonthStartTime, compareTime, isChartReady]);
 
     // Re-apply future range logic...
     useEffect(() => {

@@ -10,6 +10,7 @@ import { checkCanViewPost } from "@/lib/api/posts";
 import { toast } from "sonner";
 import { useState } from "react";
 import { LimitPopup } from "@/components/subscription/LimitPopup";
+import { CountryFlag } from "@/components/ui/CountryFlag";
 
 // Use SavedChartViewer for displaying saved charts with configuration
 const SavedChartViewer = dynamic(() => import("@/components/analyze/SavedChartViewer").then(mod => mod.SavedChartViewer), {
@@ -30,6 +31,7 @@ interface ChartCardProps {
     level: string;
     ranking: number;
     avatar?: string;
+    countryCode?: string;
   };
   stats: {
     profit: string; // e.g., "900만 92%"
@@ -68,7 +70,9 @@ export function ChartCard({ id, symbol, koreanName, title, excerpt, pointPhase, 
   // Extract chart configuration
   const interval = chartConfig?.interval || "D";
   const predictionPoints = chartConfig?.prediction_points || [];
+
   const chartStyle = chartConfig?.chartStyle || "line";
+  const country = chartConfig?.country;
 
   // Handle card click with view limit check
   const handleCardClick = async (e: React.MouseEvent) => {
@@ -115,9 +119,19 @@ export function ChartCard({ id, symbol, koreanName, title, excerpt, pointPhase, 
           {/* Chart Section */}
           <div className="rounded-xl border-0 bg-transparent overflow-hidden shadow-none transition-all group relative cursor-pointer">
             <div className="p-4 pb-2 flex justify-between items-center">
-              <h3 className="font-bold text-sm text-foreground/80">
-                {symbol} {koreanName && <span className="font-normal text-muted-foreground">({koreanName})</span>} Price
-              </h3>
+              <div className="flex flex-col gap-0.5">
+                {country && (
+                    <span className="text-[10px] text-muted-foreground font-medium px-1.5 py-0.5 bg-secondary/50 rounded w-fit">
+                        {country}
+                    </span>
+                )}
+                <h3 className="font-bold text-sm text-foreground/80 flex items-center gap-1.5">
+                    {symbol} 
+                    {koreanName && <span className="font-normal text-muted-foreground">({koreanName})</span>}
+                    <span className="text-xs font-normal text-muted-foreground">Price</span>
+                </h3>
+              </div>
+
             <div className="flex items-center gap-2">
               {pointPhase && (
                 <span className={`px-2 py-0.5 rounded-md border text-[10px] font-bold ${pointPhaseClass}`}>
@@ -161,11 +175,16 @@ export function ChartCard({ id, symbol, koreanName, title, excerpt, pointPhase, 
 
           {/* User Info + Excerpt */}
           <div className="flex items-start gap-3 group/info cursor-pointer">
-            <div className="flex flex-col items-center gap-1">
+            <div className="flex flex-col items-center gap-1 relative">
               <Avatar className="h-10 w-10 border-0">
                 <AvatarImage src={user.avatar} />
                 <AvatarFallback>{user.name[0]}</AvatarFallback>
               </Avatar>
+              {user.countryCode && (
+                <div className="absolute -bottom-1 -right-1 bg-background rounded-sm shadow-sm">
+                  <CountryFlag countryCode={user.countryCode} size={14} />
+                </div>
+              )}
             </div>
             <div className="flex-1 space-y-1">
               <h4 className="font-bold text-sm group-hover/info:text-primary transition-colors">

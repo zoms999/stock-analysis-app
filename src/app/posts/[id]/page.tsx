@@ -16,6 +16,8 @@ import { PostCard } from "@/components/posts/PostCard";
 import { SORT_OPTIONS, type SortOption } from "@/lib/ui/chartBoardSort";
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getKoreanName } from "@/lib/constants/krx_names";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { CountryFlag } from "@/components/ui/CountryFlag";
 
 type CommentItem = {
   id: string;
@@ -399,10 +401,14 @@ export default function PostDetailPage() {
               </span>
               {krName && <span className="text-sm text-foreground/80 font-medium">({krName})</span>}
               <span className="text-sm text-muted-foreground">
-                {new Date(post.created_at).toLocaleDateString('ko-KR', {
+                {new Date(post.created_at).toLocaleString('ko-KR', {
                   year: 'numeric',
                   month: 'long',
                   day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false
                 })}
               </span>
             </div>
@@ -414,8 +420,18 @@ export default function PostDetailPage() {
 
           <div className="flex items-center justify-between py-4 border-y border-border/50">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-sm font-bold border border-border/50">
-                {(post.profiles?.nickname || 'U')[0]}
+              <div className="relative">
+                <Avatar className="h-10 w-10 border border-border/50">
+                  <AvatarImage src={post.profiles?.avatar_url || undefined} />
+                  <AvatarFallback className="bg-muted text-sm font-bold">
+                    {(post.profiles?.nickname || 'U')[0]}
+                  </AvatarFallback>
+                </Avatar>
+                {post.profiles?.country_code && (
+                  <div className="absolute -bottom-1 -right-1 bg-background rounded-sm shadow-sm">
+                    <CountryFlag countryCode={post.profiles.country_code} size={14} />
+                  </div>
+                )}
               </div>
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-foreground">{post.profiles?.nickname || '익명'}</span>

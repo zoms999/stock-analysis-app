@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Search, Save, BarChart2, LineChart } from "lucide-react";
 import { ChartAnalyzer } from "@/components/analyze/ChartAnalyzer";
 import { createPost } from "@/lib/api/posts";
-import { searchSymbol } from "@/lib/api/search";
+import { searchSymbol, type SearchResult } from "@/lib/api/search";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Time } from "lightweight-charts";
@@ -24,6 +24,7 @@ interface PredictionPoint {
 export default function AnalyzePage() {
     const router = useRouter();
     const [symbol, setSymbol] = useState<string | null>(null);
+    const [symbolInfo, setSymbolInfo] = useState<SearchResult | null>(null);
     const [interval, setInterval] = useState("D");
     const [chartStyle, setChartStyle] = useState<"candle" | "line">("line");
     const [content, setContent] = useState("");
@@ -56,7 +57,8 @@ export default function AnalyzePage() {
 
             const resolved = await searchSymbol(q);
             if (resolved) {
-                setSymbol(resolved.toUpperCase());
+                setSymbol(resolved.symbol.toUpperCase());
+                setSymbolInfo(resolved);
                 return;
             }
 
@@ -130,6 +132,22 @@ export default function AnalyzePage() {
                 chart_config: {
                     interval: interval,
                     prediction_points: points,
+                    country: (() => {
+                        if (!symbolInfo) return "기타";
+                        // 1. 코인 (Digital Currency)
+                        if (symbolInfo.type === "Digital Currency" || symbolInfo.exchange?.includes("Binance") || symbolInfo.exchange?.includes("Coinbase")) {
+                            return "코인";
+                        }
+                        // 2. 국가별
+                        const c = symbolInfo.country?.toLowerCase();
+                        if (c === "united states" || c === "usa") return "미국";
+                        if (c === "south korea" || c === "korea") return "한국";
+                        if (c === "japan") return "일본";
+                        if (c === "china") return "중국";
+                        
+                        // 3. Fallback to raw country or '기타'
+                        return symbolInfo.country || "기타";
+                    })()
                 },
                 chart_image_url: uploadedImageUrl,
             });

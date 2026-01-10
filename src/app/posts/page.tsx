@@ -105,7 +105,7 @@ export default function PostsPage() {
       try {
         const sym = await searchSymbol(q);
         if (cancelled) return;
-        setResolvedSymbol(sym);
+        setResolvedSymbol(sym ? sym.symbol : null);
       } catch {
         if (cancelled) return;
         setResolvedSymbol(null);
@@ -415,6 +415,7 @@ export default function PostsPage() {
                       level: "레벨 1",
                       ranking: 0,
                       avatar: post.profiles?.avatar_url,
+                      countryCode: post.profiles?.country_code,
                     }}
                     stats={{
                       profit: profitLabel,

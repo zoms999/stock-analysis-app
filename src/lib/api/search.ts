@@ -5,7 +5,19 @@
  * - Twelve Data 검색(`/api/twelvedata/search`)을 1순위로 사용합니다.
  * - (옵션) Twelve Data가 못 찾으면 Yahoo 검색(`/api/yahoo/search`)으로 폴백합니다.
  */
-export async function searchSymbol(query: string): Promise<string | null> {
+export interface SearchResult {
+  symbol: string;
+  exchange?: string;
+  type?: string;
+  country?: string;
+}
+
+/**
+ * 사용자가 입력한 키워드(다국어 포함)를 티커(symbol)로 변환합니다.
+ * - Twelve Data 검색(`/api/twelvedata/search`)을 1순위로 사용합니다.
+ * - (옵션) Twelve Data가 못 찾으면 Yahoo 검색(`/api/yahoo/search`)으로 폴백합니다.
+ */
+export async function searchSymbol(query: string): Promise<SearchResult | null> {
   const q = query?.trim();
   if (!q) return null;
 
@@ -15,10 +27,27 @@ export async function searchSymbol(query: string): Promise<string | null> {
     const tdRes = await fetch(tdUrl);
 
     if (tdRes.ok) {
-      const tdData: unknown = await tdRes.json().catch(() => null);
-      if (tdData && typeof tdData === "object") {
-        const symbol = (tdData as { symbol?: unknown }).symbol;
-        if (typeof symbol === "string" && symbol.length > 0) return symbol;
+      const tdData: any = await tdRes.json().catch(() => null);
+      if (tdData && Array.isArray(tdData.data) && tdData.data.length > 0) {
+        // 첫 번째 매칭 결과 사용
+        const item = tdData.data[0];
+        const symbol = item.symbol;
+        if (typeof symbol === "string" && symbol.length > 0) {
+            return {
+                symbol: symbol,
+                exchange: item.exchange,
+                type: item.instrument_type,
+                country: item.country
+            };
+        }
+      }
+      // Fallback for object format (old handling) if data array is missing?
+      // Usually search returns { data: [...] }
+      if (tdData && typeof tdData === "object" && !Array.isArray(tdData.data)) {
+         const symbol = (tdData as { symbol?: unknown }).symbol;
+         if (typeof symbol === "string" && symbol.length > 0) {
+             return { symbol: symbol };
+         }
       }
     } else {
       const errorData = await tdRes.json().catch(() => ({}));
@@ -45,8 +74,15 @@ export async function searchSymbol(query: string): Promise<string | null> {
 
     const yhData: unknown = await yhRes.json();
     if (!yhData || typeof yhData !== "object") return null;
+    
+    // Yahoo often returns { quotes: [...] } or just array? 
+    // Assuming current impl was working for `symbol`.
+    // Validating existing logic: `const symbol = (yhData as { symbol?: unknown }).symbol;`
+    // This looks like it expects a single object, but Yahoo usually returns a list.
+    // Let's stick to the existing extraction logic but wrap it.
     const symbol = (yhData as { symbol?: unknown }).symbol;
-    return typeof symbol === "string" && symbol.length > 0 ? symbol : null;
+    return typeof symbol === "string" && symbol.length > 0 ? { symbol } : null;
+
   } catch (error) {
     console.error("Search API Error:", error);
     return null;

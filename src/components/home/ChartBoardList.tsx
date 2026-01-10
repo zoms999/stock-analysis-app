@@ -104,9 +104,9 @@ export function ChartBoardList() {
     const t = setTimeout(async () => {
       setIsResolving(true);
       try {
-        const sym = await searchSymbol(q);
+        const res = await searchSymbol(q);
         if (cancelled) return;
-        setResolvedSymbol(sym);
+        setResolvedSymbol(res ? res.symbol : null);
       } catch {
         if (cancelled) return;
         setResolvedSymbol(null);
@@ -391,6 +391,7 @@ export function ChartBoardList() {
               level: "레벨 1",
               ranking: 0,
               avatar: post.profiles?.avatar_url,
+              countryCode: post.profiles?.country_code,
             }}
             stats={{
               profit: profitLabel,

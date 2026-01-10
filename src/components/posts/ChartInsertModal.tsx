@@ -78,7 +78,7 @@ export function ChartInsertModal({ isOpen, onClose, onInsert }: ChartInsertModal
       const resolved = await searchSymbol(q);
       
       if (resolved) {
-        setSymbol(resolved.toUpperCase());
+        setSymbol(resolved.symbol.toUpperCase());
         setChartImageUrl(""); // Reset image when symbol changes
         return;
       }

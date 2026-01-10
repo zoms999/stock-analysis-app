@@ -126,7 +126,7 @@ export function ChartCard({ id, symbol, koreanName, title, excerpt, pointPhase, 
           <div className="rounded-xl border-0 bg-transparent overflow-hidden shadow-none transition-all group relative cursor-pointer">
             <div className="p-4 pb-2 flex justify-between items-center">
               <div className="flex flex-col gap-0.5">
-                {country && (
+                {country && country !== '기타' && (
                     <span className="text-[10px] text-muted-foreground font-medium px-1.5 py-0.5 bg-secondary/50 rounded w-fit">
                         {country}
                     </span>

@@ -28,6 +28,11 @@ export interface Post {
     nickname: string;
     avatar_url?: string;
     country_code?: string;
+    stats?: {
+      recent_accuracy: number;
+      all_time_accuracy: number;
+      total_count: number;
+    };
   };
   // Calculated fields (not in DB)
   currentPrice?: number;
@@ -91,7 +96,8 @@ export async function fetchPosts(limit: number = 20, offset: number = 0, sort: P
       profiles:user_id (
         nickname,
         avatar_url,
-        country_code
+        country_code,
+        stats:user_stats
       )
     `);
 
@@ -350,7 +356,8 @@ export async function fetchPostById(id: string): Promise<Post | null> {
       profiles:user_id (
         nickname,
         avatar_url,
-        country_code
+        country_code,
+        stats:user_stats
       )
     `)
     .eq("id", id)
@@ -404,7 +411,8 @@ export async function fetchPostsBySymbol(params: {
       profiles:user_id (
         nickname,
         avatar_url,
-        country_code
+        country_code,
+        stats:user_stats
       )
     `)
     .eq("ticker_symbol", symbol);

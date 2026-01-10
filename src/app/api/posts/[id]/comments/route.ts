@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 type ProfileLite = {
   nickname: string | null;
   avatar_url: string | null;
+  country_code: string | null;
 };
 
 type CommentRow = {
@@ -13,6 +14,7 @@ type CommentRow = {
   content: string;
   created_at: string;
   updated_at: string;
+  parent_comment_id: string | null;
   profiles?: ProfileLite | null;
 };
 
@@ -44,9 +46,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       content,
       created_at,
       updated_at,
+      parent_comment_id,
       profiles:user_id (
         nickname,
-        avatar_url
+        avatar_url,
+        country_code
       )
     `
     )
@@ -77,8 +81,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ ok: false, error: "LOGIN_REQUIRED" }, { status: 401 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { content?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { content?: unknown; parent_comment_id?: unknown };
   const content = typeof body.content === "string" ? body.content.trim() : "";
+  const parentCommentId = typeof body.parent_comment_id === "string" ? body.parent_comment_id : null;
 
   if (!content) {
     return NextResponse.json({ ok: false, error: "EMPTY_CONTENT" }, { status: 400 });
@@ -93,6 +98,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       post_id: postId,
       user_id: user.id,
       content,
+      parent_comment_id: parentCommentId,
     })
     .select(
       `
@@ -102,9 +108,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       content,
       created_at,
       updated_at,
+      parent_comment_id,
       profiles:user_id (
         nickname,
-        avatar_url
+        avatar_url,
+        country_code
       )
     `
     )

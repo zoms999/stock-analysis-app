@@ -410,12 +410,14 @@ export default function PostsPage() {
                     koreanName={getKoreanName(post.ticker_symbol)}
                     excerpt={makeExcerpt(post.content, 140)}
                     pointPhase={pointPhase ?? undefined}
+                    chartImageUrl={post.chart_image_url}
                     user={{
                       name: post.profiles?.nickname || "익명",
                       level: "레벨 1",
                       ranking: 0,
                       avatar: post.profiles?.avatar_url,
                       countryCode: post.profiles?.country_code,
+                      stats: post.profiles?.stats,
                     }}
                     stats={{
                       profit: profitLabel,

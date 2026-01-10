@@ -28,37 +28,14 @@ const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<CandleData[]>>();
 
 /**
- * Twelve Data 캔들 데이터를 내부 REST 프록시(`/api/twelvedata/candles`)로부터 가져옵니다.
+ * 캔들 데이터를 내부 REST 프록시(`/api/yahoo`)로부터 가져옵니다.
+ * (기존 함수명 호환성을 위해 유지: fetchTwelveDataCandles)
  */
 export async function fetchTwelveDataCandles(symbol: string, interval: string): Promise<CandleData[]> {
   const s0 = symbol?.trim();
   const itv = interval?.trim();
-  const normalizeSymbol = (raw: string) => {
-    // KRX:005930 / XKRX:005930 → 005930:KRX
-    const mKr = raw.match(/^(KRX|XKRX)\s*:\s*(\d{6})$/i);
-    if (mKr) return `${mKr[2]}:KRX`;
-    return raw;
-  };
-  const s = normalizeSymbol(s0);
 
-  // ✅ 국내주식 판별 (6자리 숫자 또는 :KRX 접미사)
-  const baseKr = s.replace(/:KRX$/i, "");
-  const isKrx = /^\d{6}$/.test(baseKr);
-
-  // ✅ 국내주식인 경우 KIS 전용 API로 라우팅
-  if (isKrx) {
-    const url = `/api/kis/candles?symbol=${encodeURIComponent(baseKr)}&interval=${encodeURIComponent(itv)}`;
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.details || err.error || "KIS API 호출 실패");
-    }
-    return await res.json();
-  }
-
-
-
-  const key = `${s}|${itv}`;
+  const key = `${s0}|${itv}`;
   const now = Date.now();
   const cached = cache.get(key);
   if (cached && cached.expiresAt > now) return cached.data;
@@ -67,24 +44,13 @@ export async function fetchTwelveDataCandles(symbol: string, interval: string): 
   if (pending) return await pending;
 
   const promise = (async () => {
-    const url = `/api/twelvedata/candles?symbol=${encodeURIComponent(s)}&interval=${encodeURIComponent(itv)}`;
-    const res = await fetch(url, { cache: "no-store" });
+    // Yahoo Proxy Route 호출
+    const url = `/api/yahoo?symbol=${encodeURIComponent(s0)}&interval=${encodeURIComponent(itv)}`;
+    const res = await fetch(url);
 
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
-      const details =
-        (errorData as any)?.details ||
-        (errorData as any)?.message ||
-        (errorData as any)?.error ||
-        "";
-      const msg = String(details || `Twelve Data API Error: ${res.statusText}`);
-
-      // 분당 크레딧 초과 등은 그대로 메시지를 노출(사용자에게 원인 제공)
-      if (msg.includes("API credits") || msg.includes("current minute")) {
-        throw new Error(msg);
-      }
-
-      throw new Error(msg);
+      throw new Error(errorData.error || errorData.details || `Chart Data Error: ${res.statusText}`);
     }
 
     const data = await res.json();

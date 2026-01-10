@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Share2, ThumbsUp } from "lucide-react";
+import { ArrowLeft, Share2, ThumbsUp, CornerDownRight } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { LimitPopup } from "@/components/subscription/LimitPopup";
@@ -26,7 +26,8 @@ type CommentItem = {
   content: string;
   created_at: string;
   updated_at: string;
-  profiles?: { nickname: string | null; avatar_url: string | null } | null;
+  parent_comment_id: string | null;
+  profiles?: { nickname: string | null; avatar_url: string | null; country_code: string | null } | null;
 };
 
 export default function PostDetailPage() {
@@ -48,6 +49,8 @@ export default function PostDetailPage() {
 
   const [showLimitPopup, setShowLimitPopup] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
 
   const errorMessage = (e: unknown) => {
     if (typeof e === "string") return e;
@@ -228,6 +231,53 @@ export default function PostDetailPage() {
     } finally {
       setCommentSubmitting(false);
     }
+  };
+
+  const submitReply = async (parentId: string) => {
+    const text = replyText.trim();
+    if (!text) return;
+    if (commentSubmitting) return;
+    setCommentSubmitting(true);
+    try {
+      const res = await fetch(`/api/posts/${id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text, parent_comment_id: parentId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (json?.error === "LOGIN_REQUIRED") {
+          toast.info("댓글 작성은 로그인 후 이용할 수 있어요.");
+          return;
+        }
+        throw new Error(json?.error || "답글 작성에 실패했습니다.");
+      }
+      const created = json?.comment as CommentItem | undefined;
+      if (created?.id) {
+        setComments((prev) => [...prev, created]);
+        setReplyText("");
+        setReplyingToId(null);
+      } else {
+        await loadComments();
+        setReplyText("");
+        setReplyingToId(null);
+      }
+      toast.success("답글이 등록되었습니다.");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e) || "답글 작성에 실패했습니다.");
+    } finally {
+      setCommentSubmitting(false);
+    }
+  };
+
+  const startReply = (commentId: string) => {
+    setReplyingToId(commentId);
+    setReplyText("");
+  };
+
+  const cancelReply = () => {
+    setReplyingToId(null);
+    setReplyText("");
   };
 
   const startEdit = (c: CommentItem) => {
@@ -544,79 +594,128 @@ export default function PostDetailPage() {
                 첫 번째 댓글의 주인공이 되어보세요!
               </div>
             ) : (
-              <div className="space-y-4">
-                {comments.map((c) => {
-                  const isMine = !!meId && c.user_id === meId;
-                  const nickname = c.profiles?.nickname || "익명";
-                  return (
-                    <div key={c.id} className="rounded-xl border border-border/50 bg-background/40 p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-xs font-bold border border-border/50">
-                          {String(nickname)[0] || "U"}
-                        </div>
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <div className="text-sm font-semibold">{nickname}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {new Date(c.created_at).toLocaleString("ko-KR")}
-                              </div>
-                            </div>
-                            {isMine && (
-                              <div className="flex items-center gap-2">
-                                {editingId === c.id ? (
-                                  <>
-                                    <button
-                                      className="text-xs text-primary hover:underline"
-                                      onClick={() => saveEdit(c.id)}
-                                    >
-                                      저장
-                                    </button>
-                                    <button
-                                      className="text-xs text-muted-foreground hover:underline"
-                                      onClick={cancelEdit}
-                                    >
-                                      취소
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button
-                                      className="text-xs text-muted-foreground hover:underline"
-                                      onClick={() => startEdit(c)}
-                                    >
-                                      수정
-                                    </button>
-                                    <button
-                                      className="text-xs text-red-500 hover:underline"
-                                      onClick={() => deleteComment(c.id)}
-                                    >
-                                      삭제
-                                    </button>
-                                  </>
+              <div className="space-y-6">
+                {buildCommentTree(comments).map((root) => {
+                  const renderCommentNode = (c: CommentItem & { children: any[] }, depth = 0) => {
+                    const isMine = !!meId && c.user_id === meId;
+                    const nickname = c.profiles?.nickname || "익명";
+                    const isReplying = replyingToId === c.id;
+                    
+                    return (
+                      <div key={c.id} className={`flex flex-col ${depth > 0 ? "mt-3 pl-4 md:pl-6 border-l-2 border-border/30 relative" : ""}`}>
+                        {/* Connecting Line for nested comments */}
+                        {depth > 0 && (
+                          <div className="absolute -left-[9px] top-4 w-4 h-[2px] bg-border/30 rounded-full" />
+                        )}
+
+                        <div className={`group rounded-xl p-4 transition-colors ${depth === 0 ? "border border-border/50 bg-background/40" : "bg-transparent hover:bg-muted/30"}`}>
+                          <div className="flex items-start gap-3">
+                            <div className="relative flex-shrink-0">
+                                <Avatar className="h-9 w-9 border border-border/50">
+                                  <AvatarImage src={c.profiles?.avatar_url || undefined} />
+                                  <AvatarFallback className="bg-muted text-xs font-bold">
+                                    {String(nickname)[0] || "U"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                {c.profiles?.country_code && (
+                                  <div className="absolute -bottom-1 -right-1 bg-background rounded-sm shadow-sm">
+                                    <CountryFlag countryCode={c.profiles.country_code} size={12} />
+                                  </div>
                                 )}
+                            </div>
+                            
+                            <div className="flex-1 space-y-1.5 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <div className="text-sm font-semibold truncate">{nickname}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {new Date(c.created_at).toLocaleString("ko-KR", {
+                                        month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                                    })}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {meId && !isReplying && (
+                                    <button
+                                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                                      onClick={() => startReply(c.id)}
+                                    >
+                                      <CornerDownRight className="h-3 w-3" />
+                                      답글
+                                    </button>
+                                  )}
+                                  {isMine && (
+                                    <>
+                                      {editingId === c.id ? (
+                                        <>
+                                          <button className="text-xs text-primary hover:underline" onClick={() => saveEdit(c.id)}>저장</button>
+                                          <button className="text-xs text-muted-foreground hover:underline" onClick={cancelEdit}>취소</button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <button className="text-xs text-muted-foreground hover:underline" onClick={() => startEdit(c)}>수정</button>
+                                          <button className="text-xs text-red-500 hover:underline" onClick={() => deleteComment(c.id)}>삭제</button>
+                                        </>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
                               </div>
-                            )}
+
+                              {editingId === c.id ? (
+                                <textarea
+                                  className="w-full min-h-[80px] rounded-lg border border-border/60 bg-transparent p-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none mt-1"
+                                  value={editingText}
+                                  onChange={(e) => setEditingText(e.target.value)}
+                                />
+                              ) : (
+                                <div className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90">{c.content}</div>
+                              )}
+                            </div>
                           </div>
 
-                          {editingId === c.id ? (
-                            <textarea
-                              className="w-full min-h-[90px] rounded-xl border border-border/60 bg-transparent p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none"
-                              placeholder="댓글을 수정하세요."
-                              aria-label="댓글 수정"
-                              value={editingText}
-                              onChange={(e) => setEditingText(e.target.value)}
-                            />
-                          ) : (
-                            <div className="text-sm whitespace-pre-wrap leading-relaxed">{c.content}</div>
+                          {/* Reply Form */}
+                          {isReplying && (
+                            <div className="mt-4 ml-12 animate-in fade-in slide-in-from-top-2">
+                              <div className="flex items-start gap-3">
+                                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs border border-border/50">
+                                   <CornerDownRight className="h-4 w-4 text-muted-foreground" />
+                                </div>
+                                <div className="flex-1 space-y-2">
+                                  <textarea
+                                    className="w-full min-h-[80px] rounded-xl border border-border/60 bg-transparent p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none placeholder:text-muted-foreground/70"
+                                    placeholder={`${nickname}님에게 답글 작성...`}
+                                    value={replyText}
+                                    onChange={(e) => setReplyText(e.target.value)}
+                                    autoFocus
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                    <Button size="sm" variant="ghost" onClick={cancelReply}>취소</Button>
+                                    <Button size="sm" onClick={() => submitReply(c.id)} disabled={!replyText.trim() || commentSubmitting} className="rounded-full">
+                                      {commentSubmitting ? "등록 중..." : "답글 등록"}
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
                           )}
                         </div>
+
+                        {/* Recursively render children */}
+                        {c.children && c.children.length > 0 && (
+                          <div className={depth === 0 ? "mt-2" : ""}>
+                            {c.children.map((child) => renderCommentNode(child, depth + 1))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
+                    );
+                  };
+
+                  return renderCommentNode(root);
                 })}
               </div>
             )}
+
           </section>
         </main>
 
@@ -673,4 +772,31 @@ export default function PostDetailPage() {
       />
     </div>
   );
+
+}
+
+
+function buildCommentTree(comments: CommentItem[]) {
+  const map = new Map<string, CommentItem & { children: any[] }>();
+  const roots: (CommentItem & { children: any[] })[] = [];
+
+  // First pass: create nodes
+  comments.forEach((c) => {
+    map.set(c.id, { ...c, children: [] });
+  });
+
+  // Second pass: link nodes
+  // Sort comments by created_at to ensure order
+  const sorted = [...comments].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  
+  sorted.forEach((c) => {
+    const node = map.get(c.id)!;
+    if (c.parent_comment_id && map.get(c.parent_comment_id)) {
+      map.get(c.parent_comment_id)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  return roots;
 }

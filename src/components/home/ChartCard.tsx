@@ -26,12 +26,18 @@ interface ChartCardProps {
   title: string;
   excerpt?: string;
   pointPhase?: "진행중" | "완료";
+  chartImageUrl?: string;
   user: {
     name: string;
     level: string;
     ranking: number;
     avatar?: string;
     countryCode?: string;
+    stats?: {
+      recent_accuracy: number;
+      all_time_accuracy: number;
+      total_count: number;
+    };
   };
   stats: {
     profit: string; // e.g., "900만 92%"
@@ -191,6 +197,11 @@ export function ChartCard({ id, symbol, koreanName, title, excerpt, pointPhase, 
                 {title}
                 <span className="ml-2 text-[#4A90E2]">{stats.profit}</span>
               </h4>
+              {user.stats && (
+                <div className="text-xs text-muted-foreground mt-0.5 font-medium">
+                  최근 {Math.round(user.stats.recent_accuracy)}% <span className="mx-1">·</span> 전체 {Math.round(user.stats.all_time_accuracy)}% <span className="mx-1">·</span> {user.stats.total_count}개
+                </div>
+              )}
 
               {!!excerpt && (
                 <p className="text-xs text-muted-foreground/90 line-clamp-2 leading-relaxed">

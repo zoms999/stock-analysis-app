@@ -122,11 +122,19 @@ export async function GET(req: Request) {
         // period2 defaults to now
     };
 
+    // Safely get client (handle CJS/ESM interop where default might be Class)
+    const yf = typeof yahooFinance === 'function' ? new (yahooFinance as any)() : yahooFinance;
+
     try {
-        const result = await yahooFinance.historical(symbol, queryOptions as any);
+        // Use 'chart' method for intraday support
+        const result = await yf.chart(symbol, queryOptions as any);
         
+        if (!result || !result.quotes || !Array.isArray(result.quotes)) {
+            throw new Error("Invalid response from Yahoo Finance");
+        }
+
         // Transform to Candle format
-        const candles: Candle[] = result.map((item) => {
+        const candles: Candle[] = result.quotes.map((item: any) => {
              // date is Date object in yahoo-finance2
              const timeStr = item.date.toISOString();
              // For daily/weekly/monthly, use YYYY-MM-DD string
@@ -137,7 +145,7 @@ export async function GET(req: Request) {
              } else {
                  time = Math.floor(item.date.getTime() / 1000);
              }
-
+             
              return {
                  time,
                  open: item.open,
@@ -146,7 +154,9 @@ export async function GET(req: Request) {
                  close: item.close,
                  volume: item.volume
              };
-        });
+        }).filter((c: any) => c.open !== null && c.close !== null);
+
+
 
         // Sort just in case
         candles.sort((a, b) => {

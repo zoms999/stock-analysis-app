@@ -13,15 +13,15 @@ export default async function TournamentsPage() {
     .order('created_at', { ascending: false });
 
   return (
-    <div className="min-h-screen bg-black text-white p-4 md:p-8 space-y-8">
+    <div className="min-h-screen bg-background text-foreground p-4 md:p-8 space-y-8">
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-end mb-12 border-b border-gray-800 pb-8">
+        <div className="flex flex-col md:flex-row justify-between items-end mb-12 border-b border-border pb-8">
           <div>
-            <span className="text-blue-500 font-bold tracking-widest text-sm mb-2 block">COMPETITION</span>
-            <h1 className="text-4xl md:text-5xl font-black text-white mb-4">
+            <span className="text-primary font-bold tracking-widest text-sm mb-2 block">COMPETITION</span>
+            <h1 className="text-4xl md:text-5xl font-black text-foreground mb-4">
               진행 중인 토너먼트
             </h1>
-            <p className="text-gray-400 text-lg max-w-2xl">
+            <p className="text-muted-foreground text-lg max-w-2xl">
               실전 투자 대회에 참여하고, 예측을 제출하여 상금을 획득하세요.
             </p>
           </div>
@@ -33,9 +33,9 @@ export default async function TournamentsPage() {
           ))}
 
           {(!tournaments || tournaments.length === 0) && !error && (
-             <div className="col-span-full py-20 text-center bg-[#111315] rounded-2xl border border-dashed border-gray-800">
-               <div className="text-gray-500 text-xl font-medium">진행 중인 토너먼트가 없습니다.</div>
-               <p className="text-gray-600 mt-2">나중에 다시 확인해주세요.</p>
+             <div className="col-span-full py-20 text-center bg-card rounded-2xl border border-dashed border-border">
+               <div className="text-muted-foreground text-xl font-medium">진행 중인 토너먼트가 없습니다.</div>
+               <p className="text-muted-foreground/80 mt-2">나중에 다시 확인해주세요.</p>
              </div>
           )}
         </div>

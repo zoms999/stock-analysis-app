@@ -694,7 +694,8 @@ export function SavedChartViewer({
                 visible: true,
                 timeVisible: ["1", "60"].includes(interval),
                 secondsVisible: false,
-                rightOffset: mode === "card" ? 0 : 20,
+                // ✅ Card mode: Give small buffer (5px) to prevent stroke clipping
+                rightOffset: mode === "card" ? 10 : 20,
                 borderColor: isDark ? "#2a2a2a" : "#E5E7EB",
                 barSpacing: getTargetBarSpacingPx(interval),
                 minBarSpacing: 0.1,

@@ -150,7 +150,7 @@ export default function TournamentDetailView({ tournament, userEntry, onUnlockSl
       : [
           "목표 시간의 종가를 예측하세요.",
           "실제 가격과 가장 가까운 예측을 한 참가자가 승리합니다.", 
-          "친구에게 공유하고 최대 3개의 예측 슬롯을 잠금 해제하세요."
+          "친구에게 공유하고 모든 예측 슬롯을 잠금 해제하세요."
         ];
 
   return (

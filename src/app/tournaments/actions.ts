@@ -42,10 +42,27 @@ export async function unlockSlots(tournamentId: string) {
 
     if (entry) {
       console.log('[unlockSlots] Updating existing entry:', entry.id);
-      if (entry.max_re_entry < 3) {
+      
+      // Fetch tournament to get duration
+      const { data: tournament } = await supabase
+        .from('tournaments')
+        .select('start_date, end_date, target_date')
+        .eq('id', tournamentId)
+        .single();
+      
+      let maxSlots = 5; // Default fallback
+      if (tournament?.start_date && tournament?.end_date) {
+        const start = new Date(tournament.start_date);
+        const end = new Date(tournament.end_date);
+        const diffTime = Math.abs(end.getTime() - start.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        maxSlots = Math.max(1, diffDays);
+      }
+      
+      if (entry.max_re_entry < maxSlots) {
         const { error: updateError } = await supabase
           .from('tournament_entries')
-          .update({ max_re_entry: 3 })
+          .update({ max_re_entry: maxSlots })
           .eq('id', entry.id);
         
         if (updateError) {
@@ -55,12 +72,29 @@ export async function unlockSlots(tournamentId: string) {
       }
     } else {
       console.log('[unlockSlots] Creating new entry');
-      // Create new entry with 3 slots unlocked
+      
+      // Fetch tournament to get duration
+      const { data: tournament } = await supabase
+        .from('tournaments')
+        .select('start_date, end_date, target_date')
+        .eq('id', tournamentId)
+        .single();
+      
+      let maxSlots = 5; // Default fallback
+      if (tournament?.start_date && tournament?.end_date) {
+        const start = new Date(tournament.start_date);
+        const end = new Date(tournament.end_date);
+        const diffTime = Math.abs(end.getTime() - start.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        maxSlots = Math.max(1, diffDays);
+      }
+      
+      // Create new entry with all slots unlocked
       const { error: insertError } = await supabase.from('tournament_entries').insert({
         tournament_id: tournamentId,
         user_id: user.id,
         re_entry_count: 0,
-        max_re_entry: 3,
+        max_re_entry: maxSlots,
         prediction_json: { slots: [] }
       });
 

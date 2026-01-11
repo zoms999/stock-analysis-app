@@ -5,6 +5,7 @@ import { login, signup, signInWithGoogle, signInWithFacebook } from './actions'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useState, Suspense, useEffect } from 'react'
+import { GoogleOneTap } from "@/components/auth/GoogleOneTap"
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -16,6 +17,7 @@ function LoginForm() {
   const [referralCode, setReferralCode] = useState<string>('')
   const [referralFromUrl, setReferralFromUrl] = useState(false)
   const [hasReferrer, setHasReferrer] = useState<boolean | null>(null)
+  const [showOneTap, setShowOneTap] = useState(true)
 
   const normalizeReferralCode = (value: string) =>
     value.replace(/\D/g, '').slice(0, 4)
@@ -155,8 +157,8 @@ function LoginForm() {
             </div>
             {isSignupMode && (
               <div>
-                <label htmlFor="nickname" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">닉네임 (선택)</label>
-                <Input id="nickname" name="nickname" type="text" className="mt-1" placeholder="닉네임을 입력하세요" />
+                <label htmlFor="nickname" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">닉네임</label>
+                <Input id="nickname" name="nickname" type="text" required className="mt-1" placeholder="닉네임을 입력하세요" />
               </div>
             )}
           </div>
@@ -214,6 +216,17 @@ function LoginForm() {
 
           </div>
         </form>
+        
+        {showOneTap && (
+          <GoogleOneTap
+            onContinue={() => {
+              const formData = new FormData()
+              if (referralCode) formData.append('referral_code', referralCode)
+              signInWithGoogle(formData)
+            }}
+            onClose={() => setShowOneTap(false)}
+          />
+        )}
       </div>
     </div>
   )

@@ -59,6 +59,20 @@ export async function GET(request: Request) {
         }
       }
     }
+
+    // Check if user needs to set a nickname (OAuth users)
+    if (sessionData?.user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('nickname')
+        .eq('id', sessionData.user.id)
+        .single()
+
+      // If nickname is missing or auto-generated (starts with "User_"), redirect to onboarding
+      if (!profile?.nickname || profile.nickname.startsWith('User_')) {
+        return NextResponse.redirect(`${origin}/onboarding`)
+      }
+    }
   }
 
   // 로그인 성공 후 홈으로 리다이렉트

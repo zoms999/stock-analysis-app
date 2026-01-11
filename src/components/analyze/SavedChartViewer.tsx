@@ -112,6 +112,7 @@ export function SavedChartViewer({
 
     // ✅ 차트가 재성성될 때(테마 변경 등) 기존 줌/스크롤 위치(LogicalRange)를 저장해두었다가 복구
     const savedRangeRef = useRef<LogicalRange | null>(null);
+    const isRangeSetRef = useRef(false);
     const prevIntervalRef = useRef<string>(interval);
 
     const getIntervalSeconds = (itv: string) => {
@@ -388,33 +389,14 @@ export function SavedChartViewer({
     };
 
 
-    // ✅ 핵심: 차트가 재생성되었을 때 “base 데이터”를 새 시리즈에 다시 주입
-    const applyBaseDataToSeries = useCallback(() => {
-        const candle = candleSeriesRef.current;
-        const area = areaSeriesRef.current;
-        const areaGlow = areaGlowSeriesRef.current;
-        const vol = volumeSeriesRef.current;
+    // ✅ 뷰 범위(Range) 설정 로직 분리 (Resize 시 재호출 가능하도록)
+    const updateVisibleRange = useCallback(() => {
         const chart = chartRef.current;
-
-        if (!candle || !area || !areaGlow || !vol || !chart) return;
-
         const baseC = baseCandleRef.current;
-        const baseA = baseAreaRef.current;
-        const baseV = baseVolumeRef.current;
-
-        if (!baseC.length || !baseA.length) return;
-
-        candle.setData(baseC);
-        area.setData(baseA);
-        areaGlow.setData(baseA);
-        vol.setData(baseV);
-
-        // visible switch
-        candle.applyOptions({ visible: viewStyle === "candle" });
-        area.applyOptions({ visible: viewStyle === "line" });
-        // ✅ 카드에서는 글로우 OFF (번짐 방지)
-        areaGlow.applyOptions({ visible: viewStyle === "line" && mode !== "card" });
-
+        if (!chart || !baseC.length) return false;
+        
+        // ✅ 컨테이너 크기가 0이면 범위 설정을 미룸 (차트 라이브러리 오동작 방지)
+        if (chartContainerRef.current?.clientWidth === 0) return false;
 
         if (savedRangeRef.current) {
             // ✅ 저장된 뷰가 있다면 복구 (테마 변경 시 깜빡임/리셋 방지)
@@ -430,7 +412,7 @@ export function SavedChartViewer({
             
             // ✅ card 모드: "오늘(마지막 캔들)" 기준으로 최근 구간 + 제한된 미래(예측)까지 보이게 고정
             if (mode === "card") {
-                const count = baseC.length; // candle.getData().length 대신 baseC 사용
+                const count = baseC.length; 
                 const bars = getCardWindowBars(interval);
                 const toIndex = Math.max(0, count - 1);
                 const fromIndex = Math.max(0, toIndex - bars);
@@ -471,7 +453,50 @@ export function SavedChartViewer({
             // fallback
             chart.applyOptions({ timeScale: { rightOffset: 0 } });
         }
-    }, [viewStyle, interval, computeFutureBarsFromPrediction, computeFutureBarsForCard, mode]);
+        
+        isRangeSetRef.current = true;
+        return true;
+    }, [interval, computeFutureBarsFromPrediction, computeFutureBarsForCard, mode, getCardWindowBars]);
+
+    // ✅ 핵심: 차트가 재생성되었을 때 “base 데이터”를 새 시리즈에 다시 주입
+    const applyBaseDataToSeries = useCallback(() => {
+        const candle = candleSeriesRef.current;
+        const area = areaSeriesRef.current;
+        const areaGlow = areaGlowSeriesRef.current;
+        const vol = volumeSeriesRef.current;
+        const chart = chartRef.current;
+
+        if (!candle || !area || !areaGlow || !vol || !chart) return;
+
+        const baseC = baseCandleRef.current;
+        const baseA = baseAreaRef.current;
+        const baseV = baseVolumeRef.current;
+        
+        // Ensure data is sorted (defense in depth)
+        // Note: We already sort in fetch, but this safety prevents regression if other paths inject data.
+        // (Skipping actual sort code here to avoid perf hit, assuming fetch did it)
+
+        if (!baseC.length || !baseA.length) return;
+
+        // ✅ BEFORE setData: Ensure chart options are set
+        // Adding a slight right offset default to prevent clipping during data load
+        // chart.timeScale().applyOptions({ rightOffset: 10 });
+        
+        candle.setData(baseC);
+        area.setData(baseA);
+        areaGlow.setData(baseA);
+        vol.setData(baseV);
+
+        // visible switch
+        candle.applyOptions({ visible: viewStyle === "candle" });
+        area.applyOptions({ visible: viewStyle === "line" });
+        // ✅ 카드에서는 글로우 OFF (번짐 방지)
+        areaGlow.applyOptions({ visible: viewStyle === "line" && mode !== "card" });
+        
+        // 데이터 주입 후 범위 설정 시도
+        updateVisibleRange();
+
+    }, [viewStyle, mode, updateVisibleRange]);
 
 
     // 3) Prediction line inject (Segmented Gradient)
@@ -803,12 +828,30 @@ export function SavedChartViewer({
             if (!chartContainerRef.current) return;
             const w = chartContainerRef.current.clientWidth;
             const h = chartContainerRef.current.clientHeight;
-            if (w <= 0 || h <= 0) return;
+            if (w <= 0 || h <= 0) {
+                // Retry syncing size if dimensions are invalid (e.g. inside hidden tab or before layout paint)
+                requestAnimationFrame(syncSize);
+                return;
+            }
             chart.applyOptions({ width: w, height: h });
+            
+            // ✅ 사이즈가 유효해진 시점에 범위를 강제 재설정 (특히 카드 모드에서 잘림 방지)
+            // 아직 범위가 설정되지 않았거나(initial load race), 카드 모드일 경우(always fit window) 실행
+            if (!isRangeSetRef.current || mode === 'card') {
+                updateVisibleRange();
+            }
+
             // 차트 크기 변동 후 오버레이 좌표 재계산 (첫 로딩/레이아웃 확정 시점 포함)
             requestAnimationFrame(updateOverlayPositions);
         };
         window.addEventListener("resize", syncSize);
+
+        // ✅ 줌/스크롤 시 오버레이 좌표 동기화
+        // (VisibleLogicalRangeChange 이벤트를 구독하여 차트가 움직일 때마다 마커 위치를 업데이트)
+        const handleTimeScaleChange = () => {
+            requestAnimationFrame(updateOverlayPositions);
+        };
+        chart.timeScale().subscribeVisibleLogicalRangeChange(handleTimeScaleChange);
 
         // ✅ window resize만으로는 라우트 전환/폰트 로딩 등으로 생기는 컨테이너 크기 변화(초기 렌더)를 못 잡을 수 있어 ResizeObserver 사용
         if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
@@ -824,13 +867,27 @@ export function SavedChartViewer({
         requestAnimationFrame(syncSize);
 
         // ✅ 재생성 직후 base 데이터 즉시 주입 (이게 없으면 토글시 빈 차트)
-        setTimeout(() => {
-            applyBaseDataToSeries();
-            updatePredictionSeries(); // ✅ 차트 재생성 후 예측 라인도 다시 그려야 함
-        }, 0);
+        // 지연 시간을 200ms로 증가시켜 초기 로딩 시 레이아웃 스래싱/Flex 계산 완료 후 렌더링하도록 함
+        // (150-200ms는 사용자 경험을 크게 해치지 않으면서 안정성을 확보)
+        const renderTimer = setTimeout(() => {
+            // Check if container has size
+            if (chartContainerRef.current && chartContainerRef.current.clientWidth > 0) {
+                 applyBaseDataToSeries();
+                 updatePredictionSeries(); 
+                 syncSize(); 
+            } else {
+                // If still 0, try one more time fast
+                setTimeout(() => {
+                    applyBaseDataToSeries();
+                    updatePredictionSeries(); 
+                    syncSize(); 
+                }, 100);
+            }
+        }, 200);
 
         return () => {
-             // ✅ CLEANUP runs BEFORE next effect setup. Save range HEREs.
+            clearTimeout(renderTimer);
+            // ✅ CLEANUP runs BEFORE next effect setup. Save range HEREs.
             if (chartRef.current) {
                 // interval 변경이 아닐 때만 저장하고 싶지만, 
                 // 여기서 next interval을 알 수 없음.
@@ -839,13 +896,17 @@ export function SavedChartViewer({
             }
 
             window.removeEventListener("resize", syncSize);
+            // unsubscribe
+            if (chartRef.current) {
+                chartRef.current.timeScale().unsubscribeVisibleLogicalRangeChange(handleTimeScaleChange);
+            }
             resizeObserverRef.current?.disconnect();
             resizeObserverRef.current = null;
             clearPredictionSegments();
             chart.remove();
             chartRef.current = null;
         };
-    }, [isDark, viewStyle, interval, applyBaseDataToSeries, clearPredictionSegments, getTargetBarSpacingPx, mode, updateOverlayPositions, updatePredictionSeries]);
+    }, [isDark, viewStyle, interval, applyBaseDataToSeries, clearPredictionSegments, getTargetBarSpacingPx, mode, updateOverlayPositions, updatePredictionSeries, updateVisibleRange]);
 
     // 2) Fetch data (only when symbol/interval changes)
     useEffect(() => {
@@ -875,18 +936,26 @@ export function SavedChartViewer({
                     return;
                 }
 
+                // ✅ Data Sorting (Crucial for preventing rendering artifacts)
+                // Timestamps must be strictly ascending.
+                const sorter = (a: { time: Time }, b: { time: Time }) => {
+                    const ta = typeof a.time === 'string' ? new Date(a.time).getTime() : (a.time as number);
+                    const tb = typeof b.time === 'string' ? new Date(b.time).getTime() : (b.time as number);
+                    return ta - tb;
+                };
+
                 const candleData: CandlestickData[] = data.map((d) => ({
                     time: d.time,
                     open: d.open,
                     high: d.high,
                     low: d.low,
                     close: d.close,
-                }));
+                })).sort(sorter);
 
                 const areaData = data.map((d) => ({
                     time: d.time,
                     value: d.close,
-                }));
+                })).sort(sorter);
 
                 const volumeData: HistogramData[] = data
                     .filter((d) => d.volume !== undefined)
@@ -894,7 +963,7 @@ export function SavedChartViewer({
                         time: d.time,
                         value: d.volume!,
                         color: d.close >= d.open ? "#ef444480" : "#3b82f680",
-                    }));
+                    })).sort(sorter);
 
                 baseCandleRef.current = candleData;
                 baseAreaRef.current = areaData;

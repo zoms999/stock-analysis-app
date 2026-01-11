@@ -8,8 +8,15 @@ type CreateTournamentInput = {
   title: string;
   description?: string;
   event_type: 'DECIMAL' | 'PREDICTION';
-  target_date: string;
+  target_date?: string; // Optional/Legacy
   prize_pool: string;
+  
+  // ✅ New Fields
+  stock_symbol?: string; // 종목 (Prediction용)
+  start_date: string;
+  end_date: string;
+  prize_type: 'POINT' | 'VOUCHER';
+  ranking_rules?: string;
 };
 
 // --- Actions ---
@@ -25,8 +32,16 @@ export async function createTournament(input: CreateTournamentInput) {
     title: input.title,
     description: input.description,
     event_type: input.event_type,
-    target_date: input.target_date,
+    target_date: input.end_date, // use end_date as target_date for compatibility
     prize_pool: input.prize_pool,
+    
+    // ✅ New Columns
+    stock_symbol: input.stock_symbol,
+    start_date: input.start_date,
+    end_date: input.end_date,
+    prize_type: input.prize_type,
+    ranking_rules: input.ranking_rules,
+
     status: 'UPCOMING'
   });
 

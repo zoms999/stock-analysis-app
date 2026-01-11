@@ -53,7 +53,7 @@ export default function RealtimeLeaderboard({ tournamentId }: RealtimeLeaderboar
   }, [tournamentId]);
 
   return (
-    <Card className="bg-gray-900 border-gray-800 text-white w-full">
+    <Card className="bg-card border-border text-foreground w-full">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-lg">
           <span>👑 참가자 현황</span>
@@ -65,7 +65,7 @@ export default function RealtimeLeaderboard({ tournamentId }: RealtimeLeaderboar
       <CardContent className="h-[400px] overflow-y-auto pr-2 custom-scrollbar">
         <div className="space-y-3">
           {rankings.length === 0 ? (
-            <div className="text-center text-gray-500 py-10">
+            <div className="text-center text-muted-foreground py-10">
               아직 참가자가 없습니다.
               <br />
               첫 번째로 참가해보세요!
@@ -74,17 +74,17 @@ export default function RealtimeLeaderboard({ tournamentId }: RealtimeLeaderboar
             rankings.map((item, index) => (
               <div
                 key={item.userId}
-                className="flex items-center justify-between p-3 rounded-lg bg-gray-800/50 border border-gray-700/50"
+                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border"
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex-shrink-0 w-8 text-center font-mono text-gray-500 font-bold">
+                  <div className="flex-shrink-0 w-8 text-center font-mono text-muted-foreground font-bold">
                     #{index + 1}
                   </div>
-                  <Avatar className="h-8 w-8 border border-gray-700">
+                  <Avatar className="h-8 w-8 border border-border">
                     <AvatarImage src={item.avatarUrl} />
                     <AvatarFallback>{item.nickname[0]}</AvatarFallback>
                   </Avatar>
-                  <span className="font-medium text-sm text-gray-200">
+                  <span className="font-medium text-sm text-foreground">
                     {item.nickname}
                   </span>
                 </div>

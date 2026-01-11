@@ -26,6 +26,9 @@ interface ChartAnalyzerProps {
     chartStyle?: "candle" | "line";
     onPointsChange?: (points: PredictionPoint[]) => void;
     onChartCapture?: (imageDataUrl: string) => void;
+    minDate?: Date;
+    maxDate?: Date;
+    maxPoints?: number;
 }
 
 interface PredictionPoint {
@@ -43,6 +46,9 @@ export function ChartAnalyzer({
     chartStyle = "candle",
     onPointsChange,
     onChartCapture,
+    minDate,
+    maxDate,
+    maxPoints,
 }: ChartAnalyzerProps) {
     const { theme, systemTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
@@ -58,6 +64,9 @@ export function ChartAnalyzer({
     const chartRef = useRef<IChartApi | null>(null);
     const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const areaSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
+
+
+
     const areaGlowSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
     const predictionSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -107,6 +116,14 @@ export function ChartAnalyzer({
         return () => mq.removeListener?.(update);
     }, []);
 
+    // Notify parent when points change, but avoid loop
+    useEffect(() => {
+        if (onPointsChange) {
+            onPointsChange(points);
+        }
+    }, [points, onPointsChange]);
+
+
     // --- [HTML Overlay Logic] ---
     const [overlayMarkers, setOverlayMarkers] = useState<{ id: string; x: number; y: number; time: Time; value: number }[]>([]);
 
@@ -119,7 +136,7 @@ export function ChartAnalyzer({
             candlestickSeriesRef.current;
 
         if (!chart || !ySeries || points.length === 0) {
-            setOverlayMarkers([]);
+            setOverlayMarkers((prev) => (prev.length === 0 ? prev : []));
             return;
         }
 
@@ -621,6 +638,18 @@ export function ChartAnalyzer({
             }
 
             if (!time) return;
+
+            // ✅ Date Constraint Check
+            const timeVal = typeof time === 'string' ? new Date(time).getTime() : (time as number) * 1000;
+            if (minDate && timeVal < minDate.getTime()) {
+                console.log("예측 불가: 시작일 이전", new Date(timeVal).toLocaleString());
+                return;
+            }
+            if (maxDate && timeVal > maxDate.getTime()) {
+                console.log("예측 불가: 종료일 이후", new Date(timeVal).toLocaleString());
+                return;
+            }
+
             const activeSeries = chartStyleRef.current === "line" ? areaSeries : candlestickSeries;
             const price = activeSeries.coordinateToPrice(param.point.y);
             if (price !== null && price !== undefined) {
@@ -628,9 +657,18 @@ export function ChartAnalyzer({
                 setPoints((prev) => {
                     const existsIndex = prev.findIndex((p) => compareTime(p.time, newPoint.time) === 0);
                     const next = [...prev];
-                    if (existsIndex >= 0) next[existsIndex] = newPoint;
-                    else next.push(newPoint);
+                    if (existsIndex >= 0) {
+                      next[existsIndex] = newPoint;
+                    } else {
+                        // ✅ Max Points Check
+                        if (maxPoints && next.length >= maxPoints) {
+                            console.log("Max points reached");
+                            return prev; 
+                        }
+                        next.push(newPoint);
+                    }
                     next.sort((a, b) => compareTime(a.time, b.time));
+                    
                     return next;
                 });
             }
@@ -650,7 +688,7 @@ export function ChartAnalyzer({
             chartRef.current = null;
             setIsChartReady(false);
         };
-    }, [mounted, clearPredictionSegments, interval]); // Added interval to deps to recreate chart opts if needed
+    }, [mounted, clearPredictionSegments, interval, minDate, maxDate]); // Added minDate, maxDate to deps
 
     useEffect(() => {
         const chart = chartRef.current;

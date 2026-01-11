@@ -7,39 +7,62 @@ import ViralModal from './ViralModal';
 interface PredictionPanelProps {
   tournament: Tournament;
   userEntry: TournamentEntry | null;
-  onUnlockSlots: () => Promise<void>;
+  onUnlockSlots: () => Promise<any>;
   onSubmit: (slots: PredictionSlot[]) => Promise<void>;
+  isPredictionDisabled?: boolean;
+  disabledReason?: string;
+  startDate?: Date;
+  endDate?: Date;
+  slots?: PredictionSlot[];
+  onSlotsChange?: (slots: PredictionSlot[]) => void;
+  maxSlots?: number;
+  totalPossibleSlots?: number;
 }
 
-export default function PredictionPanel({ tournament, userEntry, onUnlockSlots, onSubmit }: PredictionPanelProps) {
+function formatDate(date: Date) {
+  return date.toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+}
+
+export default function PredictionPanel({ 
+  tournament, 
+  userEntry, 
+  onUnlockSlots, 
+  onSubmit, 
+  isPredictionDisabled = false, 
+  disabledReason,
+  startDate,
+  endDate,
+  slots = [{}],
+  onSlotsChange,
+  maxSlots = 1,
+  totalPossibleSlots = 3
+}: PredictionPanelProps) {
   const [isViralModalOpen, setIsViralModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  // Initialize slots based on entry or defaults
-  // If userEntry exists, use its data. If not, start with 1 empty slot.
-  const [slots, setSlots] = useState<PredictionSlot[]>(() => {
-    if (userEntry?.prediction_json?.slots) {
-      return userEntry.prediction_json.slots;
-    }
-    if (userEntry?.prediction_value !== null && userEntry?.prediction_value !== undefined) {
-      // Type 1 legacy mapping
-      return [{ val: userEntry.prediction_value }];
-    }
-    return [{}]; // Default 1 empty slot
-  });
-
-  const maxSlots = userEntry?.max_re_entry || 1; // Default to 1 if no entry
-  // If user hasn't unlocked, maxSlots is 1. If unlocked, it's 3.
-  // Actually, we should check `max_re_entry`. If it's 3, we show 3 slots available. 
-  // If it's 1 (default), we show 1 active and 2 locked.
-
-  const totalPossibleSlots = 3;
 
   const handleViralSuccess = async () => {
     setIsViralModalOpen(false);
     setLoading(true);
-    await onUnlockSlots();
-    // Optimistically update UI or waiting for parent refresh
+    try {
+      const result = await onUnlockSlots();
+      if (result?.error) {
+        alert(`오류가 발생했습니다: ${result.error}`);
+      } else if (result?.mock) {
+        alert("Mock 모드: 슬롯 잠금 해제 요청이 성공했습니다. (화면이 새로고침되지 않을 수 있습니다)");
+      } else {
+        // Success - usually revalidatePath handles refresh
+      }
+    } catch (e) {
+      console.error(e);
+      alert("알 수 없는 오류가 발생했습니다.");
+    }
     setLoading(false);
   };
 
@@ -53,7 +76,7 @@ export default function PredictionPanel({ tournament, userEntry, onUnlockSlots, 
     } else {
       newSlots[index] = { ...newSlots[index], [field]: value };
     }
-    setSlots(newSlots);
+    if (onSlotsChange) onSlotsChange(newSlots);
   };
 
   const handleSubmit = async () => {
@@ -63,13 +86,25 @@ export default function PredictionPanel({ tournament, userEntry, onUnlockSlots, 
   };
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-      <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-        <span>나의 예측</span>
-        <span className="text-xs bg-gray-800 text-gray-400 px-2 py-1 rounded">
-          {maxSlots}/{totalPossibleSlots} 슬롯
-        </span>
-      </h3>
+    <div className="bg-card border border-border rounded-xl p-6">
+      <div className="flex flex-col gap-1 mb-6">
+        <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
+            <span>나의 예측</span>
+            <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">
+            {maxSlots}/{totalPossibleSlots} 슬롯
+            </span>
+        </h3>
+        {(startDate && endDate) && (
+            <div className="text-xs text-muted-foreground">
+                예측 기간: {formatDate(startDate)} ~ {formatDate(endDate)}
+            </div>
+        )}
+        {isPredictionDisabled && (
+            <span className="text-xs bg-red-900/50 text-red-400 px-2 py-1 rounded border border-red-800/50 w-fit mt-1">
+                {disabledReason || "예측 기간이 아닙니다"}
+            </span>
+        )}
+      </div>
 
       <div className="space-y-4 mb-8">
         {Array.from({ length: totalPossibleSlots }).map((_, index) => {
@@ -80,13 +115,13 @@ export default function PredictionPanel({ tournament, userEntry, onUnlockSlots, 
             <div
               key={index}
               className={`relative p-4 rounded-lg border transition-all ${isLocked
-                  ? 'bg-gray-950 border-gray-900 opacity-70 border-dashed cursor-pointer hover:border-purple-500/50'
-                  : 'bg-black border-gray-800'
+                  ? 'bg-muted/50 border-input opacity-70 border-dashed cursor-pointer hover:border-purple-500/50'
+                  : 'bg-background border-input'
                 }`}
               onClick={() => isLocked && setIsViralModalOpen(true)}
             >
               <div className="flex justify-between items-center mb-2">
-                <span className={`text-sm font-bold ${isLocked ? 'text-gray-600' : 'text-purple-400'}`}>
+                <span className={`text-sm font-bold ${isLocked ? 'text-muted-foreground' : 'text-purple-400'}`}>
                   슬롯 #{index + 1}
                 </span>
                 {isLocked && (
@@ -98,34 +133,36 @@ export default function PredictionPanel({ tournament, userEntry, onUnlockSlots, 
               </div>
 
               {isLocked ? (
-                <div className="flex items-center justify-center py-4 text-gray-500 text-sm font-medium">
+                <div className="flex items-center justify-center py-4 text-muted-foreground text-sm font-medium">
                   공유하고 슬롯 잠금 해제
                 </div>
               ) : (
                 <div className="space-y-3">
                   {isType1 ? (
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">예측값 (0-99)</label>
+                      <label className="block text-xs text-muted-foreground mb-1">예측값 (0-99)</label>
                       <input
                         type="number"
                         min="0"
                         max="99"
-                        className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white outline-none focus:border-purple-500"
+                        className="w-full bg-muted border border-input rounded p-2 text-foreground outline-none focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         value={slots[index]?.val ?? ''}
                         onChange={(e) => handleInputChange(index, 'val', e.target.value)}
                         placeholder="45"
+                        disabled={isPredictionDisabled}
                       />
                     </div>
                   ) : (
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <label className="block text-xs text-gray-500 mb-1">목표 가격</label>
+                        <label className="block text-xs text-muted-foreground mb-1">목표 가격</label>
                         <input
                           type="number"
-                          className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white outline-none focus:border-purple-500"
+                          className="w-full bg-muted border border-input rounded p-2 text-foreground outline-none focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                           value={slots[index]?.price ?? ''}
                           onChange={(e) => handleInputChange(index, 'price', e.target.value)}
                           placeholder="75000"
+                          disabled={isPredictionDisabled}
                         />
                       </div>
                     </div>
@@ -139,7 +176,7 @@ export default function PredictionPanel({ tournament, userEntry, onUnlockSlots, 
 
       <button
         onClick={handleSubmit}
-        disabled={loading}
+        disabled={loading || isPredictionDisabled}
         className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-purple-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
       >
         {loading ? '제출 중...' : '예측 제출하기'}

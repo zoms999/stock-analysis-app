@@ -22,6 +22,17 @@ export default function TournamentItem({ tournament }: TournamentItemProps) {
   };
 
   const typeLabel = tournament.event_type === 'PREDICTION' ? '가격 예측' : '소수점 로또';
+  const prizeLabel = tournament.prize_type === 'VOUCHER' ? '🛒 상품권' : '💰 포인트';
+
+  const formatPeriod = () => {
+      // Legacy fallback
+      if (!tournament.start_date || !tournament.end_date) {
+         return format(new Date(tournament.target_date), 'MM.dd HH:mm');
+      }
+      const start = new Date(tournament.start_date);
+      const end = new Date(tournament.end_date);
+      return `${format(start, 'MM.dd')} ~ ${format(end, 'MM.dd')}`;
+  };
 
   return (
     <Link href={`/tournaments/${tournament.id}`}>
@@ -36,9 +47,14 @@ export default function TournamentItem({ tournament }: TournamentItemProps) {
               <span className="px-2.5 py-1 rounded-md text-[10px] font-bold border bg-secondary text-secondary-foreground border-border">
                 {typeLabel}
               </span>
+              {tournament.stock_symbol && (
+                  <span className="px-2.5 py-1 rounded-md text-[10px] font-bold border bg-blue-500/10 text-blue-500 border-blue-500/20">
+                     {tournament.stock_symbol}
+                  </span>
+              )}
             </div>
             <span className="text-muted-foreground text-xs font-mono">
-              {format(new Date(tournament.target_date), 'MM월 dd일 HH:mm')}
+              {formatPeriod()}
             </span>
           </div>
           
@@ -52,7 +68,7 @@ export default function TournamentItem({ tournament }: TournamentItemProps) {
           
           <div className="flex items-center justify-between pt-4 border-t border-border">
             <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+              <span className="text-xs text-muted-foreground">{prizeLabel}</span>
               <span className="text-yellow-500 font-bold text-sm tracking-wide">{tournament.prize_pool || '미정'}</span>
             </div>
             

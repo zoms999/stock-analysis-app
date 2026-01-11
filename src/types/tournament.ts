@@ -6,10 +6,17 @@ export interface Tournament {
   title: string;
   description: string | null;
   event_type: TournamentType;
-  target_date: string; // timestamptz
+  target_date: string; // Legacy support or same as end_date
   status: TournamentStatus;
   prize_pool: string | null;
   created_at: string;
+  
+  // ✅ New Fields
+  start_date?: string;
+  end_date?: string;
+  stock_symbol?: string;
+  prize_type?: 'POINT' | 'VOUCHER';
+  ranking_rules?: string;
 }
 
 export interface PredictionSlot {

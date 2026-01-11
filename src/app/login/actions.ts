@@ -70,6 +70,10 @@ export async function signup(formData: FormData) {
     redirectWithMessage({ error: '비밀번호는 6자 이상이어야 합니다' })
   }
 
+  if (!nickname || nickname.trim().length === 0) {
+    redirectWithMessage({ error: '닉네임을 입력해주세요' })
+  }
+
   const siteUrl = await getSiteUrl();
 
   const { data, error } = await supabase.auth.signUp({

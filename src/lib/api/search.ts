@@ -89,4 +89,33 @@ export async function searchSymbol(query: string): Promise<SearchResult | null> 
   }
 }
 
+/**
+ * 키워드로 종목 목록을 검색합니다. (Dropdown용)
+ */
+export async function searchStocks(query: string): Promise<SearchResult[]> {
+  const q = query?.trim();
+  if (!q) return [];
+
+  try {
+    const tdUrl = `/api/twelvedata/search?q=${encodeURIComponent(q)}`;
+    const tdRes = await fetch(tdUrl);
+    
+    if (tdRes.ok) {
+      const tdData: any = await tdRes.json().catch(() => null);
+      if (tdData && Array.isArray(tdData.data)) {
+        return tdData.data.map((item: any) => ({
+             symbol: item.symbol,
+             exchange: item.exchange,
+             type: item.instrument_type,
+             country: item.country
+        }));
+      }
+    }
+    return [];
+  } catch (e) {
+    console.error("searchStocks error:", e);
+    return [];
+  }
+}
+
 

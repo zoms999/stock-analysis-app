@@ -6,7 +6,9 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-export default async function TournamentResultsPage({ params }: { params: { id: string } }) {
+import { format } from 'date-fns';
+
+export default async function TournamentResultsPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const { id } = await params;
 
@@ -56,15 +58,24 @@ export default async function TournamentResultsPage({ params }: { params: { id: 
   // Sort by rank
   participantList.sort((a, b) => a.rank - b.rank);
 
+  // Date Formatting
+  const startDate = tournament.start_date ? new Date(tournament.start_date) : null;
+  const endDate = tournament.end_date ? new Date(tournament.end_date) : new Date(tournament.target_date);
+  const dateStr = startDate 
+        ? `${format(startDate, 'yyyy.MM.dd')} ~ ${format(endDate, 'MM.dd')}`
+        : format(endDate, 'yyyy.MM.dd');
+
+  const prizeUnit = tournament.prize_type === 'VOUCHER' ? '상품권' : 'P';
+
   return (
     <div className="min-h-screen bg-black text-white p-8">
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="text-center space-y-4">
-          <Badge className="mb-2 bg-gray-800">종료된 대회</Badge>
+          <Badge className="mb-2 bg-gray-800">{dateStr} 종료</Badge>
           <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-600">
             {tournament.title} 결과
           </h1>
-          <p className="text-gray-400">총 상금 {tournament.prize_pool}</p>
+          <p className="text-gray-400">총 상금 {tournament.prize_pool} {prizeUnit !== 'P' ? '' : prizeUnit}</p>
         </div>
 
         {/* Winners Podium */}
@@ -90,7 +101,7 @@ export default async function TournamentResultsPage({ params }: { params: { id: 
                 </CardHeader>
                 <CardContent className="text-center">
                     <div className="text-2xl font-bold text-white mb-1">
-                        {winner.prize.toLocaleString()} P
+                        {winner.prize.toLocaleString()} {prizeUnit}
                     </div>
                 </CardContent>
              </Card>
@@ -119,7 +130,7 @@ export default async function TournamentResultsPage({ params }: { params: { id: 
                                 </div>
                             </div>
                             <div className="text-gray-400">
-                                {p.prize > 0 && `+${p.prize.toLocaleString()} P`}
+                                {p.prize > 0 && `+${p.prize.toLocaleString()} ${prizeUnit}`}
                             </div>
                         </div>
                     ))}

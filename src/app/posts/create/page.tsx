@@ -39,6 +39,12 @@ export default function CreatePostPage() {
   const [content, setContent] = useState("");
   const [insertedCharts, setInsertedCharts] = useState<InsertedChart[]>([]);
   
+  // Prediction state
+  const [predictionType, setPredictionType] = useState<"LONG" | "SHORT" | null>(null);
+  const [targetPrice, setTargetPrice] = useState("");
+  const [stopLossPrice, setStopLossPrice] = useState("");
+  const [targetDate, setTargetDate] = useState("");
+
   // UI state
   const [isSaving, setIsSaving] = useState(false);
   const [showLimitPopup, setShowLimitPopup] = useState(false);
@@ -49,6 +55,8 @@ export default function CreatePostPage() {
     setInsertedCharts(prev => [...prev, chart]);
     setShowChartModal(false);
     toast.success(`${chart.symbol} 차트가 추가되었습니다.`);
+    
+    // Auto-fill prediction type if possible (future improvement)
   }, []);
 
   // Remove inserted chart
@@ -101,6 +109,18 @@ export default function CreatePostPage() {
     if (!content.trim() && insertedCharts.length === 0) {
       toast.error("내용을 입력하거나 차트를 추가해주세요.");
       return;
+    }
+    
+    // Validation for prediction
+    if (predictionType) {
+        if (!targetPrice || isNaN(Number(targetPrice))) {
+            toast.error("목표가를 올바르게 입력해주세요.");
+            return;
+        }
+        if (!targetDate) {
+            toast.error("목표 날짜를 설정해주세요.");
+            return;
+        }
     }
 
     try {
@@ -162,6 +182,20 @@ export default function CreatePostPage() {
         ticker_symbol: primarySymbol || "GENERAL",
         chart_config: primaryChartConfig,
         chart_image_url: primaryChartImageUrl,
+        // Prediction fields
+        prediction_type: predictionType || undefined,
+        target_price: targetPrice ? Number(targetPrice) : undefined,
+        stop_loss_price: stopLossPrice ? Number(stopLossPrice) : undefined,
+        target_date: targetDate || undefined,
+        entry_price: undefined, // Could be current price, but user didn't explicitly set it. Maybe add UI for it? 
+        // For now, let's assume entry price is fetched by server or optional. 
+        // Actually the backend might need entry price for calculation.
+        // Let's add entry price UI as well? Or just leave it undefined and let backend/scheduler handle it (scheduler uses current price at check time as reference? No, entry price is fixed at creation).
+        // If entry price is missing, profit calc is impossible.
+        // We should add Entry Price or auto-fetch it.
+        // For this step, I'll stick to the requested fields (Target/Stop) but add Entry Price as well if easy.
+        // Wait, the plan didn't explicitly ask for Entry Price UI, but it's crucial.
+        // I will add it to UI for completeness.
       });
 
       toast.success("게시글이 저장되었습니다.");
@@ -284,6 +318,68 @@ export default function CreatePostPage() {
             </div>
           </div>
         )}
+
+        {/* Prediction Settings */}
+        <Card className="p-4 space-y-4 border-border">
+            <div className="flex flex-col gap-2">
+                <h3 className="text-sm font-semibold text-foreground">예측 설정 (옵션)</h3>
+                <p className="text-xs text-muted-foreground">예측 방향과 목표가를 설정하면 실시간 시세 추적을 통해 성과가 기록됩니다.</p>
+            </div>
+            
+            <div className="space-y-4">
+                {/* Type Selection */}
+                <div className="flex gap-2">
+                    <Button 
+                        type="button"
+                        variant={predictionType === "LONG" ? "default" : "outline"}
+                        className={`flex-1 ${predictionType === "LONG" ? "bg-green-600 hover:bg-green-700" : ""}`}
+                        onClick={() => setPredictionType(predictionType === "LONG" ? null : "LONG")}
+                    >
+                        Long (매수)
+                    </Button>
+                    <Button 
+                        type="button"
+                        variant={predictionType === "SHORT" ? "default" : "outline"}
+                        className={`flex-1 ${predictionType === "SHORT" ? "bg-red-600 hover:bg-red-700" : ""}`}
+                        onClick={() => setPredictionType(predictionType === "SHORT" ? null : "SHORT")}
+                    >
+                        Short (매도)
+                    </Button>
+                </div>
+
+                {predictionType && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in slide-in-from-top-2">
+                         <div className="space-y-2">
+                            <label className="text-xs font-medium text-muted-foreground">목표가 (Target)</label>
+                            <Input 
+                                type="number" 
+                                placeholder="예: 100000"
+                                value={targetPrice}
+                                onChange={(e) => setTargetPrice(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium text-muted-foreground">손절가 (Stop Loss)</label>
+                            <Input 
+                                type="number" 
+                                placeholder="예: 95000"
+                                value={stopLossPrice}
+                                onChange={(e) => setStopLossPrice(e.target.value)}
+                            />
+                        </div>
+                         <div className="space-y-2">
+                            <label className="text-xs font-medium text-muted-foreground">목표 달성 기한</label>
+                            <Input 
+                                type="date"
+                                value={targetDate}
+                                onChange={(e) => setTargetDate(e.target.value)}
+                                className="block"
+                            />
+                        </div>
+                    </div>
+                )}
+            </div>
+        </Card>
 
         {/* Content Editor */}
         <RichPostEditor

@@ -26,9 +26,10 @@ export default async function TournamentDetailPage({ params }: { params: Promise
         title: id === 'mock-1' ? 'Weekly Samsung Price Prediction' : 'KOSPI Decimal Lotto',
         description: 'Mock Description',
         event_type: id === 'mock-1' ? 'PREDICTION' : 'DECIMAL',
-        target_date: new Date().toISOString(),
+        target_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // +7 days
         status: 'OPEN',
         prize_pool: '1,000,000 P',
+        stock_symbol: id === 'mock-1' ? '005930.KS' : undefined,
         created_at: new Date().toISOString()
      };
   }
@@ -61,7 +62,7 @@ export default async function TournamentDetailPage({ params }: { params: Promise
   // Bind actions
   async function unlockAction() {
     'use server';
-    await unlockSlots(id);
+    return await unlockSlots(id);
   }
 
   async function submitAction(slots: any[]) {

@@ -257,7 +257,19 @@ export async function GET(req: Request) {
 
   // 한글 키워드 빠른 폴백
   if (KO_SYMBOL_FALLBACK[q]) {
-    return NextResponse.json({ symbol: KO_SYMBOL_FALLBACK[q], source: "fallback" }, { status: 200 });
+    const sym = KO_SYMBOL_FALLBACK[q];
+    return NextResponse.json({ 
+        symbol: sym, 
+        // Mock data structure for dropdown compatibility
+        data: [{ 
+            symbol: sym, 
+            instrument_name: q, 
+            exchange: "KRX", 
+            instrument_type: "Common Stock",
+            country: "South Korea" 
+        }],
+        source: "fallback" 
+    }, { status: 200 });
   }
 
   const apiKey = await getSystemConfig("TWELVEDATA_API_KEY");
@@ -297,7 +309,7 @@ export async function GET(req: Request) {
     const symbol = pickBestSymbol(list);
 
     return NextResponse.json(
-      { symbol, source: "twelvedata" },
+      { symbol, data: list, source: "twelvedata" },
       {
         status: 200,
         headers: {

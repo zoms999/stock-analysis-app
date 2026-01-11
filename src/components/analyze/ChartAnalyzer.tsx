@@ -473,17 +473,17 @@ export function ChartAnalyzer({
         });
 
         const areaGlowSeries = chart.addSeries(AreaSeries, {
-            topColor: "rgba(41, 98, 255, 0)",
+            topColor: "rgba(0, 217, 255, 0)",
             bottomColor: "rgba(0, 0, 0, 0)",
-            lineColor: "rgba(41, 98, 255, 0.3)",
+            lineColor: "rgba(0, 217, 255, 0.3)",
             lineWidth: 4,
             visible: chartStyle === "line",
         });
 
         const areaSeries = chart.addSeries(AreaSeries, {
-            topColor: "rgba(41, 98, 255, 0.1)",
+            topColor: "rgba(0, 217, 255, 0.1)",
             bottomColor: "rgba(0, 0, 0, 0)",
-            lineColor: "#2962FF",
+            lineColor: "#00D9FF",
             lineWidth: 4,
             visible: chartStyle === "line",
         });

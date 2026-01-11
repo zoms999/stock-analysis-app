@@ -758,21 +758,21 @@ export function SavedChartViewer({
             visible: viewStyle === "candle",
         });
 
-        // ✅ 파란색 실측 라인 광채 (뒤에 배치)
+        // ✅ 청록색 실측 라인 광채 (뒤에 배치)
         const areaGlow = chart.addSeries(AreaSeries, {
-            topColor: "rgba(41, 98, 255, 0)",
+            topColor: "rgba(0, 217, 255, 0)",
             bottomColor: "rgba(0, 0, 0, 0)",
-            lineColor: "rgba(41, 98, 255, 0.25)", // 반투명한 파란색
+            lineColor: "rgba(0, 217, 255, 0.25)", // 반투명한 청록색
             lineWidth: 8 as any,                  // 상세에서만 글로우
             // ✅ 카드(리스트)에서는 글로우가 번져 보이므로 비활성화
             visible: viewStyle === "line" && mode !== "card",
         });
 
-        // ✅ 파란색 실측 메인 라인
+        // ✅ 청록색 실측 메인 라인
         const area = chart.addSeries(AreaSeries, {
-            topColor: "rgba(41, 98, 255, 0.1)", // 위쪽은 아주 살짝 투명하게 채움
+            topColor: "rgba(0, 217, 255, 0.1)", // 위쪽은 아주 살짝 투명하게 채움
             bottomColor: "rgba(0, 0, 0, 0)",
-            lineColor: "#2962FF",               // 메인 파란색
+            lineColor: "#00D9FF",               // 메인 청록색
             lineWidth: 4 as any,                       // 2 -> 4로 두껍게 변경
             visible: viewStyle === "line",
         });

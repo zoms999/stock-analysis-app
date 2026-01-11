@@ -34,6 +34,48 @@ export function calculateProfitPercentage(
 }
 
 /**
+ * Calculate achievement rate (정확도) based on predicted vs actual movement
+ * Formula: (실제 상승폭 ÷ 예측 상승폭) × 100
+ */
+export function calculateAchievementRate(
+  entryPrice: number,
+  targetPrice: number,
+  currentPrice: number,
+  predictionType: PredictionType
+): number {
+  if (predictionType === "LONG") {
+    // 예측 상승폭
+    const predictedMove = targetPrice - entryPrice;
+    // 실제 상승폭
+    const actualMove = currentPrice - entryPrice;
+    
+    // Division by zero check
+    if (predictedMove === 0) return 0;
+    
+    // If price moved in opposite direction, return 0%
+    if (actualMove < 0) return 0;
+    
+    // Achievement rate
+    return (actualMove / predictedMove) * 100;
+  } else {
+    // SHORT
+    // 예측 하락폭
+    const predictedMove = entryPrice - targetPrice;
+    // 실제 하락폭
+    const actualMove = entryPrice - currentPrice;
+    
+    // Division by zero check
+    if (predictedMove === 0) return 0;
+    
+    // If price moved in opposite direction, return 0%
+    if (actualMove < 0) return 0;
+    
+    // Achievement rate
+    return (actualMove / predictedMove) * 100;
+  }
+}
+
+/**
  * Determine prediction status based on current price
  */
 export function calculatePredictionStatus(
@@ -97,8 +139,10 @@ export function calculateAccuracy(
     prediction.targetDate
   );
 
-  const profitPercentage = calculateProfitPercentage(
+  // Use achievement rate instead of profit percentage
+  const profitPercentage = calculateAchievementRate(
     prediction.entryPrice,
+    prediction.targetPrice,
     currentPrice,
     prediction.predictionType
   );

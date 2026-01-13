@@ -26,6 +26,13 @@ export async function GET() {
         });
       }
 
+      // 7. Trigger Daily Accuracy Calculation (New System)
+      const { error: dailyRpcError } = await supabase.rpc('calculate_daily_accuracies_v4');
+      if (dailyRpcError) {
+        console.error('Failed to update daily accuracies:', dailyRpcError);
+        // Continue, as this is a separate system
+      }
+
       return NextResponse.json({ 
         message: 'Prices and Accuracies updated successfully', 
         data: result 

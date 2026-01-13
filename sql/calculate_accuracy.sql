@@ -35,50 +35,42 @@ BEGIN
           AND prediction_type IS NOT NULL
     LOOP
         -- Get the specific latest price for this ticker from market_prices
+        -- For crypto symbols like BTC, try both BTC and BTC-USD
         SELECT price INTO latest_price
         FROM public.market_prices
         WHERE ticker_symbol = r.ticker_symbol
-          OR ticker_symbol = (SELECT symbol FROM public.assets WHERE api_id = r.ticker_symbol LIMIT 1) -- Try to map if needed
+           OR ticker_symbol = r.ticker_symbol || '-USD'  -- Try crypto variant
+           OR ticker_symbol = (SELECT symbol FROM public.assets WHERE api_id = r.ticker_symbol LIMIT 1) -- Try to map if needed
         ORDER BY recorded_at DESC
         LIMIT 1;
 
-        -- If price exists, calculate achievement rate
+        -- If price exists, calculate achievement rate (direction-agnostic)
         IF latest_price IS NOT NULL THEN
-            IF r.prediction_type = 'LONG' THEN
-                -- 예측 상승폭 = target_price - entry_price
-                predicted_move := r.target_price - r.entry_price;
-                -- 실제 상승폭 = current_price - entry_price
-                actual_move := latest_price - r.entry_price;
+            -- Calculate predicted move (can be positive or negative)
+            predicted_move := r.target_price - r.entry_price;
+            -- Calculate actual move (can be positive or negative)
+            actual_move := latest_price - r.entry_price;
+            
+            -- Avoid division by zero
+            IF predicted_move != 0 THEN
+                -- Achievement rate = (actual move / predicted move) × 100
+                -- This works for both LONG and SHORT:
+                -- - LONG: entry=100, target=110, current=105 → (5/10)×100 = 50%
+                -- - SHORT: entry=110, target=100, current=105 → (-5/-10)×100 = 50%
+                -- - Opposite direction: entry=100, target=110, current=95 → (-5/10)×100 = -50% → 0%
+                calculated_accuracy := (actual_move / predicted_move) * 100;
                 
-                -- Avoid division by zero
-                IF predicted_move > 0 THEN
-                    -- If moved in opposite direction, set to 0
-                    IF actual_move < 0 THEN
-                        calculated_accuracy := 0;
-                    ELSE
-                        calculated_accuracy := (actual_move / predicted_move) * 100;
-                    END IF;
-                ELSE
+                -- If moved in opposite direction (negative achievement), set to 0
+                IF calculated_accuracy < 0 THEN
                     calculated_accuracy := 0;
                 END IF;
                 
-            ELSIF r.prediction_type = 'SHORT' THEN
-                -- 예측 하락폭 = entry_price - target_price
-                predicted_move := r.entry_price - r.target_price;
-                -- 실제 하락폭 = entry_price - current_price
-                actual_move := r.entry_price - latest_price;
-                
-                -- Avoid division by zero
-                IF predicted_move > 0 THEN
-                    -- If moved in opposite direction, set to 0
-                    IF actual_move < 0 THEN
-                        calculated_accuracy := 0;
-                    ELSE
-                        calculated_accuracy := (actual_move / predicted_move) * 100;
-                    END IF;
-                ELSE
-                    calculated_accuracy := 0;
+                -- Cap at 100% if overachieved
+                IF calculated_accuracy > 100 THEN
+                    calculated_accuracy := 100;
                 END IF;
+            ELSE
+                calculated_accuracy := 0;
             END IF;
 
             -- Update the post

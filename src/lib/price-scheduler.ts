@@ -110,7 +110,6 @@ export async function updateMarketPrices() {
     records.push({
       ticker_symbol: symbol,
       price: price,
-      source: "yahoo",
       recorded_at: now,
     });
   }

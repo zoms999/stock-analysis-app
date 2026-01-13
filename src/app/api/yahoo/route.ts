@@ -58,6 +58,13 @@ export async function GET(request: Request) {
         if (isCrypto) yahooSymbol = `${yahooSymbol.toUpperCase()}-USD`;
     }
 
+    // Indices Mapping
+    if (yahooSymbol.toUpperCase() === 'KOSPI') yahooSymbol = '^KS11';
+    if (yahooSymbol.toUpperCase() === 'KOSDAQ') yahooSymbol = '^KQ11';
+    if (yahooSymbol.toUpperCase() === 'SPX' || yahooSymbol.toUpperCase() === 'S&P500') yahooSymbol = '^GSPC';
+    if (yahooSymbol.toUpperCase() === 'DJI') yahooSymbol = '^DJI';
+    if (yahooSymbol.toUpperCase() === 'IXIC') yahooSymbol = '^IXIC';
+
     // 3. Fetch from Yahoo Finance
     const validIntervals = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', '3mo'];
     const safeInterval = validIntervals.includes(interval) ? interval : '1d';

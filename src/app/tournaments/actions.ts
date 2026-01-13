@@ -46,12 +46,14 @@ export async function unlockSlots(tournamentId: string) {
       // Fetch tournament to get duration
       const { data: tournament } = await supabase
         .from('tournaments')
-        .select('start_date, end_date, target_date')
+        .select('event_type, start_date, end_date, target_date')
         .eq('id', tournamentId)
         .single();
       
-      let maxSlots = 5; // Default fallback
-      if (tournament?.start_date && tournament?.end_date) {
+      let maxSlots = 5; 
+      if (tournament?.event_type === 'DECIMAL') {
+          maxSlots = 3;
+      } else if (tournament?.start_date && tournament?.end_date) {
         const start = new Date(tournament.start_date);
         const end = new Date(tournament.end_date);
         const diffTime = Math.abs(end.getTime() - start.getTime());
@@ -73,15 +75,18 @@ export async function unlockSlots(tournamentId: string) {
     } else {
       console.log('[unlockSlots] Creating new entry');
       
+      
       // Fetch tournament to get duration
       const { data: tournament } = await supabase
         .from('tournaments')
-        .select('start_date, end_date, target_date')
+        .select('event_type, start_date, end_date, target_date')
         .eq('id', tournamentId)
         .single();
       
       let maxSlots = 5; // Default fallback
-      if (tournament?.start_date && tournament?.end_date) {
+      if (tournament?.event_type === 'DECIMAL') {
+          maxSlots = 3;
+      } else if (tournament?.start_date && tournament?.end_date) {
         const start = new Date(tournament.start_date);
         const end = new Date(tournament.end_date);
         const diffTime = Math.abs(end.getTime() - start.getTime());

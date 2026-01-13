@@ -41,6 +41,7 @@ export default function CreatePostPage() {
   
   // Prediction state
   const [predictionType, setPredictionType] = useState<"LONG" | "SHORT" | null>(null);
+  const [entryPrice, setEntryPrice] = useState("");
   const [targetPrice, setTargetPrice] = useState("");
   const [stopLossPrice, setStopLossPrice] = useState("");
   const [targetDate, setTargetDate] = useState("");
@@ -113,6 +114,10 @@ export default function CreatePostPage() {
     
     // Validation for prediction
     if (predictionType) {
+        if (!entryPrice || isNaN(Number(entryPrice))) {
+            toast.error("진입가를 올바르게 입력해주세요.");
+            return;
+        }
         if (!targetPrice || isNaN(Number(targetPrice))) {
             toast.error("목표가를 올바르게 입력해주세요.");
             return;
@@ -176,7 +181,7 @@ export default function CreatePostPage() {
         finalContent += chartRefs.join('');
       }
 
-      await createPost({
+      const createdPost = await createPost({
         title: title.trim(),
         content: finalContent,
         ticker_symbol: primarySymbol || "GENERAL",
@@ -184,19 +189,38 @@ export default function CreatePostPage() {
         chart_image_url: primaryChartImageUrl,
         // Prediction fields
         prediction_type: predictionType || undefined,
+        entry_price: entryPrice ? Number(entryPrice) : undefined,
         target_price: targetPrice ? Number(targetPrice) : undefined,
         stop_loss_price: stopLossPrice ? Number(stopLossPrice) : undefined,
         target_date: targetDate || undefined,
-        entry_price: undefined, // Could be current price, but user didn't explicitly set it. Maybe add UI for it? 
-        // For now, let's assume entry price is fetched by server or optional. 
-        // Actually the backend might need entry price for calculation.
-        // Let's add entry price UI as well? Or just leave it undefined and let backend/scheduler handle it (scheduler uses current price at check time as reference? No, entry price is fixed at creation).
-        // If entry price is missing, profit calc is impossible.
-        // We should add Entry Price or auto-fetch it.
-        // For this step, I'll stick to the requested fields (Target/Stop) but add Entry Price as well if easy.
-        // Wait, the plan didn't explicitly ask for Entry Price UI, but it's crucial.
-        // I will add it to UI for completeness.
       });
+
+      // Save daily predictions if available in chart config
+      if (primaryChartConfig && (primaryChartConfig as any).prediction_points && Array.isArray((primaryChartConfig as any).prediction_points) && createdPost) {
+        const points = (primaryChartConfig as any).prediction_points;
+        const { saveDailyPredictions } = await import("@/lib/api/daily-predictions");
+        
+        const dailyPredictions = points.map((point: any) => {
+            let dateStr: string;
+            if (typeof point.time === 'number') {
+                dateStr = new Date(point.time * 1000).toISOString().split('T')[0];
+            } else if (typeof point.time === 'string') {
+                dateStr = point.time;
+            } else {
+                dateStr = new Date().toISOString().split('T')[0];
+            }
+            
+            return {
+                date: dateStr,
+                price: point.value
+            };
+        });
+        
+        if (dailyPredictions.length > 0) {
+            console.log('Saving daily predictions from create page:', dailyPredictions);
+            await saveDailyPredictions(createdPost.id, dailyPredictions);
+        }
+      }
 
       toast.success("게시글이 저장되었습니다.");
       router.push("/posts");
@@ -348,33 +372,49 @@ export default function CreatePostPage() {
                 </div>
 
                 {predictionType && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in slide-in-from-top-2">
-                         <div className="space-y-2">
-                            <label className="text-xs font-medium text-muted-foreground">목표가 (Target)</label>
-                            <Input 
-                                type="number" 
-                                placeholder="예: 100000"
-                                value={targetPrice}
-                                onChange={(e) => setTargetPrice(e.target.value)}
-                            />
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">진입가 (Entry Price) *</label>
+                                <Input 
+                                    type="number" 
+                                    placeholder="예: 95000"
+                                    value={entryPrice}
+                                    onChange={(e) => setEntryPrice(e.target.value)}
+                                    step="0.01"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">목표가 (Target Price) *</label>
+                                <Input 
+                                    type="number" 
+                                    placeholder="예: 100000"
+                                    value={targetPrice}
+                                    onChange={(e) => setTargetPrice(e.target.value)}
+                                    step="0.01"
+                                />
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-xs font-medium text-muted-foreground">손절가 (Stop Loss)</label>
-                            <Input 
-                                type="number" 
-                                placeholder="예: 95000"
-                                value={stopLossPrice}
-                                onChange={(e) => setStopLossPrice(e.target.value)}
-                            />
-                        </div>
-                         <div className="space-y-2">
-                            <label className="text-xs font-medium text-muted-foreground">목표 달성 기한</label>
-                            <Input 
-                                type="date"
-                                value={targetDate}
-                                onChange={(e) => setTargetDate(e.target.value)}
-                                className="block"
-                            />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">손절가 (Stop Loss)</label>
+                                <Input 
+                                    type="number" 
+                                    placeholder="예: 90000"
+                                    value={stopLossPrice}
+                                    onChange={(e) => setStopLossPrice(e.target.value)}
+                                    step="0.01"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">목표 달성 기한 *</label>
+                                <Input 
+                                    type="date"
+                                    value={targetDate}
+                                    onChange={(e) => setTargetDate(e.target.value)}
+                                    className="block"
+                                />
+                            </div>
                         </div>
                     </div>
                 )}

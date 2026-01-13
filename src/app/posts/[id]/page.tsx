@@ -18,6 +18,7 @@ import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/clie
 import { getKoreanName } from "@/lib/constants/krx_names";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CountryFlag } from "@/components/ui/CountryFlag";
+import { DailyAccuracyTable } from "@/components/predictions/DailyAccuracyTable";
 
 type CommentItem = {
   id: string;
@@ -531,6 +532,13 @@ export default function PostDetailPage() {
             />
           </div>
         </section>
+
+        {/* Daily Accuracy Table */}
+        {post.id && (
+          <section>
+            <DailyAccuracyTable postId={post.id} />
+          </section>
+        )}
       </article>
 
       {/* Below chart: content + same-symbol list */}

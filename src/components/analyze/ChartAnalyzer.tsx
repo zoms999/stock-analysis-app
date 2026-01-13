@@ -25,6 +25,7 @@ interface ChartAnalyzerProps {
     interval: string; // "Y" | "M" | "W" | "D" | "60" | "1"
     chartStyle?: "candle" | "line";
     onPointsChange?: (points: PredictionPoint[]) => void;
+    onDataLoaded?: (data: CandlestickData[]) => void;
     onChartCapture?: (imageDataUrl: string) => void;
     minDate?: Date;
     maxDate?: Date;
@@ -45,6 +46,7 @@ export function ChartAnalyzer({
     interval,
     chartStyle = "candle",
     onPointsChange,
+    onDataLoaded,
     onChartCapture,
     minDate,
     maxDate,
@@ -769,6 +771,10 @@ export function ChartAnalyzer({
                 areaSeriesRef.current.setData(areaData);
                 areaGlowSeriesRef.current?.setData(areaData);
                 volumeSeriesRef.current.setData(volumeData);
+
+                if (onDataLoaded) {
+                    onDataLoaded(candleData);
+                }
 
                 const latest = data[data.length - 1];
                 const previous = data[data.length - 2];

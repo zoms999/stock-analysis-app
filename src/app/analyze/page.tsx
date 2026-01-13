@@ -31,6 +31,7 @@ export default function AnalyzePage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [isSearching, setIsSearching] = useState(false);
     const [points, setPoints] = useState<PredictionPoint[]>([]);
+    const [chartData, setChartData] = useState<any[]>([]); // To store OHLC data for baseline calculation
     const [isSaving, setIsSaving] = useState(false);
     const [chartImageUrl, setChartImageUrl] = useState<string>("");
     const krName = symbol ? getKoreanName(symbol) : null;
@@ -125,7 +126,44 @@ export default function AnalyzePage() {
                 }
             }
 
-            await createPost({
+            // Extract daily predictions from all chart points
+            let predictionData: {
+                prediction_type?: "LONG" | "SHORT";
+                entry_price?: number;
+                target_price?: number;
+                target_date?: string;
+            } = {};
+
+            if (points && points.length >= 2) {
+                // First point = entry, Last point = target (for backward compatibility)
+                const firstPoint = points[0];
+                const lastPoint = points[points.length - 1];
+                
+                const entryPrice = firstPoint.value;
+                const targetPrice = lastPoint.value;
+                
+                // Determine prediction type based on direction
+                const predictionType = targetPrice > entryPrice ? "LONG" : "SHORT";
+                
+                // Convert time to date string for target_date
+                let targetDateStr: string | undefined;
+                if (typeof lastPoint.time === 'number') {
+                    targetDateStr = new Date(lastPoint.time * 1000).toISOString().split('T')[0];
+                } else if (typeof lastPoint.time === 'string') {
+                    targetDateStr = lastPoint.time;
+                }
+                
+                predictionData = {
+                    prediction_type: predictionType,
+                    entry_price: entryPrice,
+                    target_price: targetPrice,
+                    target_date: targetDateStr,
+                };
+                
+                console.log('Auto-extracted prediction data:', predictionData);
+            }
+
+            const createdPost = await createPost({
                 title: `${symbol} 차트 분석`,
                 content: content,
                 ticker_symbol: symbol,
@@ -150,7 +188,83 @@ export default function AnalyzePage() {
                     })()
                 },
                 chart_image_url: uploadedImageUrl,
+                // Include auto-extracted prediction data
+                ...predictionData,
             });
+
+            // Save daily predictions for all chart points
+            if (points && points.length > 0 && createdPost) {
+                const { saveDailyPredictions } = await import("@/lib/api/daily-predictions");
+                
+                const dailyPredictions = points.map(point => {
+                    let dateStr: string;
+                    let pointTimeMs: number;
+                    
+                    if (typeof point.time === 'number') {
+                        pointTimeMs = point.time * 1000;
+                        dateStr = new Date(pointTimeMs).toISOString().split('T')[0];
+                    } else if (typeof point.time === 'string') {
+                        const d = new Date(point.time);
+                        pointTimeMs = d.getTime();
+                        dateStr = point.time;
+                    } else {
+                        pointTimeMs = Date.now();
+                        dateStr = new Date().toISOString().split('T')[0];
+                    }
+                    
+                    // Find actual previous close from chart data
+                    let previousClose: number | undefined;
+                    
+                    if (chartData && chartData.length > 0) {
+                        // Sort just in case, though usually sorted
+                        // Find the latest candle BEFORE the prediction date
+                        // Candle time is usually open time. 
+                        // If prediction is for 2026-01-10, we want close of 2026-01-09.
+                        // We check all candles where candle.time < prediction.time
+                        
+                        let bestMatch = null;
+                        
+                        // Assuming chartData is sorted ascending
+                        for (let i = chartData.length - 1; i >= 0; i--) {
+                            const candle = chartData[i];
+                            let candleTimeMs: number;
+                            
+                            if (typeof candle.time === 'number') {
+                                candleTimeMs = candle.time * 1000;
+                            } else {
+                                candleTimeMs = new Date(candle.time).getTime();
+                            }
+                            
+                            // Using a slight buffer (e.g. 1 hour) to handle intraday shifts if any, 
+                            // but strictly we want candle BEFORE the prediction point time.
+                            // If prediction point is exactly at a candle time, do we want THAT candle's close?
+                            // Usually prediction is for "tomorrow" or "future".
+                            // If user clicked 01-10, they expect 01-09 close as baseline.
+                            // So we look for time < pointTimeMs.
+                            
+                            // However, if the point is snapped to 01-10, and we have 01-10 data...
+                            
+                            if (candleTimeMs < pointTimeMs) {
+                                bestMatch = candle;
+                                break;
+                            }
+                        }
+                        
+                        if (bestMatch) {
+                            previousClose = bestMatch.close;
+                        }
+                    }
+                    
+                    return {
+                        date: dateStr,
+                        price: point.value,
+                        previous_close: previousClose
+                    };
+                });
+                
+                console.log('Saving daily predictions:', dailyPredictions);
+                await saveDailyPredictions(createdPost.id, dailyPredictions);
+            }
 
             toast.success("분석이 저장되었습니다.");
             router.push("/");
@@ -273,7 +387,8 @@ export default function AnalyzePage() {
                                     interval={interval}
                                     chartStyle={chartStyle}
                                     onPointsChange={setPoints}
-                                    onChartCapture={setChartImageUrl}
+                                    onDataLoaded={setChartData}
+                                    onChartCapture={(url) => setChartImageUrl(url)}
                                 />
                             </div>
                         </Card>

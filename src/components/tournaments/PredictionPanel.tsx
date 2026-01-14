@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Tournament, TournamentEntry, PredictionSlot } from '@/types/tournament';
 import ViralModal from './ViralModal';
 
@@ -30,12 +31,12 @@ function formatDate(date: Date) {
   });
 }
 
-export default function PredictionPanel({ 
-  tournament, 
-  userEntry, 
-  onUnlockSlots, 
-  onSubmit, 
-  isPredictionDisabled = false, 
+export default function PredictionPanel({
+  tournament,
+  userEntry,
+  onUnlockSlots,
+  onSubmit,
+  isPredictionDisabled = false,
   disabledReason,
   startDate,
   endDate,
@@ -44,6 +45,7 @@ export default function PredictionPanel({
   maxSlots = 1,
   totalPossibleSlots = 3
 }: PredictionPanelProps) {
+  const router = useRouter();
   const [isViralModalOpen, setIsViralModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -57,13 +59,15 @@ export default function PredictionPanel({
       } else if (result?.mock) {
         alert("Mock 모드: 슬롯 잠금 해제 요청이 성공했습니다. (화면이 새로고침되지 않을 수 있습니다)");
       } else {
-        // Success - usually revalidatePath handles refresh
+        // Success - refresh to show updated slots
+        router.refresh();
       }
     } catch (e) {
       console.error(e);
       alert("알 수 없는 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleInputChange = (index: number, field: keyof PredictionSlot, value: string) => {
@@ -81,28 +85,36 @@ export default function PredictionPanel({
 
   const handleSubmit = async () => {
     setLoading(true);
-    await onSubmit(slots);
-    setLoading(false);
+    try {
+      await onSubmit(slots);
+      // Refresh the page to show updated data
+      router.refresh();
+    } catch (error) {
+      console.error('Submit error:', error);
+      alert('예측 제출 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="bg-card border border-border rounded-xl p-6">
       <div className="flex flex-col gap-1 mb-6">
         <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <span>나의 예측</span>
-            <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">
+          <span>나의 예측</span>
+          <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">
             {maxSlots}/{totalPossibleSlots} 슬롯
-            </span>
+          </span>
         </h3>
         {(startDate && endDate) && (
-            <div className="text-xs text-muted-foreground">
-                예측 기간: {formatDate(startDate)} ~ {formatDate(endDate)}
-            </div>
+          <div className="text-xs text-muted-foreground">
+            예측 기간: {formatDate(startDate)} ~ {formatDate(endDate)}
+          </div>
         )}
         {isPredictionDisabled && (
-            <span className="text-xs bg-red-900/50 text-red-400 px-2 py-1 rounded border border-red-800/50 w-fit mt-1">
-                {disabledReason || "예측 기간이 아닙니다"}
-            </span>
+          <span className="text-xs bg-red-900/50 text-red-400 px-2 py-1 rounded border border-red-800/50 w-fit mt-1">
+            {disabledReason || "예측 기간이 아닙니다"}
+          </span>
         )}
       </div>
 
@@ -115,8 +127,8 @@ export default function PredictionPanel({
             <div
               key={index}
               className={`relative p-4 rounded-lg border transition-all ${isLocked
-                  ? 'bg-muted/50 border-input opacity-70 border-dashed cursor-pointer hover:border-purple-500/50'
-                  : 'bg-background border-input'
+                ? 'bg-muted/50 border-input opacity-70 border-dashed cursor-pointer hover:border-purple-500/50'
+                : 'bg-background border-input'
                 }`}
               onClick={() => isLocked && setIsViralModalOpen(true)}
             >

@@ -920,18 +920,29 @@ export function ChartAnalyzer({
         predictionGlowSeriesRef.current?.setData([]);
         clearPredictionSegments();
 
-        let dataToShow = [...points];
-        if (lastCandle && points.length > 0) {
-            if (compareTime(points[0].time, lastCandle.time) !== 0) {
-                dataToShow = [lastCandle, ...points];
-            }
+        // ✅ 예측 포인트만 사용 (lastCandle 연결은 시각적으로만, 라인은 예측 포인트 간에만 그림)
+        if (points.length === 0) {
+            requestAnimationFrame(() => requestAnimationFrame(updateOverlayPositions));
+            return;
         }
+
+        // ✅ 예측 포인트들을 정렬
         const unique = new Map<Time, number>();
-        dataToShow.forEach((d) => unique.set(d.time, d.value));
+        points.forEach((d) => unique.set(d.time, d.value));
         const sorted = Array.from(unique.entries())
             .map(([t, v]) => ({ time: t, value: v }))
             .sort((a, b) => compareTime(a.time, b.time));
 
+        // ✅ lastCandle에서 첫 예측 포인트까지 연결선 (1개 세그먼트)
+        if (lastCandle && sorted.length > 0) {
+            if (compareTime(sorted[0].time, lastCandle.time) !== 0) {
+                const { seg, glow } = addPredictionSegmentSeries("#22c55e");
+                seg?.setData([lastCandle, sorted[0]]);
+                glow?.setData([lastCandle, sorted[0]]);
+            }
+        }
+
+        // ✅ 예측 포인트 간 세그먼트만 그리기 (마지막 이후로는 라인 없음)
         if (sorted.length < 2) {
             requestAnimationFrame(() => requestAnimationFrame(updateOverlayPositions));
             return;

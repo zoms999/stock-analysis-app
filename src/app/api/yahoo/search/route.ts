@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=1&newsCount=0`;
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0`;
 
     const res = await fetch(url, {
       // 일부 환경에서 403을 피하기 위해 UA를 넣어둡니다.
@@ -38,11 +38,17 @@ export async function GET(req: Request) {
     }
 
     const data = await res.json();
+    
+    // 단일 결과용 (기존 호환성)
     const symbol =
       data?.quotes && Array.isArray(data.quotes) && data.quotes.length > 0 ? data.quotes[0]?.symbol : null;
 
+    // 전체 결과 반환 (드롭다운용)
     return NextResponse.json(
-      { symbol: typeof symbol === "string" ? symbol : null },
+      { 
+        symbol: typeof symbol === "string" ? symbol : null,
+        quotes: data?.quotes || []
+      },
       {
         status: 200,
         headers: {

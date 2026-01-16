@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -37,6 +37,11 @@ export default function AnalyzePage() {
     const krName = symbol ? getKoreanName(symbol) : null;
 
     const [showLimitPopup, setShowLimitPopup] = useState(false);
+
+    // ✅ 차트 캡처 핸들러 (무한 루프 방지를 위해 useCallback 사용)
+    const handleChartCapture = useCallback((url: string) => {
+        setChartImageUrl(url);
+    }, []);
 
     // ✅ 모바일에서는 기본을 "일(일봉)"로 고정
     useEffect(() => {
@@ -388,7 +393,7 @@ export default function AnalyzePage() {
                                     chartStyle={chartStyle}
                                     onPointsChange={setPoints}
                                     onDataLoaded={setChartData}
-                                    onChartCapture={(url) => setChartImageUrl(url)}
+                                    onChartCapture={handleChartCapture}
                                 />
                             </div>
                         </Card>

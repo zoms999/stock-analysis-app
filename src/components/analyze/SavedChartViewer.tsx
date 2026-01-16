@@ -343,8 +343,8 @@ export function SavedChartViewer({
         } else {
              diffSeconds = (maxPred as number) - (lastTime as number);
         }
-        const needBars = Math.ceil(diffSeconds / step) + 5;
-        return Math.max(5, needBars);
+        const needBars = Math.ceil(diffSeconds / step) + 1; // +1 to ensure the point is visible, but no extra margin
+        return Math.max(0, needBars);
     }, [predictionPoints, interval]);
 
     // ✅ 카드 모드: 미래 예측은 보여주되, 축이 멀리(2026 등) 밀리지 않도록 미래 여백을 강하게 제한
@@ -612,9 +612,9 @@ export function SavedChartViewer({
             }
             
             if (sorted.length >= 2) {
-                 // ✅ 구간별 컬러: 왼쪽(초록) -> 오른쪽(주황) step-gradient
-                const startColor = "#22c55e"; // green
-                const endColor = "#f97316";   // orange
+                 // ✅ 구간별 컬러: 핑크/보라 계열 (User Request)
+                const startColor = "#e879f9"; // purple-400 equivalent
+                const endColor = "#ec4899";   // pink-500 equivalent
                 const segCount = sorted.length - 1;
 
                 for (let i = 0; i < segCount; i++) {
@@ -807,7 +807,7 @@ export function SavedChartViewer({
         const range = chart.addSeries(LineSeries, {
             color: "rgba(0,0,0,0)",
             lineWidth: 1,
-            lineStyle: 0,
+            visible: false, // Ensure it's not drawn
             crosshairMarkerVisible: false,
             priceLineVisible: false,
             lastValueVisible: false,

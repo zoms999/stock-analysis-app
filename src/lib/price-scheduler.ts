@@ -147,7 +147,8 @@ export async function updateMarketPrices() {
     }
   }
 
-  log(`Source calc: KIS=${kisSymbols.length}, Crypto(Binance)=${cryptoSymbols.length}, Yahoo=${yahooSymbols.length}`);
+  log(`Time: ${new Date().toISOString()} | Found ${uniqueSymbols.length} unique tickers in assets table.`);
+  log(`Source calc -> KIS: ${kisSymbols.length}, Crypto: ${cryptoSymbols.length}, Yahoo: ${yahooSymbols.length}`);
 
   const priceMap = new Map<string, number>();
 

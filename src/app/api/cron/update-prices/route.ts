@@ -11,6 +11,8 @@ import { createClient as createServerClient } from '@/lib/supabase/server';
 
 // This route is intended to be called by a Cron job (e.g. Vercel Cron) OR by an Admin
 export async function GET(request: Request) {
+  console.log('[Cron] Update Prices - Request received');
+  
   // 1. Cron Job Authentication
   const authHeader = request.headers.get('authorization');
   const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
@@ -19,12 +21,12 @@ export async function GET(request: Request) {
 
   // 2. Admin User Authentication (if not Cron)
   if (!isCron) {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const supabaseServer = await createServerClient();
+    const { data: { user } } = await supabaseServer.auth.getUser();
 
     if (user) {
       // Check user level
-      const { data: userData } = await supabase
+      const { data: userData } = await supabaseServer
         .from('users')
         .select('user_level')
         .eq('id', user.id)
@@ -37,19 +39,23 @@ export async function GET(request: Request) {
   }
 
   if (!isCron && !isAdmin) {
+    console.warn('[Cron] Unauthorized access attempt');
     return new Response('Unauthorized', { status: 401 });
   }
+
+  console.log(`[Cron] Authentication successful (isCron: ${isCron}, isAdmin: ${isAdmin})`);
 
   try {
     const result = await updateMarketPrices();
     
     if (result && result.success) {
+      console.log(`[Cron] Price update successful: ${result.count} records`);
+      
       // 6. Trigger Accuracy Calculation (DB Side)
       const { error: rpcError } = await supabase.rpc('calculate_and_update_accuracies');
       
       if (rpcError) {
-        console.error('Failed to update accuracies:', rpcError);
-        // We still return success for price update, but note the error
+        console.error('[Cron] Accuracy RPC failed:', rpcError);
         return NextResponse.json({ 
           message: 'Prices updated, but accuracy calculation failed', 
           priceData: result, 
@@ -58,10 +64,9 @@ export async function GET(request: Request) {
       }
 
       // 7. Trigger Daily Accuracy Calculation (New System)
-      const { error: dailyRpcError } = await supabase.rpc('calculate_daily_accuracies_v4');
+      const { error: dailyRpcError } = await supabase.rpc('calculate_daily_accuracies_v5');
       if (dailyRpcError) {
-        console.error('Failed to update daily accuracies:', dailyRpcError);
-        // Continue, as this is a separate system
+        console.error('[Cron] Daily Accuracy RPC failed:', dailyRpcError);
       }
 
       return NextResponse.json({ 
@@ -69,9 +74,11 @@ export async function GET(request: Request) {
         data: result 
       });
     } else {
+      console.error('[Cron] Price update failed in scheduler:', result?.error);
       return NextResponse.json({ message: 'Failed to update prices', error: result?.error }, { status: 500 });
     }
   } catch (error) {
+    console.error('[Cron] Internal error:', error);
     return NextResponse.json({ message: 'Internal Server Error', error }, { status: 500 });
   }
 }

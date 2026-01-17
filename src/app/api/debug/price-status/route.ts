@@ -73,5 +73,26 @@ export async function GET() {
         }
     }
 
+    // 4. Test Final DB Insert (Write Permission Check)
+    const writeTest: { success: boolean; error: any } = { success: false, error: null };
+    try {
+        const testRecord = {
+            ticker_symbol: 'BTC', // Must exist in assets
+            price: 99999,
+            recorded_at: new Date().toISOString()
+        };
+        const { error: testError } = await supabase.from("market_prices").insert([testRecord]).select();
+        if (testError) {
+            writeTest.error = testError;
+        } else {
+            writeTest.success = true;
+            // Immediate cleanup
+            await supabase.from("market_prices").delete().eq("price", 99999);
+        }
+    } catch (e: any) {
+        writeTest.error = e.message;
+    }
+    report.dbWriteTest = writeTest;
+
     return NextResponse.json(report);
 }

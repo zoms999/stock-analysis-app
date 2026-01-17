@@ -309,9 +309,17 @@ export function parseRealtimePrice(raw: string): KisRealtimePrice | null {
 
 export function normalizeKrxSymbol(raw: string): string | null {
   const s = raw.trim().toUpperCase();
-  const mKrx = s.match(/^(?:X?KRX)\s*:\s*(\d{6})$/);
-  if (mKrx) return mKrx[1];
+  // Prefix: KRX:005930
+  const mPrefix = s.match(/^(?:X?KRX)\s*:\s*(\d{6})$/);
+  if (mPrefix) return mPrefix[1];
+  
+  // Suffix: 005930:KRX
+  const mSuffix = s.match(/^(\d{6})\s*:\s*(?:X?KRX)$/);
+  if (mSuffix) return mSuffix[1];
+  
+  // Pure digits: 005930
   if (/^\d{6}$/.test(s)) return s;
+  
   return null;
 }
 
@@ -431,10 +439,20 @@ export async function fetchKisCandles(symbol: string, interval: string): Promise
 /**
  * 현재가 조회 (1분봉 기준 최신가)
  */
+/**
+ * 현재가 조회 (1분봉 기준 최신가 -> 실패 시 일봉 기준 종가)
+ */
 export async function fetchKisPrice(symbol: string): Promise<number | null> {
   try {
-    // 1분봉 조회 (최근 1개만 있으면 됨, 어차피 정렬되어 옴)
-    const candles = await fetchKisCandles(symbol, "1m");
+    // 1. Try 1-minute candles first
+    let candles = await fetchKisCandles(symbol, "1m");
+    
+    // 2. If no minute data (e.g., market closed, weekend, or too early), fallback to daily
+    if (!candles || candles.length === 0) {
+        // console.log(`[KIS API] No minute data for ${symbol}, trying daily fallback.`);
+        candles = await fetchKisCandles(symbol, "1d");
+    }
+
     if (!candles || candles.length === 0) return null;
 
     // 가장 최근 캔들의 종가 반환

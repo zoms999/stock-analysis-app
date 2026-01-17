@@ -7,10 +7,36 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// This route is intended to be called by a Cron job (e.g. Vercel Cron, GitHub Actions)
+import { createClient as createServerClient } from '@/lib/supabase/server';
+
+// This route is intended to be called by a Cron job (e.g. Vercel Cron) OR by an Admin
 export async function GET(request: Request) {
+  // 1. Cron Job Authentication
   const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
+
+  let isAdmin = false;
+
+  // 2. Admin User Authentication (if not Cron)
+  if (!isCron) {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user) {
+      // Check user level
+      const { data: userData } = await supabase
+        .from('users')
+        .select('user_level')
+        .eq('id', user.id)
+        .single();
+      
+      if (userData && userData.user_level >= 99) {
+        isAdmin = true;
+      }
+    }
+  }
+
+  if (!isCron && !isAdmin) {
     return new Response('Unauthorized', { status: 401 });
   }
 

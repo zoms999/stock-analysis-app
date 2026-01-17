@@ -13,33 +13,44 @@ import { createClient as createServerClient } from '@/lib/supabase/server';
 export async function GET(request: Request) {
   console.log('[Cron] Update Prices - Request received');
   
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    console.error('[Cron] CRON_SECRET is not set in environment variables!');
+  }
+
   // 1. Cron Job Authentication
   const authHeader = request.headers.get('authorization');
-  const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
 
   let isAdmin = false;
 
   // 2. Admin User Authentication (if not Cron)
   if (!isCron) {
-    const supabaseServer = await createServerClient();
-    const { data: { user } } = await supabaseServer.auth.getUser();
+    const hasCookies = request.headers.get('cookie');
+    if (hasCookies) {
+      try {
+        const supabaseServer = await createServerClient();
+        const { data: { user } } = await supabaseServer.auth.getUser();
 
-    if (user) {
-      // Check user level
-      const { data: userData } = await supabaseServer
-        .from('users')
-        .select('user_level')
-        .eq('id', user.id)
-        .single();
-      
-      if (userData && userData.user_level >= 99) {
-        isAdmin = true;
+        if (user) {
+          const { data: userData } = await supabaseServer
+            .from('users')
+            .select('user_level')
+            .eq('id', user.id)
+            .single();
+          
+          if (userData && userData.user_level >= 99) {
+            isAdmin = true;
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Cron] Admin auth check failed (might be expected in non-browser context):', e.message);
       }
     }
   }
 
   if (!isCron && !isAdmin) {
-    console.warn('[Cron] Unauthorized access attempt');
+    console.warn('[Cron] Unauthorized access attempt. No valid cron secret or admin session.');
     return new Response('Unauthorized', { status: 401 });
   }
 

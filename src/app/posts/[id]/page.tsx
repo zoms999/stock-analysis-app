@@ -534,9 +534,13 @@ export default function PostDetailPage() {
         </section>
 
         {/* Daily Accuracy Table */}
-        {post.id && (
+        {post.id && post.ticker_symbol && (
           <section>
-            <DailyAccuracyTable postId={post.id} />
+            <DailyAccuracyTable 
+              postId={post.id} 
+              symbol={post.ticker_symbol}
+              koreanName={krName} 
+            />
           </section>
         )}
       </article>

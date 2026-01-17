@@ -52,6 +52,7 @@ export default function PostDetailPage() {
   const [isSharing, setIsSharing] = useState(false);
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
+  const [authLoading, setAuthLoading] = useState(true);
 
   const errorMessage = (e: unknown) => {
     if (typeof e === "string") return e;
@@ -141,6 +142,8 @@ export default function PostDetailPage() {
         if (!cancelled) setMeId(user?.id ?? null);
       } catch {
         if (!cancelled) setMeId(null);
+      } finally {
+        if (!cancelled) setAuthLoading(false);
       }
     })();
     return () => {
@@ -386,10 +389,50 @@ export default function PostDetailPage() {
     };
   }, [post?.ticker_symbol, relatedSortBy, id]);
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="container mx-auto max-w-3xl py-20 text-center">
         <div className="animate-pulse text-muted-foreground">로딩 중...</div>
+      </div>
+    );
+  }
+
+  if (!meId) {
+    return (
+      <div className="container mx-auto max-w-sm py-20 px-4 text-center">
+        <div className="rounded-xl border border-border/50 bg-background/50 p-8 shadow-sm">
+           <div className="mb-4 flex justifying-center">
+             <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <svg
+                  className="h-6 w-6 text-primary"
+                  fill="none"
+                  height="24"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  width="24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+             </div>
+           </div>
+           <h2 className="text-xl font-bold mb-2">로그인이 필요한 서비스입니다</h2>
+           <p className="text-muted-foreground text-sm mb-6 leading-relaxed">
+             차트 분석 상세 내용과 예측 정보는<br/>로그인 후 확인할 수 있습니다.
+           </p>
+           <div className="flex flex-col gap-3">
+             <Link href="/login" className="w-full">
+               <Button className="w-full font-bold">로그인 하러 가기</Button>
+             </Link>
+             <Link href="/" className="w-full">
+               <Button variant="ghost" className="w-full text-muted-foreground">홈으로 돌아가기</Button>
+             </Link>
+           </div>
+        </div>
       </div>
     );
   }
@@ -737,7 +780,48 @@ export default function PostDetailPage() {
             <div className="rounded-xl border border-border/50 bg-background/50 p-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div>
-                  <div className="text-sm font-semibold">같은 종목 다른 게시물</div>
+                  <div className="text-sm font-semibold">
+                    {(() => {
+                      // 1. KRX Stock Check
+                      if (krName) {
+                         return `${krName} 주식분석`;
+                      }
+
+                      // 2. Coin Check (Simple Heuristic for now)
+                      // If it contains "-" (e.g. BTC-USD) or is a known coin
+                      // internal helper for coin names
+                      const coinNames: Record<string, string> = {
+                        "BTC": "비트코인",
+                        "BTC-USD": "비트코인",
+                        "ETH": "이더리움",
+                        "ETH-USD": "이더리움",
+                        "XRP": "리플",
+                        "XRP-USD": "리플",
+                        "SOL": "솔라나",
+                        "SOL-USD": "솔라나",
+                        "DOGE": "도지코인",
+                        "DOGE-USD": "도지코인",
+                        // Add more as needed or use a robust list later
+                      };
+                      
+                      // Upper case symbol for check
+                      const symUpper = post.ticker_symbol.toUpperCase();
+                      const coinName = coinNames[symUpper] || coinNames[symUpper.split('-')[0]];
+
+                      if (coinName) {
+                        return `(${coinName}) ${symUpper.split('-')[0]} 코인분석`;
+                      }
+
+                      // 3. Fallback / Foreign Stock / Unknown
+                      // If it looks like a crypto pair (e.g. has -USD), treat as coin even if name unknown
+                      if (symUpper.includes("-USD") || symUpper.includes("USDT")) {
+                         return `${symUpper.split('-')[0]} 코인분석`;
+                      }
+
+                      // Default Fallback
+                      return "같은 종목 다른 게시물";
+                    })()}
+                  </div>
                   <div className="text-xs text-muted-foreground">{post.ticker_symbol}</div>
                 </div>
               </div>

@@ -111,10 +111,10 @@ export function DailyAccuracyTable({ postId, symbol, koreanName }: DailyAccuracy
       </div>
       
       <div className="grid gap-2">
-        <div className="border border-[#1F2937] rounded-lg overflow-hidden bg-[#0B0F14]">
+        <div className="border border-border/50 rounded-lg overflow-hidden bg-card/50 shadow-sm">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#1F2937] text-[#9CA3AF] bg-[#111827]">
+              <tr className="border-b border-border/50 text-muted-foreground bg-muted/30">
                 <th className="py-3 px-4 text-left font-medium">
                   날짜(종목명) {displayName} {analysisType}
                 </th>
@@ -133,7 +133,7 @@ export function DailyAccuracyTable({ postId, symbol, koreanName }: DailyAccuracy
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1F2937] bg-[#0B0F14]">
+            <tbody className="divide-y divide-border/30 bg-card/30">
               {predictions.map((rawP) => {
                  const p = processedPredictions.find(pp => pp.id === rawP.id);
                  const hasData = !!p;
@@ -145,24 +145,20 @@ export function DailyAccuracyTable({ postId, symbol, koreanName }: DailyAccuracy
                  const change = actualPrice ? actualPrice - previousClose : 0;
                  const isRise = change > 0;
                  const isFall = change < 0;
-                 // Keeping standard Red/Blue for price color for consistency with app, or use user's palette if requested strictly?
-                 // User gave chart colors: Actual #22D3EE.
-                 // But for text, let's stick to standard Red(Rise)/Blue(Fall) for now unless specified for price text.
-                 // User specified "Tables Basic Text #E5E7EB".
-                 // Let's keep Price colors as standard (Red/Blue) for readability.
-                 const colorClass = isRise ? "text-red-500" : isFall ? "text-blue-500" : "text-[#9CA3AF]";
+                 
+                 const colorClass = isRise ? "text-red-500" : isFall ? "text-blue-500" : "text-muted-foreground";
                  
                  return (
-                  <tr key={rawP.id} className="hover:bg-[#1F2937] transition-colors group/row">
-                    <td className="py-4 px-4 align-top text-[#9CA3AF] font-medium whitespace-nowrap">
+                  <tr key={rawP.id} className="hover:bg-muted/50 transition-colors group/row">
+                    <td className="py-4 px-4 align-top text-muted-foreground font-medium whitespace-nowrap">
                       {rawP.prediction_date}
                     </td>
-                    <td className="py-4 px-4 text-right align-top font-semibold text-[#E5E7EB]">
+                    <td className="py-4 px-4 text-right align-top font-semibold text-foreground/90">
                       {previousClose.toLocaleString()}
                     </td>
                     <td className="py-4 px-4 text-right align-top">
                       <div className="flex flex-col items-end gap-1">
-                        <span className="font-bold text-[#E5E7EB]">
+                        <span className="font-bold text-foreground">
                             {predictedPrice.toLocaleString()}
                         </span>
                         <span className={`text-sm font-medium ${colorClass}`}>
@@ -203,7 +199,7 @@ export function DailyAccuracyTable({ postId, symbol, koreanName }: DailyAccuracy
                             )}
                           </div>
                         ) : (
-                          <span className="text-[#9CA3AF]">-</span>
+                          <span className="text-muted-foreground">-</span>
                         )}
                         
                         {/* Diff */}
@@ -214,7 +210,7 @@ export function DailyAccuracyTable({ postId, symbol, koreanName }: DailyAccuracy
                                   {Math.abs(change).toLocaleString()}원
                                 </>
                              ) : (
-                                <span className="text-xs text-[#9CA3AF]">{rawP.calculated_at ? '계산중' : '대기중'}</span>
+                                <span className="text-xs text-muted-foreground">{rawP.calculated_at ? '계산중' : '대기중'}</span>
                              )}
                         </span>
                       </div>
@@ -227,7 +223,7 @@ export function DailyAccuracyTable({ postId, symbol, koreanName }: DailyAccuracy
         </div>
       </div>
       
-      <div className="mt-3 text-xs text-[#9CA3AF] text-right space-y-1">
+      <div className="mt-3 text-xs text-muted-foreground text-right space-y-1">
         <p>* 예측 도달률은 전일 종가 기준 예측 상승폭 대비 실제 상승폭의 비율입니다.</p>
         <p>* 도달률은 최대 100%로 제한되며, 예측 초과분은 별도로 표시됩니다.</p>
         <p>* 가격을 정확히 맞춘 정도가 아닌, 예측 목표 충족 여부를 평가합니다.</p>
@@ -284,9 +280,9 @@ function SimpleTooltip({ title, content, children }: { title: string, content: s
     <div className="relative group/tooltip inline-block">
       {children}
       <div className="absolute z-50 bottom-full mb-2 right-1/2 translate-x-1/2 w-64 invisible opacity-0 group-hover/tooltip:visible group-hover/tooltip:opacity-100 transition-all duration-200 pointer-events-none">
-         <div className="bg-[#020617] border border-[#1E293B] rounded-lg shadow-xl p-3 text-left">
-            <div className="font-bold text-[#F9FAFB] text-xs mb-1">{title}</div>
-            <div className="text-[#CBD5E1] text-[10px] leading-relaxed break-keep">
+         <div className="bg-popover border border-border rounded-lg shadow-xl p-3 text-left">
+            <div className="font-bold text-popover-foreground text-xs mb-1">{title}</div>
+            <div className="text-muted-foreground text-[10px] leading-relaxed break-keep">
                 {content}
             </div>
          </div>

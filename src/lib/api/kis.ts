@@ -428,6 +428,25 @@ export async function fetchKisCandles(symbol: string, interval: string): Promise
   });
 }
 
+/**
+ * 현재가 조회 (1분봉 기준 최신가)
+ */
+export async function fetchKisPrice(symbol: string): Promise<number | null> {
+  try {
+    // 1분봉 조회 (최근 1개만 있으면 됨, 어차피 정렬되어 옴)
+    const candles = await fetchKisCandles(symbol, "1m");
+    if (!candles || candles.length === 0) return null;
+
+    // 가장 최근 캔들의 종가 반환
+    const latest = candles[candles.length - 1];
+    return latest.close;
+  } catch (e: any) {
+    console.error(`[KIS API] Failed to fetch price for ${symbol}: ${e.message}`);
+    return null;
+  }
+}
+
+
 
 
 

@@ -933,12 +933,18 @@ export function ChartAnalyzer({
             .map(([t, v]) => ({ time: t, value: v }))
             .sort((a, b) => compareTime(a.time, b.time));
 
-        // ✅ lastCandle에서 첫 예측 포인트까지 연결선 (1개 세그먼트)
+        // ✅ lastCandle에서 "첫 번째 미래 예측 포인트"까지 연결선 (1개 세그먼트)
+        // 과거 포인트가 있을 경우, lastCandle(현재)보다 과거이므로 연결하면 역순이 되어 에러 발생함(#22c55e)
         if (lastCandle && sorted.length > 0) {
-            if (compareTime(sorted[0].time, lastCandle.time) !== 0) {
-                const { seg, glow } = addPredictionSegmentSeries("#22c55e");
-                seg?.setData([lastCandle, sorted[0]]);
-                glow?.setData([lastCandle, sorted[0]]);
+            // lastCandle보다 시간이 "이후"인 첫 번째 포인트 찾기
+            const firstFuturePoint = sorted.find(p => compareTime(p.time, lastCandle.time) > 0);
+            
+            // 만약 미래 포인트가 있다면 연결 (없으면 과거 포인트들만 있는 것이므로 브릿지 라인 생략)
+            if (firstFuturePoint) {
+                 const { seg, glow } = addPredictionSegmentSeries("#22c55e");
+                 // [현재, 미래] 순서 보장됨
+                 seg?.setData([lastCandle, firstFuturePoint]);
+                 glow?.setData([lastCandle, firstFuturePoint]);
             }
         }
 

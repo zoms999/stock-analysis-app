@@ -180,22 +180,20 @@ export async function updateMarketPrices() {
       }));
   }
 
-  // 4b. Fetch KIS Prices (Sequential or small concurrency due to strict API limits usually)
-  // KIS API often has lower rate limits (e.g. 20 req/sec is fine, but let's be safe with chunking)
-  const KIS_CHUNK_SIZE = 2; 
+  // 4b. Fetch KIS Prices (More parallelized now that we use a faster API)
+  const KIS_CHUNK_SIZE = 5; 
   if (kisSymbols.length > 0) {
     for (let i = 0; i < kisSymbols.length; i += KIS_CHUNK_SIZE) {
         const chunk = kisSymbols.slice(i, i + KIS_CHUNK_SIZE);
         await Promise.all(chunk.map(async (sym) => {
-             // KIS API Integration
              const price = await fetchKisPrice(sym);
              if (price !== null) {
                  priceMap.set(sym, price);
              }
         }));
-        // Optional delay to respect rate limits if needed
+        // Reduced delay since fast API is less taxing
         if (i + KIS_CHUNK_SIZE < kisSymbols.length) {
-            await new Promise(r => setTimeout(r, 200)); 
+            await new Promise(r => setTimeout(r, 100)); 
         }
     }
   }

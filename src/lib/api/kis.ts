@@ -440,26 +440,72 @@ export async function fetchKisCandles(symbol: string, interval: string): Promise
  * 현재가 조회 (1분봉 기준 최신가)
  */
 /**
- * 현재가 조회 (1분봉 기준 최신가 -> 실패 시 일봉 기준 종가)
+ * 현재가 조회 (주식현재가 시세 API 사용 - FHKST01010100)
+ * 분봉/일봉 조회보다 훨씬 빠르고 가중치가 낮음
  */
 export async function fetchKisPrice(symbol: string): Promise<number | null> {
+  const code = normalizeKrxSymbol(symbol);
+  if (!code) return null;
+
+  try {
+    const accessToken = await getAccessToken();
+    const { appKey, appSecret, restBase } = await getKisConfig();
+
+    const url = new URL(`${restBase}/uapi/domestic-stock/v1/quotations/inquire-price`);
+    url.searchParams.set("FID_COND_MRKT_DIV_CODE", "J");
+    url.searchParams.set("FID_INPUT_ISCD", code);
+
+    const res = await fetch(url.toString(), {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "authorization": `Bearer ${accessToken}`,
+        "appkey": appKey,
+        "appsecret": appSecret,
+        "tr_id": "FHKST01010100",
+        "custtype": "P",
+      },
+    });
+
+    if (!res.ok) {
+       // console.log(`[KIS API] Fast price failed for ${code}, status: ${res.status}`);
+       return fetchKisPriceFallback(symbol); // Fallback to candles if price API fails
+    }
+
+    const data = await res.json();
+    if (data.rt_cd !== "0") {
+       // console.log(`[KIS API] Fast price business error for ${code}: ${data.msg1}`);
+       return fetchKisPriceFallback(symbol);
+    }
+
+    // stck_prpr: 주식 현재가
+    const price = parseFloat(data.output.stck_prpr);
+    return isNaN(price) ? fetchKisPriceFallback(symbol) : price;
+
+  } catch (e: any) {
+    console.error(`[KIS API] Failed to fetch fast price for ${symbol}: ${e.message}`);
+    return fetchKisPriceFallback(symbol);
+  }
+}
+
+/**
+ * Fallback to candle-based price fetching (Slow)
+ */
+async function fetchKisPriceFallback(symbol: string): Promise<number | null> {
   try {
     // 1. Try 1-minute candles first
     let candles = await fetchKisCandles(symbol, "1m");
     
-    // 2. If no minute data (e.g., market closed, weekend, or too early), fallback to daily
+    // 2. If no minute data (e.g., market closed), daily fallback
     if (!candles || candles.length === 0) {
-        // console.log(`[KIS API] No minute data for ${symbol}, trying daily fallback.`);
         candles = await fetchKisCandles(symbol, "1d");
     }
 
     if (!candles || candles.length === 0) return null;
 
-    // 가장 최근 캔들의 종가 반환
     const latest = candles[candles.length - 1];
     return latest.close;
   } catch (e: any) {
-    console.error(`[KIS API] Failed to fetch price for ${symbol}: ${e.message}`);
+    console.error(`[KIS API] Fallback failed for ${symbol}: ${e.message}`);
     return null;
   }
 }

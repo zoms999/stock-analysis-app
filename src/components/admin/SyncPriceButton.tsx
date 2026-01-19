@@ -12,7 +12,9 @@ export function SyncPriceButton() {
   const handleSync = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/cron/update-prices");
+      const response = await fetch("/api/cron/update-prices", {
+        credentials: 'include'
+      });
       const data = await response.json();
 
       if (response.ok) {

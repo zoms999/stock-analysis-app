@@ -9,52 +9,9 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 import { createClient as createServerClient } from '@/lib/supabase/server';
 
-// This route is intended to be called by a Cron job (e.g. Vercel Cron) OR by an Admin
+// This route is now publicly accessible for price synchronization
 export async function GET(request: Request) {
   console.log('[Cron] Update Prices - Request received');
-  
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    console.error('[Cron] CRON_SECRET is not set in environment variables!');
-  }
-
-  // 1. Cron Job Authentication
-  const authHeader = request.headers.get('authorization');
-  const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
-
-  let isAdmin = false;
-
-  // 2. Admin User Authentication (if not Cron)
-  if (!isCron) {
-    const hasCookies = request.headers.get('cookie');
-    if (hasCookies) {
-      try {
-        const supabaseServer = await createServerClient();
-        const { data: { user } } = await supabaseServer.auth.getUser();
-
-        if (user) {
-          const { data: userData } = await supabaseServer
-            .from('users')
-            .select('user_level')
-            .eq('id', user.id)
-            .single();
-          
-          if (userData && userData.user_level >= 99) {
-            isAdmin = true;
-          }
-        }
-      } catch (e: any) {
-        console.warn('[Cron] Admin auth check failed (might be expected in non-browser context):', e.message);
-      }
-    }
-  }
-
-  if (!isCron && !isAdmin) {
-    console.warn('[Cron] Unauthorized access attempt. No valid cron secret or admin session.');
-    return new Response('Unauthorized', { status: 401 });
-  }
-
-  console.log(`[Cron] Authentication successful (isCron: ${isCron}, isAdmin: ${isAdmin})`);
 
   try {
     const result = await updateMarketPrices();

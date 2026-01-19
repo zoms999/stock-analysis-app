@@ -7,6 +7,30 @@ export interface CandleData {
   volume?: number;
 }
 
+/**
+ * Fetch candle data from market_prices database
+ */
+export async function fetchMarketPricesCandles(
+  symbol: string,
+  interval: string = '1d',
+  limit: number = 100
+): Promise<CandleData[]> {
+  try {
+    const url = `/api/market-prices/candles?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`;
+    const res = await fetch(url);
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || `Failed to fetch market prices: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    return data.candles || [];
+  } catch (error) {
+    console.error('[Market Prices] Fetch error:', error);
+    return [];
+  }
+}
 
 
 export type TwelvePriceEvent = {

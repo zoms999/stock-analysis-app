@@ -3,7 +3,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, IChartApi, CandlestickSeries } from "lightweight-charts";
-import { fetchTwelveDataCandles, subscribeTwelveDataPrices, CandleData } from "@/lib/api/twelvedata";
+import { fetchMarketPricesCandles, subscribeTwelveDataPrices, CandleData } from "@/lib/api/twelvedata";
 
 interface TechChartProps {
   symbol?: string;
@@ -23,11 +23,11 @@ export function TechChart({ symbol = "BTC-USD", interval = "1d" }: TechChartProp
 
     const loadData = async () => {
       try {
-        console.log(`[TechChart] Fetching Twelve Data candles for ${symbol} (${interval})...`);
+        console.log(`[TechChart] Fetching market_prices candles for ${symbol} (${interval})...`);
 
-        const candles = await fetchTwelveDataCandles(symbol, interval);
+        const candles = await fetchMarketPricesCandles(symbol, interval);
 
-        console.log(`[TechChart] Twelve Data candles fetched:`, candles?.length);
+        console.log(`[TechChart] Market prices candles fetched:`, candles?.length);
 
         // Only update state if component is still mounted
         if (!isMounted) return;

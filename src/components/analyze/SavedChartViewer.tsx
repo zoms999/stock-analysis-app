@@ -309,41 +309,43 @@ export function SavedChartViewer({
     // 미래 여백: 예측점이 미래면 그만큼 rightOffset 확보
     const computeFutureBarsFromPrediction = useCallback(() => {
         const last = lastRealRef.current;
-        // ✅ 예측이 없거나 계산 불가한 경우에도 최소 5bar 정도의 미래 여백만 확보 (너무 커지면 실측/예측이 좌측으로 밀림)
-        if (!last) return 5;
+        // ✅ 예측이 없으면 여백 없음 (0)
+        if (!last || !predictionPoints || predictionPoints.length === 0) return 0;
 
         const lastTime = last.time;
         const step = getIntervalSeconds(interval);
 
         let maxPred = lastTime;
-        for (const p of predictionPoints || []) {
+        for (const p of predictionPoints) {
             let t = p.time;
             // If we are compared against string time, we might need conversion or just rely on value check?
             // Actually comparing string "2024..." > "2024..." works generally for ISO format.
             // But p.time might be number (timestamp) while lastTime is string.
             if (typeof t === 'number' && typeof lastTime === 'string') {
-                 // Convert timestamp p.time to string for comparison?
-                 // Or just assume mixed types won't happen often if we sync them. 
-                 // For safety:
-                 const d = new Date(t * 1000);
-                 const year = d.getFullYear();
-                 const month = String(d.getMonth() + 1).padStart(2, '0');
-                 const day = String(d.getDate()).padStart(2, '0');
-                 t = `${year}-${month}-${day}`;
+                // Convert timestamp p.time to string for comparison?
+                // Or just assume mixed types won't happen often if we sync them. 
+                // For safety:
+                const d = new Date(t * 1000);
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                t = `${year}-${month}-${day}`;
             }
-            
+
             if (t > maxPred) maxPred = t as any;
         }
 
-        if (maxPred <= lastTime) return 5;
+        // ✅ 마지막 예측이 현재 시점보다 이전이면 여백 없음
+        if (maxPred <= lastTime) return 0;
 
         let diffSeconds = 0;
         if (typeof maxPred === 'string' && typeof lastTime === 'string') {
-             diffSeconds = (new Date(maxPred).getTime() - new Date(lastTime).getTime()) / 1000;
+            diffSeconds = (new Date(maxPred).getTime() - new Date(lastTime).getTime()) / 1000;
         } else {
-             diffSeconds = (maxPred as number) - (lastTime as number);
+            diffSeconds = (maxPred as number) - (lastTime as number);
         }
-        const needBars = Math.ceil(diffSeconds / step) + 1; // +1 to ensure the point is visible, but no extra margin
+        // ✅ 마지막 예측 포인트까지만 표시 (추가 여백 없음)
+        const needBars = Math.ceil(diffSeconds / step);
         return Math.max(0, needBars);
     }, [predictionPoints, interval]);
 
@@ -358,7 +360,7 @@ export function SavedChartViewer({
     const buildRangeData = (lastTime: Time, lastValue: number, itv: string, bars: number) => {
         const step = getIntervalSeconds(itv);
         const arr: { time: Time; value: number }[] = [{ time: lastTime, value: lastValue }];
-        
+
         // Helper to add days to YYYY-MM-DD
         const addDays = (dateStr: string, days: number) => {
             const d = new Date(dateStr);
@@ -370,20 +372,20 @@ export function SavedChartViewer({
         };
 
         for (let i = 1; i <= bars; i++) {
-             if (typeof lastTime === 'string') {
+            if (typeof lastTime === 'string') {
                 // For daily/weekly/monthly intervals, use date string arithmetic
                 // Determine days to add based on interval
-                let daysToAdd = i; 
+                let daysToAdd = i;
                 if (itv === 'W' || itv === '1wk') daysToAdd = i * 7;
                 if (itv === 'M' || itv === '1mo') daysToAdd = i * 30; // Approx
                 if (itv === 'D' || itv === '1d') daysToAdd = i; // Daily
-                
+
                 const nextDate = addDays(lastTime, daysToAdd);
                 arr.push({ time: nextDate as Time, value: lastValue });
-             } else {
+            } else {
                 // For intraday intervals (numeric timestamps), add seconds
                 arr.push({ time: ((lastTime as number) + step * i) as Time, value: lastValue });
-             }
+            }
         }
         return arr;
     };
@@ -394,7 +396,7 @@ export function SavedChartViewer({
         const chart = chartRef.current;
         const baseC = baseCandleRef.current;
         if (!chart || !baseC.length) return false;
-        
+
         // ✅ 컨테이너 크기가 0이면 범위 설정을 미룸 (차트 라이브러리 오동작 방지)
         if (chartContainerRef.current?.clientWidth === 0) return false;
 
@@ -409,10 +411,10 @@ export function SavedChartViewer({
 
             const rangeData = buildRangeData(lastRealRef.current.time, lastRealRef.current.close, interval, futureBars);
             rangeSeriesRef.current.setData(rangeData as any);
-            
+
             // ✅ card 모드: "오늘(마지막 캔들)" 기준으로 최근 구간 + 제한된 미래(예측)까지 보이게 고정
             if (mode === "card") {
-                const count = baseC.length; 
+                const count = baseC.length;
                 const bars = getCardWindowBars(interval);
                 const toIndex = Math.max(0, count - 1);
                 const fromIndex = Math.max(0, toIndex - bars);
@@ -453,7 +455,7 @@ export function SavedChartViewer({
             // fallback
             chart.applyOptions({ timeScale: { rightOffset: 0 } });
         }
-        
+
         isRangeSetRef.current = true;
         return true;
     }, [interval, computeFutureBarsFromPrediction, computeFutureBarsForCard, mode, getCardWindowBars]);
@@ -471,7 +473,7 @@ export function SavedChartViewer({
         const baseC = baseCandleRef.current;
         const baseA = baseAreaRef.current;
         const baseV = baseVolumeRef.current;
-        
+
         // Ensure data is sorted (defense in depth)
         // Note: We already sort in fetch, but this safety prevents regression if other paths inject data.
         // (Skipping actual sort code here to avoid perf hit, assuming fetch did it)
@@ -481,7 +483,7 @@ export function SavedChartViewer({
         // ✅ BEFORE setData: Ensure chart options are set
         // Adding a slight right offset default to prevent clipping during data load
         // chart.timeScale().applyOptions({ rightOffset: 10 });
-        
+
         candle.setData(baseC);
         area.setData(baseA);
         areaGlow.setData(baseA);
@@ -492,7 +494,7 @@ export function SavedChartViewer({
         area.applyOptions({ visible: viewStyle === "line" });
         // ✅ 카드에서는 글로우 OFF (번짐 방지)
         areaGlow.applyOptions({ visible: viewStyle === "line" && mode !== "card" });
-        
+
         // 데이터 주입 후 범위 설정 시도
         updateVisibleRange();
 
@@ -518,9 +520,11 @@ export function SavedChartViewer({
         clearPredictionSegments();
 
         if (predictionPoints && predictionPoints.length > 0) {
+            // ✅ 예측 포인트만 사용 (마지막 실측 포인트는 연결하지 않음)
             let dataToShow = [...predictionPoints];
-            
-            // Connect to last real point if available
+
+            // ✅ 마지막 실측 포인트와 첫 예측 포인트를 연결하되, 
+            // 예측 라인은 마지막 예측 포인트에서 끝나도록 함
             let lastRealPoint = null;
             if (lastRealRef.current) {
                 const lastReal = { time: lastRealRef.current.time, value: lastRealRef.current.close };
@@ -531,7 +535,7 @@ export function SavedChartViewer({
                 const t1 = getTs(firstPred.time);
                 const t2 = getTs(lastReal.time);
                 if (t1 !== t2) {
-                   dataToShow = [lastReal, ...dataToShow];
+                    dataToShow = [lastReal, ...dataToShow];
                 }
             }
 
@@ -549,7 +553,7 @@ export function SavedChartViewer({
                     if (isNaN(ms)) return null; // Filter invalid
 
                     let newTime: Time;
-                    
+
                     if (useString) {
                         // Convert to YYYY-MM-DD
                         const d = new Date(ms);
@@ -610,9 +614,9 @@ export function SavedChartViewer({
                 // 좌표 업데이트는 다음 프레임에 (시리즈 setData 후 좌표계 안정화)
                 requestAnimationFrame(updateOverlayPositions);
             }
-            
+
             if (sorted.length >= 2) {
-                 // ✅ 구간별 컬러: 핑크/보라 계열 (User Request)
+                // ✅ 구간별 컬러: 핑크/보라 계열 (User Request)
                 const startColor = "#e879f9"; // purple-400 equivalent
                 const endColor = "#ec4899";   // pink-500 equivalent
                 const segCount = sorted.length - 1;
@@ -628,7 +632,7 @@ export function SavedChartViewer({
             }
 
         }
-        
+
         // Update range for future
         applyBaseDataToSeries();
         // ✅ rightOffset 등 timeScale이 바뀐 뒤에도 한 번 더 보정
@@ -834,7 +838,7 @@ export function SavedChartViewer({
                 return;
             }
             chart.applyOptions({ width: w, height: h });
-            
+
             // ✅ 사이즈가 유효해진 시점에 범위를 강제 재설정 (특히 카드 모드에서 잘림 방지)
             // 아직 범위가 설정되지 않았거나(initial load race), 카드 모드일 경우(always fit window) 실행
             if (!isRangeSetRef.current || mode === 'card') {
@@ -872,15 +876,15 @@ export function SavedChartViewer({
         const renderTimer = setTimeout(() => {
             // Check if container has size
             if (chartContainerRef.current && chartContainerRef.current.clientWidth > 0) {
-                 applyBaseDataToSeries();
-                 updatePredictionSeries(); 
-                 syncSize(); 
+                applyBaseDataToSeries();
+                updatePredictionSeries();
+                syncSize();
             } else {
                 // If still 0, try one more time fast
                 setTimeout(() => {
                     applyBaseDataToSeries();
-                    updatePredictionSeries(); 
-                    syncSize(); 
+                    updatePredictionSeries();
+                    syncSize();
                 }, 100);
             }
         }, 200);
@@ -980,7 +984,7 @@ export function SavedChartViewer({
                 // applyBaseDataToSeries 내부의 default logic이 실행되어야 하는데,
                 // 위에서 호출한 applyBaseDataToSeries()가 이미 로직을 수행함.
                 // 따라서 여기서는 중복 호출할 필요가 없음.
-                
+
                 // 단, FETCH 시점에는 savedRangeRef가 비어있어야 함을 보장해야 하지만, 
                 // interval 변경 시에는 effect[1]이 먼저 돌아 null or savedRange가 됨.
                 // symbol 변경 시에는 savedRangeRef가 이전 값일 수 있나?
@@ -1008,20 +1012,20 @@ export function SavedChartViewer({
         // 목록 단위(ChartBoardList)의 배치 구독만 사용해 SSE 연결 폭주를 방지합니다.
         const sub =
             mode === "card"
-                ? { close: () => {} }
+                ? { close: () => { } }
                 : subscribeTwelveDataPrices([symbol], (msg) => {
-                      const p = Number(msg.price);
-                      if (!Number.isFinite(p)) return;
-                      const last = lastRealRef.current;
-                      if (!last) return;
-                      lastRealRef.current = {
-                          ...last,
-                          close: p,
-                      };
-                  });
+                    const p = Number(msg.price);
+                    if (!Number.isFinite(p)) return;
+                    const last = lastRealRef.current;
+                    if (!last) return;
+                    lastRealRef.current = {
+                        ...last,
+                        close: p,
+                    };
+                });
 
         return () => sub.close();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [symbol, interval, applyBaseDataToSeries, mode, getCardWindowBars, computeFutureBarsForCard]);
 
 

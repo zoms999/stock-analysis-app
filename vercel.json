@@ -3,6 +3,18 @@
     {
       "path": "/api/cron/update-prices",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/update-previous-close",
+      "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/cron/update-previous-close",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/update-previous-close",
+      "schedule": "30 1 * * *"
     }
   ]
 }

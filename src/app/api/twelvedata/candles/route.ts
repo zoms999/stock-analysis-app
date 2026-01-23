@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import yahooFinance from "yahoo-finance2";
+import YahooFinance from "yahoo-finance2";
+
+// ✅ Yahoo Finance 인스턴스 생성 (v2.12+ 필수)
+const yahooFinance = new YahooFinance();
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +39,7 @@ function normalizeSymbolForYahoo(symbol: string) {
     // 하지만 우선 삼성전자(005930) 등 대형주는 .KS임.
     return `${mKr[2]}.KS`;
   }
-  
+
   // 005930 같은 숫자만 있는 경우 -> .KS 붙임 (가정)
   if (/^\d{6}$/.test(s)) {
     return `${s}.KS`;
@@ -46,7 +49,7 @@ function normalizeSymbolForYahoo(symbol: string) {
   if (s.includes("/")) {
     return s.replace("/", "-");
   }
-  
+
   // 3. Crypto: BTC (without quote) -> BTC-USD (default)
   const isCrypto = ["BTC", "ETH", "XRP", "DOGE", "SOL"].includes(s.toUpperCase());
   if (isCrypto) {
@@ -78,7 +81,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const rawSymbol = searchParams.get("symbol") ?? "AAPL";
   const intervalArg = searchParams.get("interval") ?? "1d";
-  
+
   const symbol = normalizeSymbolForYahoo(rawSymbol);
   const interval = mapIntervalToYahoo(intervalArg);
   const cacheKey = `${symbol}|${interval}`;
@@ -99,7 +102,7 @@ export async function GET(req: Request) {
       const data = await pending;
       return NextResponse.json(data);
     } catch (e) {
-       // pending 실패 시 아래 로직 진행
+      // pending 실패 시 아래 로직 진행
     }
   }
 
@@ -107,85 +110,85 @@ export async function GET(req: Request) {
     // Yahoo Finance Historical Options
     // period1 is required. "2000-01-01" is safe.
     // For intraday (1m, 5m), fetch recent data only (e.g., last 7 days) to avoid errors.
-    
+
     let period1 = "2020-01-01";
     // Intraday limitations: 1m (7 days), etc.
     if (interval === "1m" || interval === "5m" || interval === "15m" || interval === "1h") {
-        const d = new Date();
-        d.setDate(d.getDate() - 7); // Max 7 days buffer for reliable intraday
-        period1 = d.toISOString().split("T")[0];
+      const d = new Date();
+      d.setDate(d.getDate() - 7); // Max 7 days buffer for reliable intraday
+      period1 = d.toISOString().split("T")[0];
     }
 
-    const queryOptions = { 
-        period1, 
-        interval 
-        // period2 defaults to now
+    const queryOptions = {
+      period1,
+      interval
+      // period2 defaults to now
     };
 
     // Safely get client (handle CJS/ESM interop where default might be Class)
     const yf = typeof yahooFinance === 'function' ? new (yahooFinance as any)() : yahooFinance;
 
     try {
-        // Use 'chart' method for intraday support
-        const result = await yf.chart(symbol, queryOptions as any);
-        
-        if (!result || !result.quotes || !Array.isArray(result.quotes)) {
-            throw new Error("Invalid response from Yahoo Finance");
+      // Use 'chart' method for intraday support
+      const result = await yf.chart(symbol, queryOptions as any);
+
+      if (!result || !result.quotes || !Array.isArray(result.quotes)) {
+        throw new Error("Invalid response from Yahoo Finance");
+      }
+
+      // Transform to Candle format
+      const candles: Candle[] = result.quotes.map((item: any) => {
+        // date is Date object in yahoo-finance2
+        const timeStr = item.date.toISOString();
+        // For daily/weekly/monthly, use YYYY-MM-DD string
+        // For intraday, use UNIX timestamp (seconds)
+        let time: string | number;
+        if (interval === "1d" || interval === "1wk" || interval === "1mo") {
+          time = timeStr.split("T")[0];
+        } else {
+          time = Math.floor(item.date.getTime() / 1000);
         }
 
-        // Transform to Candle format
-        const candles: Candle[] = result.quotes.map((item: any) => {
-             // date is Date object in yahoo-finance2
-             const timeStr = item.date.toISOString();
-             // For daily/weekly/monthly, use YYYY-MM-DD string
-             // For intraday, use UNIX timestamp (seconds)
-             let time: string | number;
-             if (interval === "1d" || interval === "1wk" || interval === "1mo") {
-                 time = timeStr.split("T")[0];
-             } else {
-                 time = Math.floor(item.date.getTime() / 1000);
-             }
-             
-             return {
-                 time,
-                 open: item.open,
-                 high: item.high,
-                 low: item.low,
-                 close: item.close,
-                 volume: item.volume
-             };
-        }).filter((c: any) => c.open !== null && c.close !== null);
+        return {
+          time,
+          open: item.open,
+          high: item.high,
+          low: item.low,
+          close: item.close,
+          volume: item.volume
+        };
+      }).filter((c: any) => c.open !== null && c.close !== null);
 
 
 
-        // Sort just in case
-        candles.sort((a, b) => {
-            if (typeof a.time === 'string' && typeof b.time === 'string') return a.time.localeCompare(b.time);
-            return (a.time as number) - (b.time as number);
-        });
+      // Sort just in case
+      candles.sort((a, b) => {
+        if (typeof a.time === 'string' && typeof b.time === 'string') return a.time.localeCompare(b.time);
+        return (a.time as number) - (b.time as number);
+      });
 
-        return candles;
+      return candles;
     } catch (error) {
-        throw error;
+      throw error;
     }
   })();
 
   inFlight.set(cacheKey, fetchPromise);
 
   try {
-      const data = await fetchPromise;
-      // Cache success
-      cache.set(cacheKey, { expiresAt: Date.now() + TTL_MS, data });
-      return NextResponse.json(data, {
-          headers: { "Access-Control-Allow-Origin": "*" }
-      });
+    const data = await fetchPromise;
+    // Cache success
+    cache.set(cacheKey, { expiresAt: Date.now() + TTL_MS, data });
+    return NextResponse.json(data, {
+      headers: { "Access-Control-Allow-Origin": "*" }
+    });
   } catch (error: any) {
-      console.error(`Yahoo Finance Error [${symbol}]:`, error);
-      return NextResponse.json(
-          { error: "Failed to fetch data", details: error.message }, 
-          { status: 500 }
-      );
+    console.error(`Yahoo Finance Error [${symbol}]:`, error);
+    return NextResponse.json(
+      { error: "Failed to fetch data", details: error.message },
+      { status: 500 }
+    );
   } finally {
-      inFlight.delete(cacheKey);
+    inFlight.delete(cacheKey);
   }
 }

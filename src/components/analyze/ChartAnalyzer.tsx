@@ -17,7 +17,8 @@ import {
     LineSeries,
     AreaSeries,
 } from "lightweight-charts";
-import { fetchTwelveDataCandles, subscribeTwelveDataPrices } from "@/lib/api/twelvedata";
+// ✅ Phase 1: Yahoo Finance 통합 (TwelveData 제거)
+// import { fetchTwelveDataCandles, subscribeTwelveDataPrices } from "@/lib/api/twelvedata";
 import { Button } from "@/components/ui/button";
 
 interface ChartAnalyzerProps {
@@ -99,7 +100,7 @@ export function ChartAnalyzer({
 
     const isMobileRef = useRef(false);
     const [isNarrowScreen, setIsNarrowScreen] = useState(false);
-    
+
     useEffect(() => {
         if (typeof window === "undefined") return;
         const mq = window.matchMedia("(max-width: 900px)");
@@ -292,7 +293,7 @@ export function ChartAnalyzer({
             case "1": return 2;
             case "60": return 2;
             // ✅ 일봉: 데스크톱 2px / 모바일 3px (반으로 줄여서 더 촘촘하게)
-            case "D": return isMobileRef.current ? 3 : 2; 
+            case "D": return isMobileRef.current ? 3 : 2;
             case "W": return 3;
             case "M": return 5;
             case "Y": return 7;
@@ -660,17 +661,17 @@ export function ChartAnalyzer({
                     const existsIndex = prev.findIndex((p) => compareTime(p.time, newPoint.time) === 0);
                     const next = [...prev];
                     if (existsIndex >= 0) {
-                      next[existsIndex] = newPoint;
+                        next[existsIndex] = newPoint;
                     } else {
                         // ✅ Max Points Check
                         if (maxPoints && next.length >= maxPoints) {
                             console.log("Max points reached");
-                            return prev; 
+                            return prev;
                         }
                         next.push(newPoint);
                     }
                     next.sort((a, b) => compareTime(a.time, b.time));
-                    
+
                     return next;
                 });
             }
@@ -739,7 +740,13 @@ export function ChartAnalyzer({
                 if (interval === "60") dataInterval = "1h";
                 if (interval === "1") dataInterval = "1m";
 
-                const data = (await fetchTwelveDataCandles(symbol, dataInterval)) as CandleDataWithVolume[];
+                // ✅ Phase 1: 통합 차트 API 사용 (Yahoo Finance 기반, 서버 캐싱)
+                const response = await fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&interval=${dataInterval}`);
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Failed to fetch chart data');
+                }
+                const data = (await response.json()) as CandleDataWithVolume[];
 
                 if (!data || data.length === 0) {
                     setError(`데이터를 불러올 수 없습니다.`);
@@ -804,7 +811,7 @@ export function ChartAnalyzer({
                     const spacing = getTargetBarSpacingPx(interval);
                     // ✅ 요청사항: 일봉(D) 최초 로딩 시 "오늘~한달 전" + "미래 한달(기본 1개월 모드)"까지 보이도록 우측 여백 확보
                     const rightOffset = interval === "D" ? futureBars : futureBars;
-                    
+
                     chartRef.current.applyOptions({
                         timeScale: {
                             timeVisible: isIntraday,
@@ -821,7 +828,7 @@ export function ChartAnalyzer({
 
                                 // ✅ 일봉/모바일 등에서 강제로 MM.DD 형식 우선
                                 if (interval === "D") return `${month}.${day}`;
-                                
+
                                 if (tickMarkType === TickMarkType.DayOfMonth) return `${month}.${day}`;
                                 if (tickMarkType === TickMarkType.Month) return `${year}.${month}`;
                                 if (tickMarkType === TickMarkType.Year) return year.toString();
@@ -866,9 +873,9 @@ export function ChartAnalyzer({
                         // 기존 로직 유지 (다른 시간대)
                         const width = chartContainerRef.current.clientWidth;
                         const autoBars = Math.floor(width / spacing);
-                        const total = autoBars; 
-                        const to = data.length + futureBars; 
-                        const from = to - total; 
+                        const total = autoBars;
+                        const to = data.length + futureBars;
+                        const from = to - total;
                         chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
                     }
                 }
@@ -883,14 +890,16 @@ export function ChartAnalyzer({
 
         fetchData();
 
-        // ✅ 실시간 가격 스트리밍: currentPrice만 갱신(차트 시리즈 보정은 최소화)
-        const sub = subscribeTwelveDataPrices([symbol], (msg) => {
-            const p = Number(msg.price);
-            if (!Number.isFinite(p)) return;
-            setCurrentPrice(p);
-        });
+        // ✅ Phase 2 TODO: 실시간 가격 폴링으로 대체 예정
+        // 현재는 실시간 업데이트 비활성화
+        // const sub = subscribeTwelveDataPrices([symbol], (msg) => {
+        //     const p = Number(msg.price);
+        //     if (!Number.isFinite(p)) return;
+        //     setCurrentPrice(p);
+        // });
 
-        return () => sub.close();
+        // return () => sub.close();
+        return () => { }; // Phase 2에서 폴링 cleanup 추가 예정
     }, [symbol, interval, mounted, futureMode, customDays, captureChart, buildMonthStartTime, compareTime, isChartReady]);
 
     // Re-apply future range logic...
@@ -938,13 +947,13 @@ export function ChartAnalyzer({
         if (lastCandle && sorted.length > 0) {
             // lastCandle보다 시간이 "이후"인 첫 번째 포인트 찾기
             const firstFuturePoint = sorted.find(p => compareTime(p.time, lastCandle.time) > 0);
-            
+
             // 만약 미래 포인트가 있다면 연결 (없으면 과거 포인트들만 있는 것이므로 브릿지 라인 생략)
             if (firstFuturePoint) {
-                 const { seg, glow } = addPredictionSegmentSeries("#22c55e");
-                 // [현재, 미래] 순서 보장됨
-                 seg?.setData([lastCandle, firstFuturePoint]);
-                 glow?.setData([lastCandle, firstFuturePoint]);
+                const { seg, glow } = addPredictionSegmentSeries("#22c55e");
+                // [현재, 미래] 순서 보장됨
+                seg?.setData([lastCandle, firstFuturePoint]);
+                glow?.setData([lastCandle, firstFuturePoint]);
             }
         }
 
@@ -954,8 +963,8 @@ export function ChartAnalyzer({
             return;
         }
 
-        const startColor = "#22c55e"; 
-        const endColor = "#f97316";   
+        const startColor = "#22c55e";
+        const endColor = "#f97316";
         const segCount = sorted.length - 1;
 
         for (let i = 0; i < segCount; i++) {

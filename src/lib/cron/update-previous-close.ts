@@ -19,24 +19,26 @@ interface PredictionRecord {
 
 /**
  * Determine the appropriate data source for a symbol
+ * 
+ * ✅ Phase 1: Yahoo Finance 중심으로 통합
+ * - 업비트 코인 (KRW-*): Upbit API 유지
+ * - 나머지 모두: Yahoo Finance (한국 주식 포함)
  */
-function getDataSource(symbol: string): 'yahoo' | 'upbit' | 'twelvedata' {
+function getDataSource(symbol: string): 'yahoo' | 'upbit' {
     // Upbit crypto (e.g., KRW-BTC)
     if (symbol.includes('KRW-')) {
         return 'upbit';
     }
 
-    // Korean stock (6-digit code)
-    if (symbol.match(/^\d{6}$/)) {
-        return 'twelvedata';
-    }
-
-    // Default to Yahoo (US stocks, crypto pairs like BTC-USD)
+    // 나머지는 모두 Yahoo (한국 주식, 미국 주식, 코인 등)
+    // 한국 주식: 005930 → 005930.KS로 자동 변환됨
     return 'yahoo';
 }
 
 /**
  * Fetch candle data for a symbol
+ * 
+ * ✅ Phase 1: 통합 차트 API 사용
  */
 async function fetchCandleData(symbol: string, retries = 3): Promise<any[] | null> {
     const source = getDataSource(symbol);
@@ -44,14 +46,21 @@ async function fetchCandleData(symbol: string, retries = 3): Promise<any[] | nul
 
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-            const response = await fetch(
-                `${baseUrl}/api/${source}/candles?symbol=${encodeURIComponent(symbol)}&interval=1d`,
-                {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' },
-                    cache: 'no-store'
-                }
-            );
+            let url: string;
+
+            if (source === 'upbit') {
+                // 업비트 API 사용
+                url = `${baseUrl}/api/upbit/candles?market=${encodeURIComponent(symbol)}&minutes=1440&count=200`;
+            } else {
+                // 통합 차트 API 사용 (Yahoo Finance 기반)
+                url = `${baseUrl}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d`;
+            }
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store'
+            });
 
             if (!response.ok) {
                 if (attempt < retries) {

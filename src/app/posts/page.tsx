@@ -10,7 +10,8 @@ import { calculateAccuracy } from "@/lib/utils/accuracy";
 import { SyncPriceButton } from "@/components/admin/SyncPriceButton";
 import { Input } from "@/components/ui/input";
 import { clientCacheGet, clientCacheSet } from "@/lib/utils/clientCache";
-import { subscribeTwelveDataPrices } from "@/lib/api/twelvedata";
+// ✅ Phase 2: 폴링 방식으로 전환
+// import { subscribeTwelveDataPrices } from "@/lib/api/twelvedata";
 import { searchSymbol } from "@/lib/api/search";
 import { SORT_OPTIONS, type SortOption } from "@/lib/ui/chartBoardSort";
 import { getKoreanName } from "@/lib/constants/krx_names";
@@ -46,12 +47,12 @@ export default function PostsPage() {
     const interval = String(post?.chart_config?.interval ?? "D");
     const stepMs =
       interval === "1" ? 60_000 :
-      interval === "60" ? 3_600_000 :
-      interval === "D" ? 86_400_000 :
-      interval === "W" ? 7 * 86_400_000 :
-      interval === "M" ? 30 * 86_400_000 :
-      interval === "Y" ? 365 * 86_400_000 :
-      86_400_000;
+        interval === "60" ? 3_600_000 :
+          interval === "D" ? 86_400_000 :
+            interval === "W" ? 7 * 86_400_000 :
+              interval === "M" ? 30 * 86_400_000 :
+                interval === "Y" ? 365 * 86_400_000 :
+                  86_400_000;
 
     const toMs = (t: unknown): number | null => {
       if (typeof t === "number" && Number.isFinite(t)) return t * 1000; // unix seconds
@@ -123,7 +124,7 @@ export default function PostsPage() {
   useEffect(() => {
     async function loadPosts() {
       const requestId = ++lastRequestIdRef.current;
-      
+
       let apiSort: PostSortOption = 'latest';
       if (sortBy === 'accuracy') apiSort = 'accuracy';
       if (sortBy === 'recent_accuracy') apiSort = 'recent_accuracy';
@@ -132,10 +133,10 @@ export default function PostsPage() {
       if (sortBy === 'daily_accuracy') apiSort = 'accuracy_1day';
       if (sortBy === 'accuracy_5day') apiSort = 'accuracy_5day';
       if (sortBy === 'accuracy_10day') apiSort = 'accuracy_10day';
-      
+
       const cacheKey = `posts:page:${apiSort}:limit=12:offset=0`;
       const cached = clientCacheGet<Post[]>(cacheKey);
-      
+
       if (cached && cached.length > 0) {
         setPosts(cached);
         setLoading(false);
@@ -144,7 +145,7 @@ export default function PostsPage() {
       }
 
       const fetchedPosts = await fetchPosts(12, 0, apiSort);
-      
+
       const symbolsToStream = Array.from(
         new Set(
           fetchedPosts
@@ -152,26 +153,26 @@ export default function PostsPage() {
             .map((p) => p.ticker_symbol)
         )
       );
-      
+
       const postsWithData = fetchedPosts.map((post) => {
         const currentPrice = priceRef.current.get(post.ticker_symbol);
-        
+
         let profit = post.accuracy_score;
         let status = post.prediction_status;
 
         if (currentPrice && post.prediction_type && post.entry_price && post.target_price && post.stop_loss_price && post.target_date) {
-             const accuracy = calculateAccuracy(
-              {
-                predictionType: post.prediction_type,
-                entryPrice: post.entry_price,
-                targetPrice: post.target_price,
-                stopLossPrice: post.stop_loss_price,
-                targetDate: new Date(post.target_date),
-              },
-              currentPrice
-            );
-            profit = accuracy.profitPercentage;
-            status = accuracy.status;
+          const accuracy = calculateAccuracy(
+            {
+              predictionType: post.prediction_type,
+              entryPrice: post.entry_price,
+              targetPrice: post.target_price,
+              stopLossPrice: post.stop_loss_price,
+              targetDate: new Date(post.target_date),
+            },
+            currentPrice
+          );
+          profit = accuracy.profitPercentage;
+          status = accuracy.status;
         }
 
         return {
@@ -181,7 +182,7 @@ export default function PostsPage() {
           prediction_status: status
         };
       });
-      
+
       if (requestId !== lastRequestIdRef.current) return;
 
       setPosts(postsWithData);
@@ -191,14 +192,16 @@ export default function PostsPage() {
       streamRef.current?.close();
       streamRef.current = null;
       if (symbolsToStream.length > 0) {
-        streamRef.current = subscribeTwelveDataPrices(symbolsToStream, (msg) => {
-          const p = Number(msg.price);
+        // ✅ Phase 2: 실시간 가격 폴링으로 전환
+        const { subscribePrices } = await import('@/lib/api/price-polling');
+        streamRef.current = subscribePrices(symbolsToStream, (priceUpdate) => {
+          const p = priceUpdate.price;
           if (!Number.isFinite(p)) return;
-          priceRef.current.set(msg.symbol, p);
+          priceRef.current.set(priceUpdate.symbol, p);
 
           setPosts((prev) =>
             prev.map((post) => {
-              if (post.ticker_symbol !== msg.symbol) return post;
+              if (post.ticker_symbol !== priceUpdate.symbol) return post;
               const currentPrice = p;
 
               let profit = post.accuracy_score;
@@ -237,7 +240,7 @@ export default function PostsPage() {
         });
       }
     }
-    
+
     loadPosts();
     return () => {
       streamRef.current?.close();
@@ -297,11 +300,11 @@ export default function PostsPage() {
       <div className="flex flex-col gap-6 mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-4 flex-1 overflow-x-auto pb-2 sm:pb-0">
-             <h1 className="text-2xl font-bold whitespace-nowrap">차트 게시판</h1>
-             <SyncPriceButton />
-             
-             {/* Search - Visible on Desktop */}
-             <div className="relative w-full max-w-xs hidden sm:block">
+            <h1 className="text-2xl font-bold whitespace-nowrap">차트 게시판</h1>
+            <SyncPriceButton />
+
+            {/* Search - Visible on Desktop */}
+            <div className="relative w-full max-w-xs hidden sm:block">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
@@ -312,7 +315,7 @@ export default function PostsPage() {
               />
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <select
               value={sortBy}
@@ -326,30 +329,30 @@ export default function PostsPage() {
                 </option>
               ))}
             </select>
-            
+
             <Button
-                className="gap-2 bg-blue-600 hover:bg-blue-700 whitespace-nowrap"
-                onClick={() => router.push("/analyze")}
+              className="gap-2 bg-blue-600 hover:bg-blue-700 whitespace-nowrap"
+              onClick={() => router.push("/analyze")}
             >
-                <LineChart className="h-4 w-4" />
-                <span className="hidden sm:inline">차트 분석</span>
-                <span className="sm:hidden">분석</span>
+              <LineChart className="h-4 w-4" />
+              <span className="hidden sm:inline">차트 분석</span>
+              <span className="sm:hidden">분석</span>
             </Button>
           </div>
         </div>
-        
+
         {/* Search - Mobile Only */}
         <div className="sm:hidden">
-             <div className="relative w-full">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="종목 검색..."
-                className="w-full bg-secondary pl-9 h-9"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+          <div className="relative w-full">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="종목 검색..."
+              className="w-full bg-secondary pl-9 h-9"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -357,29 +360,29 @@ export default function PostsPage() {
       {filteredPosts.length === 0 ? (
         <div className="text-center py-12">
           {searchTerm.trim() ? (
-             <p className="text-muted-foreground text-lg">
-                {isResolving ? "검색 중..." : "검색 결과가 없습니다."}
-             </p>
+            <p className="text-muted-foreground text-lg">
+              {isResolving ? "검색 중..." : "검색 결과가 없습니다."}
+            </p>
           ) : (
-             <>
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-                    <LineChart className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <p className="text-muted-foreground text-lg">
-                    아직 게시글이 없습니다.
-                </p>
-                <p className="text-muted-foreground text-sm mt-2 mb-6">
-                    첫 번째 차트 분석을 작성해보세요!
-                </p>
-             </>
+            <>
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                <LineChart className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <p className="text-muted-foreground text-lg">
+                아직 게시글이 없습니다.
+              </p>
+              <p className="text-muted-foreground text-sm mt-2 mb-6">
+                첫 번째 차트 분석을 작성해보세요!
+              </p>
+            </>
           )}
           {!searchTerm.trim() && (
-              <Button
-                className="gap-2 bg-blue-600 hover:bg-blue-700"
-                onClick={() => router.push("/analyze")}
+            <Button
+              className="gap-2 bg-blue-600 hover:bg-blue-700"
+              onClick={() => router.push("/analyze")}
             >
-                <LineChart className="h-4 w-4" />
-                차트 분석
+              <LineChart className="h-4 w-4" />
+              차트 분석
             </Button>
           )}
         </div>
@@ -387,48 +390,48 @@ export default function PostsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredPosts.map((post) => (
             (() => {
-                const pointsCount = Array.isArray(post?.chart_config?.prediction_points)
-                  ? post.chart_config.prediction_points.length
-                  : 0;
-    
-                const pointPhase = getPointPhase(post);
-    
-                const profitLabel =
-                  typeof post.profitPercentage === "number"
-                    ? `${post.profitPercentage >= 0 ? "+" : ""}${post.profitPercentage.toFixed(2)}%`
-                    : pointsCount > 0
-                      ? `포인트 ${pointsCount}개`
-                      : "예측 없음";
-    
-                return (
-                  <ChartCard
-                    key={post.id}
-                    id={post.id}
-                    symbol={post.ticker_symbol}
-                    source="yahoo"
-                    title={post.title}
-                    koreanName={getKoreanName(post.ticker_symbol)}
-                    excerpt={makeExcerpt(post.content, 140)}
-                    pointPhase={pointPhase ?? undefined}
-                    chartImageUrl={post.chart_image_url}
-                    user={{
-                      name: post.profiles?.nickname || "익명",
-                      level: post.profiles?.nickname || "익명",
-                      ranking: 0,
-                      avatar: post.profiles?.avatar_url,
-                      countryCode: post.profiles?.country_code,
-                      stats: post.profiles?.stats,
-                    }}
-                    stats={{
-                      profit: profitLabel,
-                      winRate: post.prediction_status || "대기",
-                      count: `조회 ${post.view_count || 0}`,
-                    }}
-                    predictionStatus={post.prediction_status}
-                    chartConfig={post.chart_config}
-                  />
-                );
-              })()
+              const pointsCount = Array.isArray(post?.chart_config?.prediction_points)
+                ? post.chart_config.prediction_points.length
+                : 0;
+
+              const pointPhase = getPointPhase(post);
+
+              const profitLabel =
+                typeof post.profitPercentage === "number"
+                  ? `${post.profitPercentage >= 0 ? "+" : ""}${post.profitPercentage.toFixed(2)}%`
+                  : pointsCount > 0
+                    ? `포인트 ${pointsCount}개`
+                    : "예측 없음";
+
+              return (
+                <ChartCard
+                  key={post.id}
+                  id={post.id}
+                  symbol={post.ticker_symbol}
+                  source="yahoo"
+                  title={post.title}
+                  koreanName={getKoreanName(post.ticker_symbol)}
+                  excerpt={makeExcerpt(post.content, 140)}
+                  pointPhase={pointPhase ?? undefined}
+                  chartImageUrl={post.chart_image_url}
+                  user={{
+                    name: post.profiles?.nickname || "익명",
+                    level: post.profiles?.nickname || "익명",
+                    ranking: 0,
+                    avatar: post.profiles?.avatar_url,
+                    countryCode: post.profiles?.country_code,
+                    stats: post.profiles?.stats,
+                  }}
+                  stats={{
+                    profit: profitLabel,
+                    winRate: post.prediction_status || "대기",
+                    count: `조회 ${post.view_count || 0}`,
+                  }}
+                  predictionStatus={post.prediction_status}
+                  chartConfig={post.chart_config}
+                />
+              );
+            })()
           ))}
         </div>
       )}

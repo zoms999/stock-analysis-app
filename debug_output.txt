@@ -1,0 +1,41 @@
+--- Checking Market Prices for XRP ---
+[
+  {
+    "symbol": "XRP",
+    "price": 1.978879,
+    "time": "2026. 1. 20. 오전 12:03:04",
+    "raw_time": "2026-01-19T15:03:04.379+00:00"
+  },
+  {
+    "symbol": "XRP",
+    "price": 1.9776,
+    "time": "2026. 1. 19. 오후 11:18:12",
+    "raw_time": "2026-01-19T14:18:12.515+00:00"
+  }
+]
+
+--- Checking Daily Predictions for XRP ---
+Found Post ID: 8208d0c0-baf8-4ab7-9d59-81ec4569d1a0 for symbol XRP
+[
+  {
+    "date": "2026-01-19",
+    "prev_close": 2.0509133338928223,
+    "predicted": 2.0733615846255393,
+    "actual": 1.978879,
+    "updated_at": "2026. 1. 20. 오전 12:22:15"
+  },
+  {
+    "date": "2026-01-20",
+    "prev_close": 2.0509133338928223,
+    "predicted": 2.0889469274216936,
+    "actual": null,
+    "updated_at": "N/A"
+  },
+  {
+    "date": "2026-01-21",
+    "prev_close": 2.0509133338928223,
+    "predicted": 2.104532270217848,
+    "actual": null,
+    "updated_at": "N/A"
+  }
+]

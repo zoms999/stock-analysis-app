@@ -17,7 +17,8 @@ import {
     AreaSeries,
     LogicalRange,
 } from "lightweight-charts";
-import { fetchTwelveDataCandles, subscribeTwelveDataPrices } from "@/lib/api/twelvedata";
+// ✅ Phase 1: Yahoo Finance 통합 (TwelveData 제거)
+// import { fetchTwelveDataCandles, subscribeTwelveDataPrices } from "@/lib/api/twelvedata";
 
 type ViewStyle = "candle" | "line";
 
@@ -929,7 +930,13 @@ export function SavedChartViewer({
                 if (interval === "60") dataInterval = "1h";
                 if (interval === "1") dataInterval = "1m";
 
-                const data = (await fetchTwelveDataCandles(symbol, dataInterval)) as CandleDataWithVolume[];
+                // ✅ Phase 1: 통합 차트 API 사용 (Yahoo Finance 기반, 서버 캐싱)
+                const response = await fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&interval=${dataInterval}`);
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Failed to fetch chart data');
+                }
+                const data = (await response.json()) as CandleDataWithVolume[];
 
                 if (!data || data.length === 0) {
                     setError("차트 데이터를 불러올 수 없습니다.");
@@ -1007,24 +1014,23 @@ export function SavedChartViewer({
 
         run();
 
-        // ✅ 실시간 현재가 스트리밍 (마지막 실측 캔들의 close/high/low 보정에 활용 가능)
-        // 홈 카드(mode="card")에선 차트 미리보기만 필요하므로 스트리밍 구독을 끄고
-        // 목록 단위(ChartBoardList)의 배치 구독만 사용해 SSE 연결 폭주를 방지합니다.
-        const sub =
-            mode === "card"
-                ? { close: () => { } }
-                : subscribeTwelveDataPrices([symbol], (msg) => {
-                    const p = Number(msg.price);
-                    if (!Number.isFinite(p)) return;
-                    const last = lastRealRef.current;
-                    if (!last) return;
-                    lastRealRef.current = {
-                        ...last,
-                        close: p,
-                    };
-                });
+        // ✅ Phase 2 TODO: 실시간 가격 폴링으로 대체 예정
+        // 현재는 실시간 업데이트 비활성화 (차트 데이터만 표시)
+        // const sub = mode === "card"
+        //     ? { close: () => { } }
+        //     : subscribeTwelveDataPrices([symbol], (msg) => {
+        //         const p = Number(msg.price);
+        //         if (!Number.isFinite(p)) return;
+        //         const last = lastRealRef.current;
+        //         if (!last) return;
+        //         lastRealRef.current = {
+        //             ...last,
+        //             close: p,
+        //         };
+        //     });
 
-        return () => sub.close();
+        // return () => sub.close();
+        return () => { }; // Phase 2에서 폴링 cleanup 추가 예정
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [symbol, interval, applyBaseDataToSeries, mode, getCardWindowBars, computeFutureBarsForCard]);
 

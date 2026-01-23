@@ -1,28 +1,49 @@
 // src/lib/api/search.ts
 
 /**
- * 사용자가 입력한 키워드(다국어 포함)를 티커(symbol)로 변환합니다.
- * - Yahoo Finance 검색(`/api/yahoo/search`)을 1순위로 사용합니다. (코인 및 해외 주식에 강함)
- * - (옵션) Yahoo가 못 찾으면 Twelve Data 검색(`/api/twelvedata/search`)으로 폴백합니다.
+ * ✅ Phase 3: Yahoo Finance 중심 검색 (TwelveData 폴백 제거)
+ * 
+ * 검색 우선순위:
+ * 1. 업비트 코인 (하드코딩 목록)
+ * 2. Yahoo Finance (미국/한국 주식, 글로벌 코인)
  */
+
+import { searchUpbitCoins, getUpbitCoin, type UpbitCoin } from './upbit-coins';
+
 export interface SearchResult {
   symbol: string;
+  name?: string;
   exchange?: string;
   type?: string;
   country?: string;
+  source?: 'upbit' | 'yahoo';
 }
 
 /**
- * 사용자가 입력한 키워드(다국어 포함)를 티커(symbol)로 변환합니다.
- * - Yahoo Finance 검색(`/api/yahoo/search`)을 1순위로 사용합니다. (코인 및 해외 주식에 강함)
- * - (옵션) Yahoo가 못 찾으면 Twelve Data 검색(`/api/twelvedata/search`)으로 폴백합니다.
+ * 사용자가 입력한 키워드를 티커(symbol)로 변환합니다.
+ * 
+ * ✅ Phase 3: TwelveData 제거, Yahoo + Upbit만 사용
  */
 export async function searchSymbol(query: string): Promise<SearchResult | null> {
   const q = query?.trim();
   if (!q) return null;
 
   try {
-    // 1) Yahoo Finance (코인 및 해외 주식에 강함)
+    // 1) 업비트 코인 우선 검색 (KRW 페어)
+    const upbitResults = searchUpbitCoins(q);
+    if (upbitResults.length > 0) {
+      const coin = upbitResults[0];
+      return {
+        symbol: coin.symbol,
+        name: coin.name,
+        type: 'CRYPTOCURRENCY',
+        exchange: 'Upbit',
+        country: 'KR',
+        source: 'upbit',
+      };
+    }
+
+    // 2) Yahoo Finance 검색 (미국/한국 주식, 글로벌 코인)
     const yhUrl = `/api/yahoo/search?q=${encodeURIComponent(q)}`;
     const yhRes = await fetch(yhUrl);
 
@@ -31,44 +52,15 @@ export async function searchSymbol(query: string): Promise<SearchResult | null> 
       if (yhData && typeof yhData === "object") {
         const symbol = (yhData as { symbol?: unknown }).symbol;
         if (typeof symbol === "string" && symbol.length > 0) {
-          return { symbol };
+          return {
+            symbol,
+            source: 'yahoo',
+          };
         }
       }
     } else {
       const errorData = await yhRes.json().catch(() => ({}));
       console.warn(`Yahoo Search API Error (${yhRes.status}):`, errorData);
-    }
-
-    // 2) Twelve Data fallback (한국 주식 등에 강함)
-    const tdUrl = `/api/twelvedata/search?q=${encodeURIComponent(q)}`;
-    const tdRes = await fetch(tdUrl);
-
-    if (!tdRes.ok) {
-      const errorData = await tdRes.json().catch(() => ({}));
-      console.error(`Twelve Data Search API Error (${tdRes.status}):`, errorData);
-      return null;
-    }
-
-    const tdData: any = await tdRes.json().catch(() => null);
-    if (tdData && Array.isArray(tdData.data) && tdData.data.length > 0) {
-      // 첫 번째 매칭 결과 사용
-      const item = tdData.data[0];
-      const symbol = item.symbol;
-      if (typeof symbol === "string" && symbol.length > 0) {
-        return {
-          symbol: symbol,
-          exchange: item.exchange,
-          type: item.instrument_type,
-          country: item.country
-        };
-      }
-    }
-    // Fallback for object format (old handling) if data array is missing?
-    if (tdData && typeof tdData === "object" && !Array.isArray(tdData.data)) {
-      const symbol = (tdData as { symbol?: unknown }).symbol;
-      if (typeof symbol === "string" && symbol.length > 0) {
-        return { symbol: symbol };
-      }
     }
 
     return null;
@@ -81,48 +73,56 @@ export async function searchSymbol(query: string): Promise<SearchResult | null> 
 
 /**
  * 키워드로 종목 목록을 검색합니다. (Dropdown용)
+ * 
+ * ✅ Phase 3: TwelveData 제거, Yahoo + Upbit만 사용
  */
 export async function searchStocks(query: string): Promise<SearchResult[]> {
   const q = query?.trim();
   if (!q) return [];
 
   try {
-    // 1) Yahoo Finance 우선 시도 (더 많은 결과 반환)
+    const results: SearchResult[] = [];
+
+    // 1) 업비트 코인 검색
+    const upbitResults = searchUpbitCoins(q);
+    results.push(...upbitResults.map((coin) => ({
+      symbol: coin.symbol,
+      name: coin.name,
+      type: 'CRYPTOCURRENCY',
+      exchange: 'Upbit',
+      country: 'KR',
+      source: 'upbit' as const,
+    })));
+
+    // 2) Yahoo Finance 검색
     const yhUrl = `/api/yahoo/search?q=${encodeURIComponent(q)}`;
     const yhRes = await fetch(yhUrl);
-    
+
     if (yhRes.ok) {
       const yhData: any = await yhRes.json().catch(() => null);
       if (yhData && Array.isArray(yhData.quotes) && yhData.quotes.length > 0) {
-        return yhData.quotes.map((item: any) => ({
+        results.push(...yhData.quotes.map((item: any) => ({
           symbol: item.symbol,
+          name: item.shortname || item.longname,
           exchange: item.exchange,
           type: item.quoteType || item.typeDisp,
-          country: item.exchDisp
-        }));
+          country: item.exchDisp,
+          source: 'yahoo' as const,
+        })));
       }
     }
 
-    // 2) Twelve Data 폴백
-    const tdUrl = `/api/twelvedata/search?q=${encodeURIComponent(q)}`;
-    const tdRes = await fetch(tdUrl);
-    
-    if (tdRes.ok) {
-      const tdData: any = await tdRes.json().catch(() => null);
-      if (tdData && Array.isArray(tdData.data)) {
-        return tdData.data.map((item: any) => ({
-             symbol: item.symbol,
-             exchange: item.exchange,
-             type: item.instrument_type,
-             country: item.country
-        }));
-      }
-    }
-    return [];
+    // 중복 제거 (같은 심볼)
+    const uniqueResults = results.filter((result, index, self) =>
+      index === self.findIndex((r) => r.symbol === result.symbol)
+    );
+
+    return uniqueResults;
   } catch (e) {
     console.error("searchStocks error:", e);
     return [];
   }
 }
+
 
 

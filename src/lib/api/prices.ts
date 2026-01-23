@@ -16,10 +16,12 @@ const CACHE_DURATION = 60000; // 1 minute cache
 
 /**
  * Get current price for a symbol
+ * 
+ * ✅ Phase 1: Yahoo Finance를 기본 소스로 변경
  */
 export async function getCurrentPrice(
   symbol: string,
-  source: PriceSource = "twelvedata"
+  source: PriceSource = "yahoo" // twelvedata → yahoo로 변경
 ): Promise<number | null> {
   const cacheKey = `${source}:${symbol}`;
   const now = Date.now();

@@ -126,10 +126,11 @@ BEGIN
         ELSIF v_prev_close IS NOT NULL AND v_actual_close IS NULL THEN
             -- We have prev close but no actual close yet (maybe market hasn't closed or no data)
             -- Just update prev_close if needed
+            -- Allow updating even if not NULL, to reflect the latest "previous close" (latest price before prediction date)
             UPDATE public.daily_predictions
             SET previous_close = v_prev_close
-            WHERE id = r.id AND previous_close IS NULL;
-        END IF;
+            WHERE id = r.id; 
+            -- Removed "AND previous_close IS NULL" allows self-correction as 01-19 data becomes available for 01-20 prediction
         
     END LOOP;
     

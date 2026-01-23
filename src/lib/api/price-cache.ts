@@ -9,7 +9,7 @@
 import YahooFinance from 'yahoo-finance2';
 
 // ✅ Yahoo Finance 인스턴스 생성 (v2.12+ 필수)
-const yahooFinance = new YahooFinance();
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 interface CachedPrice {
     price: number;

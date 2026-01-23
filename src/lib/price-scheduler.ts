@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { fetchKisPrice } from "./api/kis";
 
 // ✅ Yahoo Finance 인스턴스 생성 (v2.12+ 필수)
-const yahooFinance = new YahooFinance();
+const yahooFinance = new YahooFinance({ suppressNotices: ['ripHistorical', 'yahooSurvey'] });
 
 // Initialize Supabase Client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -79,17 +79,12 @@ async function fetchBinancePrice(symbol: string): Promise<number | null> {
 /**
  * Fetch current price using Yahoo Finance
  */
-/**
- * Fetch current price using Yahoo Finance
- */
 async function fetchYahooPrice(symbol: string): Promise<number | null> {
   try {
     const yahooSymbol = normalizeSymbolForYahoo(symbol);
 
-    // Instantiate YahooFinance
-    const yf = new yahooFinance({ suppressNotices: ['ripHistorical'] });
-
-    const quote = await yf.quote(yahooSymbol);
+    // Use the global yahooFinance instance
+    const quote = await yahooFinance.quote(yahooSymbol);
 
     // Prefer regularMarketPrice, fallback to close/price
     const price = quote.regularMarketPrice ?? quote.ask ?? quote.bid ?? null;

@@ -255,3 +255,44 @@ yahoo-finance2 라이브러리의 API 변경으로 인한 문제를 성공적으
 - 일관된 import 패턴 유지
 - 충분한 로깅으로 문제 진단 시간 단축
 - 테스트 스크립트로 빠른 검증
+
+---
+
+## 추가 수정 (Build Error 해결)
+
+### 문제
+
+```
+Type error: This expression is not constructable.
+```
+
+### 원인
+
+`price-scheduler.ts`에서 함수 내부에서 `new yahooFinance()`를 시도했으나, 이미 전역에서 `yahooFinance` 변수를 선언했기 때문에 충돌 발생.
+
+### 해결
+
+전역 인스턴스를 한 번만 생성하고 재사용:
+
+```typescript
+// 파일 상단에서 한 번만 생성
+import YahooFinance from "yahoo-finance2";
+const yahooFinance = new YahooFinance({
+  suppressNotices: ["yahooSurvey", "ripHistorical"],
+});
+
+// 함수에서는 전역 인스턴스 사용
+async function fetchYahooPrice(symbol: string) {
+  const quote = await yahooFinance.quote(symbol); // ✅ 전역 인스턴스 사용
+}
+```
+
+### 빌드 검증
+
+```bash
+npm run build
+# ✓ Compiled successfully in 9.5s
+# ✓ Finished TypeScript in 11.4s
+```
+
+모든 TypeScript 에러가 해결되고 프로덕션 빌드가 성공적으로 완료되었습니다.

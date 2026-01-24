@@ -138,6 +138,21 @@ export function DailyAccuracyTable({ postId, symbol, koreanName }: DailyAccuracy
                  const p = processedPredictions.find(pp => pp.id === rawP.id);
                  const hasData = !!p;
                  
+                 // ✅ UI Fix: 오늘 날짜 이후(미래)인 경우, 아직 확정되지 않은 전일종가는 숨김 처리
+                 // (DB에 잘못된 값이 들어있을 수 있으므로 UI에서 방어)
+                 const today = new Date();
+                 today.setHours(0, 0, 0, 0);
+                 const predDate = new Date(rawP.prediction_date);
+                 predDate.setHours(0, 0, 0, 0);
+                 
+                 const isFuture = predDate > today;
+                 // 전일 종가는 "예측일의 전일" 데이터이므로, 예측일이 오늘이더라도 표시 가능
+                 // 하지만 예측일이 미래라면, 그 전날 가격도 아직 확정되지 않았을 수 있음 (내일의 전일=오늘)
+                 
+                 // 만약 값이 있고, 실제 종가(actual_close)가 없다면(아직 미도래), 
+                 // 그리고 미래 날짜라면 previous_close가 있더라도 신뢰할 수 없음(오래된 데이터일 수 있음)
+                 const showPreviousClose = !isFuture || (rawP.actual_close !== null);
+
                  const previousClose = rawP.previous_close || 0;
                  const predictedPrice = rawP.predicted_price || 0;
                  const actualPrice = rawP.actual_close;
@@ -154,7 +169,7 @@ export function DailyAccuracyTable({ postId, symbol, koreanName }: DailyAccuracy
                       {rawP.prediction_date}
                     </td>
                     <td className="py-4 px-4 text-right align-top font-semibold text-foreground/90">
-                      {previousClose.toLocaleString()}
+                      {showPreviousClose ? previousClose.toLocaleString() : <span className="text-muted-foreground font-normal text-xs">대기중</span>}
                     </td>
                     <td className="py-4 px-4 text-right align-top">
                       <div className="flex flex-col items-end gap-1">

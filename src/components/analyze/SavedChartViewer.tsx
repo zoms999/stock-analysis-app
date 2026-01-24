@@ -408,7 +408,11 @@ export function SavedChartViewer({
         } else if (lastRealRef.current && rangeSeriesRef.current) {
             // ✅ card 모드: 예측 라인은 보여주되, 미래 여백은 제한
             const futureBars = mode === "card" ? computeFutureBarsForCard() : computeFutureBarsFromPrediction();
-            chart.applyOptions({ timeScale: { rightOffset: futureBars } });
+            
+            // ✅ Fix: rightOffset을 futureBars로 설정하면 "예측 라인 끝 + futureBars 공백"이 되어버림.
+            // 대신 고정된 여백(margin)만 주고, 데이터(rangeSeries)가 미래까지 뻗어있으므로 자연스럽게 표시됨.
+            const margin = mode === "card" ? 10 : 12;
+            chart.applyOptions({ timeScale: { rightOffset: margin } });
 
             const rangeData = buildRangeData(lastRealRef.current.time, lastRealRef.current.close, interval, futureBars);
             rangeSeriesRef.current.setData(rangeData as any);
@@ -930,13 +934,42 @@ export function SavedChartViewer({
                 if (interval === "60") dataInterval = "1h";
                 if (interval === "1") dataInterval = "1m";
 
-                // ✅ Phase 1: 통합 차트 API 사용 (Yahoo Finance 기반, 서버 캐싱)
-                const response = await fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&interval=${dataInterval}`);
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.error || 'Failed to fetch chart data');
+                // ✅ Upbit 심볼 감지 (KRW-로 시작)
+                const isUpbitSymbol = symbol.toUpperCase().startsWith('KRW-');
+                
+                let data: CandleDataWithVolume[];
+
+                if (isUpbitSymbol) {
+                    // ✅ Upbit API 사용
+                    const upbitInterval = (() => {
+                        if (interval === "1") return "1";
+                        if (interval === "60") return "60";
+                        if (interval === "D") return "240"; // 일봉은 240분봉으로 근사
+                        if (interval === "W") return "240"; // 주봉도 240분봉으로 근사
+                        return "240";
+                    })();
+
+                    const count = (() => {
+                        if (interval === "1") return 1440; // 1일치
+                        if (interval === "60") return 720; // 30일치
+                        return 200; // 기본 200개
+                    })();
+
+                    const response = await fetch(`/api/upbit/candles?market=${encodeURIComponent(symbol)}&minutes=${upbitInterval}&count=${count}`);
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || 'Failed to fetch Upbit chart data');
+                    }
+                    data = await response.json();
+                } else {
+                    // ✅ Yahoo Finance API 사용 (기존 로직)
+                    const response = await fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&interval=${dataInterval}`);
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || 'Failed to fetch chart data');
+                    }
+                    data = await response.json();
                 }
-                const data = (await response.json()) as CandleDataWithVolume[];
 
                 if (!data || data.length === 0) {
                     setError("차트 데이터를 불러올 수 없습니다.");

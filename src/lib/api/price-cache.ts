@@ -169,26 +169,50 @@ export async function getCachedCandles(
         console.log(`[PriceCache] ✅ Fetched ${result.quotes.length} candles for ${yahooSymbol}`);
 
         // 5. Lightweight Charts 형식으로 변환
-        const candles = result.quotes.map((q: any) => {
-            // 날짜 형식 변환
-            let time: string | number;
-            if (interval === '1d' || interval === '1wk' || interval === '1mo') {
-                // 일봉/주봉/월봉: YYYY-MM-DD 문자열
-                time = q.date.toISOString().split('T')[0];
-            } else {
-                // 분봉/시간봉: Unix timestamp (초)
-                time = Math.floor(q.date.getTime() / 1000);
-            }
+        const candles = result.quotes
+            .map((q: any) => {
+                // 날짜 형식 변환
+                let time: string | number;
+                if (interval === '1d' || interval === '1wk' || interval === '1mo') {
+                    // 일봉/주봉/월봉: YYYY-MM-DD 문자열
+                    time = q.date.toISOString().split('T')[0];
+                } else {
+                    // 분봉/시간봉: Unix timestamp (초)
+                    time = Math.floor(q.date.getTime() / 1000);
+                }
 
-            return {
-                time,
-                open: q.open,
-                high: q.high,
-                low: q.low,
-                close: q.close,
-                volume: q.volume,
-            };
-        });
+                return {
+                    time,
+                    open: q.open,
+                    high: q.high,
+                    low: q.low,
+                    close: q.close,
+                    volume: q.volume,
+                };
+            })
+            .filter((candle: any) => {
+                // ✅ Filter out candles with null OHLC values (non-trading periods)
+                const isValid = 
+                    typeof candle.open === 'number' &&
+                    typeof candle.high === 'number' &&
+                    typeof candle.low === 'number' &&
+                    typeof candle.close === 'number' &&
+                    !isNaN(candle.open) &&
+                    !isNaN(candle.high) &&
+                    !isNaN(candle.low) &&
+                    !isNaN(candle.close);
+                
+                if (!isValid) {
+                    console.warn(`[PriceCache] ⚠️ Filtered invalid candle at ${candle.time}:`, {
+                        open: candle.open,
+                        high: candle.high,
+                        low: candle.low,
+                        close: candle.close,
+                    });
+                }
+                
+                return isValid;
+            });
 
         // 6. 캐시 업데이트
         candleCache.set(cacheKey, {

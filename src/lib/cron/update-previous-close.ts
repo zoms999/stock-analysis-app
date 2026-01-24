@@ -116,6 +116,14 @@ function findPreviousClose(candles: any[], predictionDate: string): number | nul
 
         // Check if this candle is before the prediction date
         if (candleDate < predDate) {
+            // ✅ Add Staleness Check: If data is older than 7 days from prediction date, ignore it.
+            const diffTime = Math.abs(predDate.getTime() - candleDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            
+            if (diffDays > 7) {
+                // console.warn(`[UpdatePreviousClose] Found data but too old (${diffDays} days) for ${predictionDate}`);
+                return null;
+            }
             return candle.close;
         }
     }
@@ -143,6 +151,8 @@ export async function updatePreviousClosePrices(): Promise<UpdateResult> {
         posts!inner(ticker_symbol)
       `)
             .is('previous_close', null)
+            // ✅ Only process past or today's predictions
+            .lte('prediction_date', new Date().toISOString().split('T')[0])
             .order('prediction_date', { ascending: true });
 
         if (fetchError) {

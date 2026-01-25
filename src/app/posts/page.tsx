@@ -8,6 +8,7 @@ import { Loader2, LineChart, Search } from "lucide-react";
 import { ChartCard } from "@/components/home/ChartCard";
 import { calculateAccuracy } from "@/lib/utils/accuracy";
 import { SyncPriceButton } from "@/components/admin/SyncPriceButton";
+import { UpdateHistoryButton } from "@/components/admin/UpdateHistoryButton";
 import { Input } from "@/components/ui/input";
 import { clientCacheGet, clientCacheSet } from "@/lib/utils/clientCache";
 // ✅ Phase 2: 폴링 방식으로 전환
@@ -301,7 +302,10 @@ export default function PostsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-4 flex-1 overflow-x-auto pb-2 sm:pb-0">
             <h1 className="text-2xl font-bold whitespace-nowrap">차트 게시판</h1>
-            <SyncPriceButton />
+            <div className="flex items-center gap-2">
+              <SyncPriceButton />
+              {/* <UpdateHistoryButton /> */}
+            </div>
 
             {/* Search - Visible on Desktop */}
             <div className="relative w-full max-w-xs hidden sm:block">

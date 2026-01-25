@@ -5,6 +5,7 @@ import { ChartCard } from "./ChartCard";
 import { fetchPosts, Post, PostSortOption } from "@/lib/api/posts";
 import { calculateAccuracy } from "@/lib/utils/accuracy";
 import { SyncPriceButton } from "@/components/admin/SyncPriceButton";
+import { UpdateHistoryButton } from "@/components/admin/UpdateHistoryButton";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { clientCacheGet, clientCacheSet } from "@/lib/utils/clientCache";
@@ -335,7 +336,10 @@ export function ChartBoardList() {
 
         <div className="flex items-center gap-4 flex-1">
           <h2 className="text-2xl font-bold whitespace-nowrap">차트 게시판</h2>
-          <SyncPriceButton />
+          <div className="flex items-center gap-2">
+            <SyncPriceButton />
+            {/* <UpdateHistoryButton /> */}
+          </div>
 
           <div className="relative w-full max-w-xs hidden sm:block">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

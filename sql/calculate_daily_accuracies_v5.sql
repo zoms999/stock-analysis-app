@@ -83,9 +83,16 @@ BEGIN
         v_prev_close := prev_close_record.price;
         v_actual_close := actual_close_record.price;
         
-        -- Only override manually set previous_close if fetch succeeded
+        -- ✅ FALLBACK: Only override manually set previous_close if fetch succeeded
         IF v_prev_close IS NULL AND r.previous_close IS NOT NULL THEN
             v_prev_close := r.previous_close;
+        END IF;
+
+        -- ✅ FALLBACK: Only override manually set actual_close if fetch succeeded
+        -- This allows manual backfilling via API/Scripts without being overwritten by NULL
+        IF v_actual_close IS NULL AND (r.actual_close IS NOT NULL) THEN
+            -- We need to fetch the existing actual_close from the row since we didn't select it initially
+             SELECT actual_close INTO v_actual_close FROM public.daily_predictions WHERE id = r.id;
         END IF;
 
         IF v_prev_close IS NOT NULL AND v_actual_close IS NOT NULL THEN

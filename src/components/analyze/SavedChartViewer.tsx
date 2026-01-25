@@ -407,7 +407,12 @@ export function SavedChartViewer({
             savedRangeRef.current = null; // 1회성 소모
         } else if (lastRealRef.current && rangeSeriesRef.current) {
             // ✅ card 모드: 예측 라인은 보여주되, 미래 여백은 제한
-            const futureBars = mode === "card" ? computeFutureBarsForCard() : computeFutureBarsFromPrediction();
+            let futureBars = mode === "card" ? computeFutureBarsForCard() : computeFutureBarsFromPrediction();
+
+            // ✅ 상세 모드 & 일봉: "오늘"을 가운데에 두기 위해 미래 여백을 과거(30일)만큼 강제로 확보
+            if (mode === "detail" && interval === "D") {
+                futureBars = Math.max(futureBars, 30);
+            }
             
             // ✅ Fix: rightOffset을 futureBars로 설정하면 "예측 라인 끝 + futureBars 공백"이 되어버림.
             // 대신 고정된 여백(margin)만 주고, 데이터(rangeSeries)가 미래까지 뻗어있으므로 자연스럽게 표시됨.

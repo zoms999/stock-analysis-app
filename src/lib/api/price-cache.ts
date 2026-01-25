@@ -87,6 +87,13 @@ export async function getCachedPrice(symbol: string): Promise<CachedPrice | null
     const now = Date.now();
     const cacheKey = symbol.toUpperCase();
 
+    // 0. Upbit 필터링 (KRW-*)
+    // 이 캐시 시스템은 Yahoo Finance 전용이므로, 업비트 심볼은 처리하지 않고 무시합니다.
+    // (호출처에서 별도로 Upbit API를 사용해야 함)
+    if (cacheKey.includes('KRW-')) {
+        return null; 
+    }
+
     // 1. 캐시 확인
     const cached = priceCache.get(cacheKey);
     if (cached && (now - cached.timestamp < PRICE_CACHE_DURATION)) {
@@ -137,6 +144,11 @@ export async function getCachedCandles(
 ): Promise<any[] | null> {
     const now = Date.now();
     const cacheKey = `${symbol.toUpperCase()}:${interval}`;
+
+    // 0. Upbit 필터링 (KRW-*)
+    if (symbol.toUpperCase().includes('KRW-')) {
+        return null;
+    }
 
     // 1. 캐시 확인
     const cached = candleCache.get(cacheKey);

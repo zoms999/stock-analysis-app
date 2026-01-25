@@ -19,7 +19,7 @@ DECLARE
 BEGIN
     -- Loop through daily_predictions that need calculation
     FOR r IN 
-        SELECT dp.id, dp.post_id, dp.prediction_date, dp.predicted_price, dp.previous_close, p.ticker_symbol
+        SELECT dp.id, dp.post_id, dp.prediction_date, dp.predicted_price, dp.previous_close, dp.actual_close, p.ticker_symbol
         FROM public.daily_predictions dp
         JOIN public.posts p ON dp.post_id = p.id
         -- Remove strict date filter to allow fixing future dates if they were wrongly populated

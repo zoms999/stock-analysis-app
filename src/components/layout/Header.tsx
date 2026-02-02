@@ -268,7 +268,7 @@ export function Header() {
 
         <div className="flex items-center space-x-4 ml-auto">
           <Link href={user ? "/analyze" : "/login"}>
-            <Button variant="outline" className="hidden md:flex items-center gap-2 border-primary/20 hover:bg-primary/5 hover:text-primary transition-colors">
+            <Button variant="outline" className="hidden md:flex items-center gap-2 border-primary/20 hover:bg-primary/5 transition-colors">
               <LogOut className="h-4 w-4 rotate-90" />
               <span className="text-primary font-bold">차트 분석하기</span>
             </Button>

@@ -118,7 +118,7 @@ export function ChartCard({ id, symbol, koreanName, title, excerpt, pointPhase, 
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 p-4 border border-border rounded-2xl">
       {/* ✅ 카드 전체를 링크로 감싸서(차트/제목/유저정보) 어디를 클릭해도 상세로 이동 */}
       <Link href={`/posts/${id}`} onClick={handleCardClick} className="block">
         <div className="flex flex-col gap-4">

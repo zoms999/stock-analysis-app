@@ -46,9 +46,10 @@ interface ChartCardProps {
   };
   predictionStatus?: PredictionStatus;
   chartConfig?: any; // Chart configuration from post
+  createdAt: string;
 }
 
-export function ChartCard({ id, symbol, koreanName, title, excerpt, pointPhase, user, stats, predictionStatus, chartConfig }: ChartCardProps) {
+export function ChartCard({ id, symbol, koreanName, title, excerpt, pointPhase, user, stats, predictionStatus, chartConfig, createdAt }: ChartCardProps) {
   const router = useRouter();
   const [showLimitPopup, setShowLimitPopup] = useState(false);
   
@@ -193,6 +194,14 @@ export function ChartCard({ id, symbol, koreanName, title, excerpt, pointPhase, 
               )}
             </div>
             <div className="flex-1 space-y-1">
+              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                <span className="whitespace-nowrap">
+                  {user.level}
+                </span>
+                <span className="whitespace-nowrap">
+                  <CountryFlag countryCode={user.countryCode} size={14} />
+                </span>
+              </div>
               <h4 className="font-bold text-sm group-hover/info:text-primary transition-colors">
                 {title}
                 <span className="ml-2 text-[#4A90E2]">{stats.profit}</span>
@@ -211,11 +220,12 @@ export function ChartCard({ id, symbol, koreanName, title, excerpt, pointPhase, 
 
               <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                 <span className="whitespace-nowrap">
-                  {stats.winRate} • {stats.count}
+                  {/* {stats.winRate} • {stats.count} */}
+                  {stats.count}
                 </span>
                 <span className="opacity-70">|</span>
                 <span className="whitespace-nowrap">
-                  {user.level}
+                  {createdAt.split('T')[0]}
                 </span>
               </div>
             </div>

@@ -3,6 +3,7 @@
 import { Search, Globe, Bell, Menu, User, LogOut, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Clock } from "./Clock";
 import Link from "next/link";
@@ -12,6 +13,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { GlobalSearch } from "@/components/common/GlobalSearch";
+import { fetchUnreadNoticeCount } from "@/lib/api/notices";
 
 export function Header() {
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -19,15 +21,27 @@ export function Header() {
   const [userLevel, setUserLevel] = useState<number>(1);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isPartner, setIsPartner] = useState(false);
+  const [userCountryCode, setUserCountryCode] = useState('KR');
   const router = useRouter();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [unreadNoticeCount, setUnreadNoticeCount] = useState(0);
 
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const getUnreadNoticeCountNum = async () => {
+      const num = await fetchUnreadNoticeCount();
+      console.log(num);
+      setUnreadNoticeCount(num);
+    };
+
+    getUnreadNoticeCountNum();
   }, []);
 
   useEffect(() => {
@@ -102,28 +116,29 @@ export function Header() {
     if (!user) return;
 
     const fetchLevel = async () => {
-        const supabase = createClient();
-        try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('user_level,is_admin,is_partner')
-                .eq('id', user.id)
-                .single();
+      const supabase = createClient();
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('user_level,is_admin,is_partner,country_code')
+          .eq('id', user.id)
+          .single();
 
-            if (data && !error) {
-                setUserLevel(data.user_level ?? 1);
-                setIsAdmin((data as any).is_admin === true || (data.user_level ?? 1) >= 99);
-                setIsPartner((data as any).is_partner === true);
-            }
-        } catch (e) {
-            console.error("Failed to fetch user level", e);
+        if (data && !error) {
+          setUserLevel(data.user_level ?? 1);
+          setIsAdmin((data as any).is_admin === true || (data.user_level ?? 1) >= 99);
+          setIsPartner((data as any).is_partner === true);
+          setUserCountryCode(data.country_code);
         }
+      } catch (e) {
+        console.error("Failed to fetch user level", e);
+      }
     };
 
     // Delay fetch to avoid competing with critical page resources (Chart)
     const timer = setTimeout(() => {
-        fetchLevel();
-    }, 1000); 
+      fetchLevel();
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, [user]);
@@ -156,19 +171,20 @@ export function Header() {
             <Link href="/posts" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer">
               차트 게시판
             </Link>
-            <Link href="/notices" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer">
+            <Link href="/notices" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer relative">
               공지사항
+              {unreadNoticeCount > 0 && <Badge variant="destructive" className='text-xs p-1 leading-1 absolute top--2 right--2'>{unreadNoticeCount}</Badge>}
             </Link>
             <Link href="/subscription" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer">
               구독하기
             </Link>
             {isPartner && (
-               <Link href="/partner/dashboard" className="transition-colors text-purple-600 hover:text-purple-800 font-bold cursor-pointer">
+              <Link href="/partner/dashboard" className="transition-colors text-purple-600 hover:text-purple-800 font-bold cursor-pointer">
                 파트너
               </Link>
             )}
             {isAdmin && (
-               <Link href="/admin" className="transition-colors text-red-500 hover:text-red-700 font-bold cursor-pointer">
+              <Link href="/admin" className="transition-colors text-red-500 hover:text-red-700 font-bold cursor-pointer">
                 관리자
               </Link>
             )}
@@ -261,14 +277,14 @@ export function Header() {
             </nav>
           </DialogContent>
         </Dialog>
-        
+
         <div className="flex flex-1 md:hidden">
-             {/* Mobile specific spacing or search if needed, but keeping simple for now */}
+          {/* Mobile specific spacing or search if needed, but keeping simple for now */}
         </div>
 
         <div className="flex items-center space-x-4 ml-auto">
           <Link href={user ? "/analyze" : "/login"}>
-            <Button variant="outline" className="hidden md:flex items-center gap-2 border-primary/20 hover:bg-primary/5 hover:text-primary transition-colors">
+            <Button variant="outline" className="hidden md:flex items-center gap-2 border-primary/20 hover:bg-primary/5 transition-colors">
               <LogOut className="h-4 w-4 rotate-90" />
               <span className="text-primary font-bold">차트 분석하기</span>
             </Button>
@@ -276,12 +292,12 @@ export function Header() {
 
           <GlobalSearch />
 
-          <Clock />
+          <Clock countryCode={userCountryCode} />
 
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="text-muted-foreground" 
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground"
             title="테마 변경"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           >
@@ -296,16 +312,16 @@ export function Header() {
             <Globe className="h-5 w-5" />
           </Button>
 
-          <Button variant="ghost" size="icon" className="text-muted-foreground" title="알림">
+          {/* <Button variant="ghost" size="icon" className="text-muted-foreground" title="알림">
             <Bell className="h-5 w-5" />
-          </Button>
+          </Button> */}
 
           {/* Login / User Placeholder */}
           {user ? (
             <div className="flex items-center space-x-2">
               <Link href="/mypage" className="cursor-pointer">
                 <div className="hidden sm:flex items-center gap-2 mr-2">
-                   <Avatar className="h-8 w-8">
+                  <Avatar className="h-8 w-8">
                     <AvatarImage src={user?.user_metadata?.avatar_url} alt={user.email} />
                     <AvatarFallback>{user.email?.charAt(0).toUpperCase()}</AvatarFallback>
                   </Avatar>

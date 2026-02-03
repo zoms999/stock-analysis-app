@@ -19,6 +19,7 @@ export function Header() {
   const [userLevel, setUserLevel] = useState<number>(1);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isPartner, setIsPartner] = useState(false);
+  const [userCountryCode, setUserCountryCode] = useState('KR');
   const router = useRouter();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
@@ -57,6 +58,9 @@ export function Header() {
             return;
           }
         }
+
+        console.log(user);
+
         setUser(user);
       } catch (error: any) {
         // getUser() 호출 자체가 throw되는 케이스 방어
@@ -102,28 +106,29 @@ export function Header() {
     if (!user) return;
 
     const fetchLevel = async () => {
-        const supabase = createClient();
-        try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('user_level,is_admin,is_partner')
-                .eq('id', user.id)
-                .single();
+      const supabase = createClient();
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('user_level,is_admin,is_partner,country_code')
+          .eq('id', user.id)
+          .single();
 
-            if (data && !error) {
-                setUserLevel(data.user_level ?? 1);
-                setIsAdmin((data as any).is_admin === true || (data.user_level ?? 1) >= 99);
-                setIsPartner((data as any).is_partner === true);
-            }
-        } catch (e) {
-            console.error("Failed to fetch user level", e);
+        if (data && !error) {
+          setUserLevel(data.user_level ?? 1);
+          setIsAdmin((data as any).is_admin === true || (data.user_level ?? 1) >= 99);
+          setIsPartner((data as any).is_partner === true);
+          setUserCountryCode(data.country_code);
         }
+      } catch (e) {
+        console.error("Failed to fetch user level", e);
+      }
     };
 
     // Delay fetch to avoid competing with critical page resources (Chart)
     const timer = setTimeout(() => {
-        fetchLevel();
-    }, 1000); 
+      fetchLevel();
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, [user]);
@@ -163,12 +168,12 @@ export function Header() {
               구독하기
             </Link>
             {isPartner && (
-               <Link href="/partner/dashboard" className="transition-colors text-purple-600 hover:text-purple-800 font-bold cursor-pointer">
+              <Link href="/partner/dashboard" className="transition-colors text-purple-600 hover:text-purple-800 font-bold cursor-pointer">
                 파트너
               </Link>
             )}
             {isAdmin && (
-               <Link href="/admin" className="transition-colors text-red-500 hover:text-red-700 font-bold cursor-pointer">
+              <Link href="/admin" className="transition-colors text-red-500 hover:text-red-700 font-bold cursor-pointer">
                 관리자
               </Link>
             )}
@@ -261,9 +266,9 @@ export function Header() {
             </nav>
           </DialogContent>
         </Dialog>
-        
+
         <div className="flex flex-1 md:hidden">
-             {/* Mobile specific spacing or search if needed, but keeping simple for now */}
+          {/* Mobile specific spacing or search if needed, but keeping simple for now */}
         </div>
 
         <div className="flex items-center space-x-4 ml-auto">
@@ -276,12 +281,12 @@ export function Header() {
 
           <GlobalSearch />
 
-          <Clock />
+          <Clock countryCode={userCountryCode} />
 
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="text-muted-foreground" 
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground"
             title="테마 변경"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           >
@@ -305,7 +310,7 @@ export function Header() {
             <div className="flex items-center space-x-2">
               <Link href="/mypage" className="cursor-pointer">
                 <div className="hidden sm:flex items-center gap-2 mr-2">
-                   <Avatar className="h-8 w-8">
+                  <Avatar className="h-8 w-8">
                     <AvatarImage src={user?.user_metadata?.avatar_url} alt={user.email} />
                     <AvatarFallback>{user.email?.charAt(0).toUpperCase()}</AvatarFallback>
                   </Avatar>

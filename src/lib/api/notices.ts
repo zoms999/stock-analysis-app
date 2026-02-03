@@ -27,7 +27,7 @@ export interface Notice {
  */
 export async function fetchNotices(): Promise<Notice[]> {
   const supabase = createClient();
-  
+
   const { data, error } = await supabase
     .from("notices")
     .select(`
@@ -54,7 +54,7 @@ export async function fetchNotices(): Promise<Notice[]> {
  */
 export async function fetchNoticeById(id: string): Promise<Notice | null> {
   const supabase = createClient();
-  
+
   const { data, error } = await supabase
     .from("notices")
     .select(`
@@ -78,7 +78,7 @@ export async function fetchNoticeById(id: string): Promise<Notice | null> {
     .from("notices")
     .update({ view_count: (data.view_count || 0) + 1 })
     .eq("id", id);
-  
+
   return data;
 }
 
@@ -87,7 +87,7 @@ export async function fetchNoticeById(id: string): Promise<Notice | null> {
  */
 export async function fetchPopupNotices(): Promise<Notice[]> {
   const supabase = createClient();
-  
+
   const { data, error } = await supabase
     .from("notices")
     .select(`
@@ -137,4 +137,81 @@ export function getCategoryLabel(category: NoticeCategory): string {
     default:
       return "일반";
   }
+}
+
+/**
+ * Log notice view (read)
+ * - 1 user x 1 notice = 1 row
+ * - already viewed notice will be ignored
+ */
+export async function logNoticeView(noticeId: string): Promise<void> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  // 로그인 안 했으면 기록 안 함
+  if (authError || !user) return;
+
+  // upsert로 중복 방지
+  await supabase
+    .from("notice_view_logs")
+    .upsert(
+      {
+        notice_id: noticeId,
+        user_id: user.id,
+        viewed_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "notice_id,user_id",
+        ignoreDuplicates: true,
+      }
+    );
+}
+
+/**
+ * Get count of unread notices for current user
+ */
+export async function fetchUnreadNoticeCount(): Promise<number> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) return 0;
+
+  // 1️⃣ 전체 활성 공지 ID
+  const { data: notices, error: noticeError } = await supabase
+    .from("notices")
+    .select("id")
+    .eq("is_active", true);
+
+  if (noticeError || !notices) {
+    console.error("Error fetching notices:", noticeError);
+    return 0;
+  }
+
+  // 2️⃣ 내가 읽은 공지 ID
+  const { data: readLogs, error: readError } = await supabase
+    .from("notice_view_logs")
+    .select("notice_id")
+    .eq("user_id", user.id);
+
+  if (readError || !readLogs) {
+    console.error("Error fetching notice view logs:", readError);
+    return notices.length;
+  }
+
+  // 3️⃣ Set 으로 필터링
+  const readSet = new Set(readLogs.map((v) => v.notice_id));
+
+  const unreadCount = notices.filter(
+    (notice) => !readSet.has(notice.id)
+  ).length;
+
+  return unreadCount;
 }

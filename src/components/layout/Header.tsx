@@ -3,6 +3,7 @@
 import { Search, Globe, Bell, Menu, User, LogOut, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Clock } from "./Clock";
 import Link from "next/link";
@@ -12,6 +13,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { GlobalSearch } from "@/components/common/GlobalSearch";
+import { fetchUnreadNoticeCount } from "@/lib/api/notices";
 
 export function Header() {
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -25,10 +27,21 @@ export function Header() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [unreadNoticeCount, setUnreadNoticeCount] = useState(0);
 
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const getUnreadNoticeCountNum = async () => {
+      const num = await fetchUnreadNoticeCount();
+      console.log(num);
+      setUnreadNoticeCount(num);
+    };
+
+    getUnreadNoticeCountNum();
   }, []);
 
   useEffect(() => {
@@ -58,9 +71,6 @@ export function Header() {
             return;
           }
         }
-
-        console.log(user);
-
         setUser(user);
       } catch (error: any) {
         // getUser() 호출 자체가 throw되는 케이스 방어
@@ -161,8 +171,9 @@ export function Header() {
             <Link href="/posts" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer">
               차트 게시판
             </Link>
-            <Link href="/notices" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer">
+            <Link href="/notices" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer relative">
               공지사항
+              {unreadNoticeCount > 0 && <Badge variant="destructive" className='text-xs p-1 leading-1 absolute top--2 right--2'>{unreadNoticeCount}</Badge>}
             </Link>
             <Link href="/subscription" className="transition-colors hover:text-foreground/80 text-foreground/60 cursor-pointer">
               구독하기
@@ -301,9 +312,9 @@ export function Header() {
             <Globe className="h-5 w-5" />
           </Button>
 
-          <Button variant="ghost" size="icon" className="text-muted-foreground" title="알림">
+          {/* <Button variant="ghost" size="icon" className="text-muted-foreground" title="알림">
             <Bell className="h-5 w-5" />
-          </Button>
+          </Button> */}
 
           {/* Login / User Placeholder */}
           {user ? (

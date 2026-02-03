@@ -409,6 +409,7 @@ export function ChartBoardList() {
                 }}
                 predictionStatus={post.prediction_status}
                 chartConfig={post.chart_config}
+                createdAt={post.created_at}
               />
             );
           })()
